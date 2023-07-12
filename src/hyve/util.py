@@ -7,7 +7,9 @@ Plot and report utilities
 Utilities for plotting and reporting.
 """
 from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
+
 import numpy as np
+import pandas as pd
 import pyvista as pv
 from pyvista.plotting.helpers import view_vectors
 
@@ -67,27 +69,27 @@ def cortex_view_dict() -> Dict[str, Tuple[Sequence[float], Sequence[float]]]:
     viewup is the direction of the "up" vector in the camera frame.
     """
     common = {
-        "dorsal": ((0, 0, 1), (1, 0, 0)),
-        "ventral": ((0, 0, -1), (-1, 0, 0)),
-        "anterior": ((0, 1, 0), (0, 0, 1)),
-        "posterior": ((0, -1, 0), (0, 0, 1)),
+        'dorsal': ((0, 0, 1), (1, 0, 0)),
+        'ventral': ((0, 0, -1), (-1, 0, 0)),
+        'anterior': ((0, 1, 0), (0, 0, 1)),
+        'posterior': ((0, -1, 0), (0, 0, 1)),
     }
     return {
-        "left": {
-            "lateral": ((-1, 0, 0), (0, 0, 1)),
-            "medial": ((1, 0, 0), (0, 0, 1)),
+        'left': {
+            'lateral': ((-1, 0, 0), (0, 0, 1)),
+            'medial': ((1, 0, 0), (0, 0, 1)),
             **common,
         },
-        "right": {
-            "lateral": ((1, 0, 0), (0, 0, 1)),
-            "medial": ((-1, 0, 0), (0, 0, 1)),
+        'right': {
+            'lateral': ((1, 0, 0), (0, 0, 1)),
+            'medial': ((-1, 0, 0), (0, 0, 1)),
             **common,
         },
-        "both": {
-            "left": ((-1, 0, 0), (0, 0, 1)),
-            "right": ((1, 0, 0), (0, 0, 1)),
+        'both': {
+            'left': ((-1, 0, 0), (0, 0, 1)),
+            'right': ((1, 0, 0), (0, 0, 1)),
             **common,
-        }
+        },
     }
 
 
@@ -95,12 +97,12 @@ def cortex_cameras(
     position: Union[str, Sequence[Tuple[float, float, float]]],
     plotter: pv.Plotter,
     negative: bool = False,
-    hemi: Optional[Literal["left", "right"]] = None,
+    hemi: Optional[Literal['left', 'right']] = None,
 ) -> Tuple[
-        Tuple[float, float, float],
-        Tuple[float, float, float],
-        Tuple[float, float, float]
-    ]:
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+]:
     """
     Return a tuple of (position, focal_point, view_up) for the camera. This
     function accepts a string corresponding to an anatomical direction (e.g.
@@ -109,13 +111,10 @@ def cortex_cameras(
     """
     if isinstance(position, str):
         try:
-            #TODO: I'm a little bit concerned that ``view_vectors`` is not
-            #      part of the public API. We should probably find a better
-            #      way to do this.
-            position=view_vectors(
-                view=position,
-                negative=negative
-            )
+            # TODO: I'm a little bit concerned that ``view_vectors`` is not
+            #       part of the public API. We should probably find a better
+            #       way to do this.
+            position = view_vectors(view=position, negative=negative)
         except ValueError as e:
             if isinstance(hemi, str):
                 try:
@@ -146,7 +145,7 @@ def robust_clim(
 
 def plot_to_display(
     p: pv.Plotter,
-    cpos: Optional[Sequence[Sequence[float]]] = "yz",
+    cpos: Optional[Sequence[Sequence[float]]] = 'yz',
 ) -> None:
     p.show(cpos=cpos)
 
@@ -154,39 +153,47 @@ def plot_to_display(
 def format_position_as_string(
     position: Union[str, Sequence[Tuple[float, float, float]]],
     precision: int = 2,
-    delimiter: str = "x",
+    delimiter: str = 'x',
 ) -> str:
     def _fmt_field(field: float) -> str:
         return delimiter.join(
             str(round(v, precision))
-            if v >= 0 else f"neg{abs(round(v, precision))}"
+            if v >= 0
+            else f'neg{abs(round(v, precision))}'
             for v in field
         )
 
     if isinstance(position, str):
-        return f"view-{position}"
+        return f'view-{position}'
     elif isinstance(position[0], float) or isinstance(position[0], int):
-        return f"vector-{_fmt_field(position)}"
+        return f'vector-{_fmt_field(position)}'
     else:
         return (
-            f"vector-{_fmt_field(position[0])}_"
-            f"focus-{_fmt_field(position[1])}_"
-            f"viewup-{_fmt_field(position[2])}"
+            f'vector-{_fmt_field(position[0])}_'
+            f'focus-{_fmt_field(position[1])}_'
+            f'viewup-{_fmt_field(position[2])}'
         )
 
 
 def plot_to_image(
     p: pv.Plotter,
-    views: Sequence = ("medial", "lateral", "dorsal", "ventral", "anterior", "posterior"),
+    views: Sequence = (
+        'medial',
+        'lateral',
+        'dorsal',
+        'ventral',
+        'anterior',
+        'posterior',
+    ),
     window_size: Tuple[int, int] = (1920, 1080),
     basename: Optional[str] = None,
-    hemi: Optional[Literal["left", "right", "both"]] = None,
+    hemi: Optional[Literal['left', 'right', 'both']] = None,
 ) -> Tuple[np.ndarray]:
     if basename is None:
         screenshot = [True] * len(views)
     else:
         screenshot = [
-            f"{basename}_{format_position_as_string(cpos)}.png"
+            f'{basename}_{format_position_as_string(cpos)}.png'
             for cpos in views
         ]
     ret = []
@@ -195,7 +202,7 @@ def plot_to_image(
     except IndexError:
         pass
     for cpos, fname in zip(views, screenshot):
-        p.camera.zoom("tight")
+        p.camera.zoom('tight')
         p.show(
             cpos=cortex_cameras(cpos, plotter=p, hemi=hemi),
             auto_close=False,
@@ -204,3 +211,148 @@ def plot_to_image(
         ret.append(img)
     p.close()
     return tuple(ret)
+
+
+def filter_node_data(
+    val: np.ndarray,
+    name: str = 'node',
+    threshold: Union[float, int] = 0.0,
+    percent_threshold: bool = False,
+    topk_threshold: bool = False,
+    absolute: bool = True,
+    node_selection: Optional[np.ndarray] = None,
+    incident_edge_selection: Optional[np.ndarray] = None,
+    removed_val: Optional[float] = None,
+    surviving_val: Optional[float] = 1.0,
+) -> pd.DataFrame:
+    node_incl = np.ones_like(val, dtype=bool)
+
+    sgn = np.sign(val)
+    if absolute:
+        val = np.abs(val)
+    if node_selection is not None:
+        node_incl[~node_selection] = 0
+    if incident_edge_selection is not None:
+        node_incl[~incident_edge_selection.any(axis=-1)] = 0
+    if topk_threshold:
+        indices = np.argpartition(-val, int(threshold))
+        node_incl[indices[int(threshold) :]] = 0
+    elif percent_threshold:
+        node_incl[val < np.percentile(val[node_incl], 100 * threshold)] = 0
+    else:
+        node_incl[val < threshold] = 0
+
+    if removed_val is not None:
+        val[~node_incl] = removed_val
+        if surviving_val is not None:
+            val[node_incl] = surviving_val
+        index = np.arange(val.shape[0])
+    else:
+        val = val[node_incl]
+        sgn = sgn[node_incl]
+        index = np.where(node_incl)[0]
+
+    return pd.DataFrame(
+        {
+            f'{name}_val': val,
+            f'{name}_sgn': sgn,
+        },
+        index=pd.Index(index, name='node'),
+    )
+
+
+def filter_adjacency_data(
+    adj: np.ndarray,
+    name: str = 'edge',
+    threshold: Union[float, int] = 0.0,
+    percent_threshold: bool = False,
+    topk_threshold_nodewise: bool = False,
+    absolute: bool = True,
+    incident_node_selection: Optional[np.ndarray] = None,
+    connected_node_selection: Optional[np.ndarray] = None,
+    edge_selection: Optional[np.ndarray] = None,
+    removed_val: Optional[float] = None,
+    surviving_val: Optional[float] = 1.0,
+    emit_degree: Union[bool, Literal['abs', '+', '-']] = False,
+    emit_incident_nodes: Union[bool, tuple] = False,
+) -> pd.DataFrame:
+    adj_incl = np.ones_like(adj, dtype=bool)
+
+    sgn = np.sign(adj)
+    if absolute:
+        adj = np.abs(adj)
+    if incident_node_selection is not None:
+        adj_incl[~incident_node_selection, :] = 0
+    if connected_node_selection is not None:
+        adj_incl[~connected_node_selection, :] = 0
+        adj_incl[:, ~connected_node_selection] = 0
+    if edge_selection is not None:
+        adj_incl[~edge_selection] = 0
+    if topk_threshold_nodewise:
+        indices = np.argpartition(-adj, int(threshold), axis=-1)
+        indices = indices[..., int(threshold) :]
+        adj_incl[
+            np.arange(adj.shape[0], dtype=int).reshape(-1, 1), indices
+        ] = 0
+    elif percent_threshold:
+        adj_incl[adj < np.percentile(adj[adj_incl], 100 * threshold)] = 0
+    else:
+        adj_incl[adj < threshold] = 0
+
+    degree = None
+    if emit_degree == 'abs':
+        degree = np.abs(adj).sum(axis=0)
+    elif emit_degree == '+':
+        degree = np.maximum(adj, 0).sum(axis=0)
+    elif emit_degree == '-':
+        degree = -np.minimum(adj, 0).sum(axis=0)
+    elif emit_degree:
+        degree = adj.sum(axis=0)
+
+    indices_incl = np.triu_indices(adj.shape[0], k=1)
+    adj_incl = adj_incl | adj_incl.T
+
+    incidents = None
+    if emit_incident_nodes:
+        incidents = adj_incl.any(axis=0)
+        if isinstance(emit_incident_nodes, tuple):
+            exc, inc = emit_incident_nodes
+            incidents = np.where(incidents, inc, exc)
+
+    if removed_val is not None:
+        adj[~adj_incl] = removed_val
+        if surviving_val is not None:
+            adj[adj_incl] = surviving_val
+    else:
+        adj_incl = adj_incl[indices_incl]
+        indices_incl = tuple(i[adj_incl] for i in indices_incl)
+    adj = adj[indices_incl]
+    sgn = sgn[indices_incl]
+
+    edge_values = pd.DataFrame(
+        {
+            f'{name}_val': adj,
+            f'{name}_sgn': sgn,
+        },
+        index=pd.MultiIndex.from_arrays(indices_incl, names=['src', 'dst']),
+    )
+
+    if degree is not None:
+        degree = pd.DataFrame(
+            degree,
+            index=range(1, degree.shape[0] + 1),
+            columns=(f'{name}_degree',),
+        )
+        if incidents is None:
+            return edge_values, degree
+    if incidents is not None:
+        incidents = pd.DataFrame(
+            incidents,
+            index=range(1, incidents.shape[0] + 1),
+            columns=(f'{name}_incidents',),
+        )
+        if degree is None:
+            return edge_values, incidents
+        df = degree.join(incidents, how='outer')
+        return edge_values, df
+    return edge_values

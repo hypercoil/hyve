@@ -8,11 +8,6 @@ Brain surface objects for plotting.
 """
 import pathlib
 import warnings
-import pyvista as pv
-import numpy as np
-import nibabel as nb
-import templateflow.api as tflow
-
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -22,16 +17,21 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    Union
+    Union,
 )
+
+import nibabel as nb
+import numpy as np
+import pyvista as pv
+import templateflow.api as tflow
 from matplotlib.colors import ListedColormap
 from scipy.spatial.distance import cdist
 
 from .const import (
-    Tensor,
     CIfTIStructures,
-    template_dict,
+    Tensor,
     neuromaps_fetch_fn,
+    template_dict,
 )
 
 
@@ -54,7 +54,7 @@ def is_path_like(obj: Any) -> bool:
 
 def extend_to_max(
     *pparams: Sequence[Tensor],
-    axis: int = -1
+    axis: int = -1,
 ) -> Iterable[Tensor]:
     """
     Extend multiple arrays along an axis to the maximum length among them.
@@ -131,11 +131,12 @@ class ProjectedPolyData(pv.PolyData):
     **params : Mapping[str, Any]
         Keyword parameters to pass to ``PolyData``.
     """
+
     def __init__(
         self,
         *pparams: Sequence[Any],
         projection: str = None,
-        **params: Mapping[str, Any]
+        **params: Mapping[str, Any],
     ):
         super().__init__(*pparams, **params)
         self.point_data[f'_projection_{projection}'] = self.points.copy()
@@ -149,7 +150,8 @@ class ProjectedPolyData(pv.PolyData):
         Dictionary mapping projection names to point data.
         """
         return {
-            k[12:]: v for k, v in self.point_data.items()
+            k[12:]: v
+            for k, v in self.point_data.items()
             if k[:12] == '_projection_'
         }
 
@@ -159,7 +161,7 @@ class ProjectedPolyData(pv.PolyData):
         *,
         projection: str,
         ignore_errors: bool = False,
-        **params: Mapping[str, Any]
+        **params: Mapping[str, Any],
     ) -> 'ProjectedPolyData':
         """
         Create a ``ProjectedPolyData`` object by combining multiple
@@ -204,8 +206,8 @@ class ProjectedPolyData(pv.PolyData):
         projections = self.projections
         if projection not in projections:
             raise KeyError(
-                f"Projection '{projection}' not found. "
-                f"Available projections: {set(projections.keys())}"
+                f'Projection "{projection}" not found. '
+                f'Available projections: {set(projections.keys())}'
             )
         return projections[projection]
 
@@ -226,7 +228,8 @@ class ProjectedPolyData(pv.PolyData):
         """
         if len(points) != self.n_points:
             raise ValueError(
-                f'Number of points {len(points)} must match {self.n_points}.')
+                f'Number of points {len(points)} must match {self.n_points}.'
+            )
         self.point_data[f'_projection_{projection}'] = points
 
     def remove_projection(
@@ -244,8 +247,8 @@ class ProjectedPolyData(pv.PolyData):
         projections = self.projections
         if projection not in projections:
             raise KeyError(
-                f"Projection '{projection}' not found. "
-                f"Available projections: {set(projections.keys())}"
+                f'Projection "{projection}" not found. '
+                f'Available projections: {set(projections.keys())}'
             )
         del self.point_data[f'_projection_{projection}']
 
@@ -264,8 +267,8 @@ class ProjectedPolyData(pv.PolyData):
         projections = self.projections
         if projection not in projections:
             raise KeyError(
-                f"Projection '{projection}' not found. "
-                f"Available projections: {set(projections.keys())}"
+                f'Projection "{projection}" not found. '
+                f'Available projections: {set(projections.keys())}'
             )
         self.points = projections[projection]
 
@@ -289,6 +292,7 @@ class CortexTriSurface:
     mask : str, optional
         Name of the vertex dataset containing the mask for both hemispheres.
     """
+
     left: ProjectedPolyData
     right: ProjectedPolyData
     mask: Optional[str] = None
@@ -335,9 +339,15 @@ class CortexTriSurface:
         if projection is None:
             projection = list(left.keys())[0]
         left, mask_str = cls._hemisphere_darray_impl(
-            left, left_mask, projection)
+            left,
+            left_mask,
+            projection,
+        )
         right, _ = cls._hemisphere_darray_impl(
-            right, right_mask, projection)
+            right,
+            right_mask,
+            projection,
+        )
         return cls(left, right, mask_str)
 
     @classmethod
@@ -381,10 +391,12 @@ class CortexTriSurface:
         left, left_mask = cls._hemisphere_gifti_impl(left, left_mask)
         right, right_mask = cls._hemisphere_gifti_impl(right, right_mask)
         return cls.from_darrays(
-            left={k: tuple(d.data for d in v.darrays)
-                  for k, v in left.items()},
-            right={k: tuple(d.data for d in v.darrays)
-                   for k, v in right.items()},
+            left={
+                k: tuple(d.data for d in v.darrays) for k, v in left.items()
+            },
+            right={
+                k: tuple(d.data for d in v.darrays) for k, v in right.items()
+            },
             left_mask=left_mask,
             right_mask=right_mask,
             projection=projection,
@@ -410,19 +422,20 @@ class CortexTriSurface:
         for projection in projections:
             coor_query.update(suffix=projection)
             lh_path, rh_path = (
-                fetch_fn(**coor_query, hemi="L"),
-                fetch_fn(**coor_query, hemi="R"),
+                fetch_fn(**coor_query, hemi='L'),
+                fetch_fn(**coor_query, hemi='R'),
             )
             lh[projection] = lh_path
             rh[projection] = rh_path
         lh_mask, rh_mask = None, None
         if load_mask:
             lh_mask, rh_mask = (
-                fetch_fn(**mask_query, hemi="L"),
-                fetch_fn(**mask_query, hemi="R")
+                fetch_fn(**mask_query, hemi='L'),
+                fetch_fn(**mask_query, hemi='R'),
             )
-        return cls.from_gifti(lh, rh, lh_mask, rh_mask,
-                              projection=projections[0])
+        return cls.from_gifti(
+            lh, rh, lh_mask, rh_mask, projection=projections[0]
+        )
 
     @classmethod
     def from_tflow(
@@ -532,7 +545,7 @@ class CortexTriSurface:
         cifti: Union[str, nb.cifti2.cifti2.Cifti2Image],
         is_masked: bool = False,
         apply_mask: bool = True,
-        null_value: Optional[float] = 0.,
+        null_value: Optional[float] = 0.0,
     ):
         """
         Add a CIFTI dataset to the ``CortexTriSurface``.
@@ -554,8 +567,8 @@ class CortexTriSurface:
             Value to use for vertices excluded by the surface mask.
         """
         names_dict = {
-            CIfTIStructures.LEFT : 'left',
-            CIfTIStructures.RIGHT : 'right',
+            CIfTIStructures.LEFT: 'left',
+            CIfTIStructures.RIGHT: 'right',
         }
         slices = {}
 
@@ -564,14 +577,13 @@ class CortexTriSurface:
         model_axis = get_cifti_brain_model_axis(cifti)
 
         offset = 0
-        for struc, slc, _ in (model_axis.iter_structures()):
+        for struc, slc, _ in model_axis.iter_structures():
             hemi = names_dict.get(struc, None)
             if hemi is not None:
                 start, stop = slc.start, slc.stop
                 start = start if start is not None else 0
                 stop = (
-                    stop if stop is not None
-                    else offset + self.mask_size[hemi]
+                    stop if stop is not None else offset + self.mask_size[hemi]
                 )
                 slices[hemi] = slice(start, stop)
                 offset = stop
@@ -597,7 +609,7 @@ class CortexTriSurface:
         right_gifti: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
         is_masked: bool = False,
         apply_mask: bool = True,
-        null_value: Optional[float] = 0.,
+        null_value: Optional[float] = 0.0,
         map_all: bool = True,
         arr_idx: int = 0,
         select: Optional[Sequence[int]] = None,
@@ -647,8 +659,8 @@ class CortexTriSurface:
         if map_all and len(left_data) > 1 and len(right_data) > 1:
             if left_data and right_data and len(left_data) != len(right_data):
                 raise ValueError(
-                    "Left and right hemisphere gifti images must have the "
-                    "same number of data arrays."
+                    'Left and right hemisphere gifti images must have the '
+                    'same number of data arrays.'
                 )
             n_darrays = max(len(left_data), len(right_data))
             exclude = exclude or []
@@ -658,7 +670,7 @@ class CortexTriSurface:
             for i in range(n_darrays):
                 if i in exclude:
                     continue
-                name_i = f"{name}_{i}"
+                name_i = f'{name}_{i}'
                 names.append(name_i)
                 data_l = left_data[i].data if left_gifti else None
                 data_r = right_data[i].data if right_gifti else None
@@ -695,7 +707,7 @@ class CortexTriSurface:
         default_slices: bool = True,
         is_masked: bool = False,
         apply_mask: bool = True,
-        null_value: Optional[float] = 0.,
+        null_value: Optional[float] = 0.0,
     ):
         """
         Add a vertex-wise dataset to the ``CortexTriSurface``.
@@ -776,45 +788,46 @@ class CortexTriSurface:
                         right_slice = slice(self.n_points['left'], None)
                 else:
                     warnings.warn(
-                        "No slices were provided for vertex data, and default "
-                        "slicing was toggled off. The `data` tensor will be "
-                        "ignored. Attempting fallback to `left_data` and "
-                        "`right_data`.\n\n"
-                        "To silence this warning, provide slices for the data "
-                        "or toggle on default slicing if a `data` tensor is "
-                        "provided. Alternatively, provide `left_data` and "
-                        "`right_data` directly and exclusively."
+                        'No slices were provided for vertex data, and default '
+                        'slicing was toggled off. The `data` tensor will be '
+                        'ignored. Attempting fallback to `left_data` and '
+                        '`right_data`.\n\n'
+                        'To silence this warning, provide slices for the data '
+                        'or toggle on default slicing if a `data` tensor is '
+                        'provided. Alternatively, provide `left_data` and '
+                        '`right_data` directly and exclusively.'
                     )
             if left_slice is not None:
                 if left_data is not None:
                     warnings.warn(
-                        "Both `left_data` and `left_slice` were provided. "
-                        "The `left_data` tensor will be ignored. "
-                        "To silence this warning, provide `left_data` or "
-                        "`left_slice` exclusively."
+                        'Both `left_data` and `left_slice` were provided. '
+                        'The `left_data` tensor will be ignored. '
+                        'To silence this warning, provide `left_data` or '
+                        '`left_slice` exclusively.'
                     )
                 left_data = data[..., left_slice]
             if right_slice is not None:
                 if right_data is not None:
                     warnings.warn(
-                        "Both `right_data` and `right_slice` were provided. "
-                        "The `right_data` tensor will be ignored. "
-                        "To silence this warning, provide `right_data` or "
-                        "`right_slice` exclusively."
+                        'Both `right_data` and `right_slice` were provided. '
+                        'The `right_data` tensor will be ignored. '
+                        'To silence this warning, provide `right_data` or '
+                        '`right_slice` exclusively.'
                     )
                 right_data = data[..., right_slice]
         if left_data is None and right_data is None:
             raise ValueError(
-                "Either no data was provided, or insufficient information "
-                "was provided to slice the data into left and right "
-                "hemispheres.")
+                'Either no data was provided, or insufficient information '
+                'was provided to slice the data into left and right '
+                'hemispheres.'
+            )
         if left_data is not None:
             self.left.point_data[name] = self._hemisphere_vertex_data_impl(
-                left_data, is_masked, apply_mask, null_value, 'left',
+                left_data, is_masked, apply_mask, null_value, 'left'
             )
         if right_data is not None:
             self.right.point_data[name] = self._hemisphere_vertex_data_impl(
-                right_data, is_masked, apply_mask, null_value, 'right',
+                right_data, is_masked, apply_mask, null_value, 'right'
             )
 
     def parcellate_vertex_dataset(
@@ -840,22 +853,21 @@ class CortexTriSurface:
             Parcellated data.
         """
         parcellation_left = self._hemisphere_parcellate_impl(
-            name, parcellation, 'left',
+            name, parcellation, 'left'
         )
         parcellation_right = self._hemisphere_parcellate_impl(
-            name, parcellation, 'right',
+            name, parcellation, 'right'
         )
         parcellation_left, parcellation_right = extend_to_max(
-            parcellation_left,
-            parcellation_right,
-            axis=0)
+            parcellation_left, parcellation_right, axis=0
+        )
         return parcellation_left + parcellation_right
 
     def scatter_into_parcels(
         self,
         data: Tensor,
         parcellation: str,
-        sink: Optional[str] = None
+        sink: Optional[str] = None,
     ) -> Tensor:
         """
         Scatter a parcellated dataset into a vertex-wise dataset. Parcellation
@@ -878,10 +890,10 @@ class CortexTriSurface:
             Scattered data.
         """
         scattered_left = self._hemisphere_into_parcels_impl(
-            data, parcellation, 'left',
+            data, parcellation, 'left'
         )
         scattered_right = self._hemisphere_into_parcels_impl(
-            data, parcellation, 'right',
+            data, parcellation, 'right'
         )
         if sink is not None:
             self.left.point_data[sink] = scattered_left
@@ -908,10 +920,10 @@ class CortexTriSurface:
         centres_of_mass : Tensor
             Centre of mass coordinates of each parcel.
         """
-        projection_name = f"_projection_{projection}"
+        projection_name = f'_projection_{projection}'
         return self.parcellate_vertex_dataset(
             projection_name,
-            parcellation=parcellation
+            parcellation=parcellation,
         )
 
     def scalars_centre_of_mass(
@@ -938,7 +950,7 @@ class CortexTriSurface:
         Tensor
             Coordinates of the centre of mass.
         """
-        projection_name = f"_projection_{projection}"
+        projection_name = f'_projection_{projection}'
         if hemisphere == 'left':
             proj_data = self.left.point_data[projection_name]
             scalars_data = self.left.point_data[scalars].reshape(-1, 1)
@@ -947,7 +959,9 @@ class CortexTriSurface:
             scalars_data = self.right.point_data[scalars].reshape(-1, 1)
         else:
             raise ValueError(
-                f"Invalid hemisphere: {hemisphere}. Must be 'left' or 'right'.")
+                f'Invalid hemisphere: {hemisphere}. '
+                'Must be "left" or "right".'
+            )
         num = np.nansum(proj_data * scalars_data, axis=0)
         den = np.nansum(scalars_data, axis=0)
         return num / den
@@ -956,7 +970,7 @@ class CortexTriSurface:
         self,
         hemisphere: str,
         scalars: str,
-        projection: str
+        projection: str,
     ) -> Tensor:
         """
         Find the coordinates of the peak value in a scalar dataset.
@@ -976,7 +990,7 @@ class CortexTriSurface:
         Tensor
             Coordinates of the peak.
         """
-        projection_name = f"_projection_{projection}"
+        projection_name = f'_projection_{projection}'
         if hemisphere == 'left':
             proj_data = self.left.point_data[projection_name]
             scalars_data = self.left.point_data[scalars].reshape(-1, 1)
@@ -985,7 +999,9 @@ class CortexTriSurface:
             scalars_data = self.right.point_data[scalars].reshape(-1, 1)
         else:
             raise ValueError(
-                f"Invalid hemisphere: {hemisphere}. Must be 'left' or 'right'.")
+                f'Invalid hemisphere: {hemisphere}. '
+                'Must be "left" or "right".'
+            )
         return proj_data[np.argmax(scalars_data)]
 
     def poles(self, hemisphere: str) -> Tensor:
@@ -1004,21 +1020,31 @@ class CortexTriSurface:
         Tensor
             Coordinates of the poles.
         """
-        if hemisphere == "left":
+        if hemisphere == 'left':
             pole_names = (
-                "lateral", "posterior", "ventral",
-                "medial", "anterior", "dorsal"
+                'lateral',
+                'posterior',
+                'ventral',
+                'medial',
+                'anterior',
+                'dorsal',
             )
-        elif hemisphere == "right":
+        elif hemisphere == 'right':
             pole_names = (
-                "medial", "posterior", "ventral",
-                "lateral", "anterior", "dorsal"
+                'medial',
+                'posterior',
+                'ventral',
+                'lateral',
+                'anterior',
+                'dorsal',
             )
         coors = self.__getattribute__(hemisphere).points
-        pole_index = np.concatenate((
-            coors.argmin(axis=0),
-            coors.argmax(axis=0)
-        ))
+        pole_index = np.concatenate(
+            (
+                coors.argmin(axis=0),
+                coors.argmax(axis=0),
+            )
+        )
         poles = coors[pole_index]
         return dict(zip(pole_names, poles))
 
@@ -1026,7 +1052,7 @@ class CortexTriSurface:
         self,
         hemisphere: str,
         coors: Tensor,
-        metric: str = "euclidean",
+        metric: str = 'euclidean',
         n_poles: int = 1,
     ) -> Tensor:
         """
@@ -1054,27 +1080,28 @@ class CortexTriSurface:
         """
         poles = self.poles(hemisphere)
         poles_coors = np.array(list(poles.values()))
-        if metric == "euclidean":
+        if metric == 'euclidean':
             dists = cdist(coors, poles_coors)
-        elif metric == "spherical":
+        elif metric == 'spherical':
             warnings.warn(
-                "Spherical distance is not currently implemented. "
-                "Fallback to Euclidean distance."
+                'Spherical distance is not currently implemented. '
+                'Fallback to Euclidean distance.'
             )
             dists = cdist(coors, poles_coors)
             # proj = self.projection
             # self.__getattribute__(hemisphere).project("sphere")
             # dists = spherical_geodesic(coors, poles_coors)
             # self.__getattribute__(hemisphere).project(proj)
-        #TODO: add case for the geodesic on the manifold as implemented in
-        #      PyVista/VTK.
+        # TODO: add case for the geodesic on the manifold as implemented in
+        #       PyVista/VTK.
         else:
             raise ValueError(
-                f"Metric must currently be either euclidean or spherical, "
-                f"but {metric} was given.")
+                f'Metric must currently be either euclidean or spherical, '
+                f'but {metric} was given.'
+            )
         pole_index = np.argsort(dists, axis=1)[:, :n_poles]
         pole_names = np.array(list(poles.keys()))
-        #TODO: need to use tuple indexing here
+        # TODO: need to use tuple indexing here
         return pole_names[pole_index]
 
     @staticmethod
@@ -1102,8 +1129,8 @@ class CortexTriSurface:
         dictionary of GIFTI files.
         """
         data = {
-            k: (nb.load(v) if is_path_like(v) else v)
-            for k, v in data.items()}
+            k: (nb.load(v) if is_path_like(v) else v) for k, v in data.items()
+        }
         if mask is not None:
             if is_path_like(mask):
                 mask = nb.load(mask)
@@ -1129,7 +1156,7 @@ class CortexTriSurface:
                 data = data.T
                 init = np.full(
                     (self.n_points[hemisphere], data.shape[-1]),
-                    null_value
+                    null_value,
                 )
             else:
                 init = np.full(self.n_points[hemisphere], null_value)
@@ -1153,7 +1180,7 @@ class CortexTriSurface:
     def _hemisphere_parcellation_impl(
         point_data: Mapping,
         parcellation: str,
-        null_value: Optional[float] = 0.,
+        null_value: Optional[float] = 0.0,
         transpose: bool = False,
     ) -> Tensor:
         """
@@ -1215,7 +1242,7 @@ class CortexTriSurface:
             parcellation=parcellation,
             transpose=True,
         )
-        return parcellation @ data[:parcellation.shape[-1]]
+        return parcellation @ data[: parcellation.shape[-1]]
 
 
 def _cmap_impl_hemisphere(
@@ -1223,7 +1250,7 @@ def _cmap_impl_hemisphere(
     hemisphere: Literal['left', 'right'],
     parcellation: str,
     colours: Tensor,
-    null_value: float
+    null_value: float,
 ) -> Tuple[Tensor, Tuple[float, float]]:
     """
     Helper function used when creating a colormap for a cortical hemisphere.
@@ -1246,11 +1273,15 @@ def make_cmap(
     return_both: bool = False,
 ) -> Union[
     Tuple[Tensor, Tuple[float, float]],
-    Tuple[Tuple[Tensor, Tuple[float, float]],
-          Tuple[Tensor, Tuple[float, float]]],
-    Tuple[Tuple[Tensor, Tuple[float, float]],
-          Tuple[Tensor, Tuple[float, float]],
-          Tuple[Tensor, Tuple[float, float]]],
+    Tuple[
+        Tuple[Tensor, Tuple[float, float]],
+        Tuple[Tensor, Tuple[float, float]],
+    ],
+    Tuple[
+        Tuple[Tensor, Tuple[float, float]],
+        Tuple[Tensor, Tuple[float, float]],
+        Tuple[Tensor, Tuple[float, float]],
+    ],
 ]:
     """
     Create a colormap for a parcellation dataset defined over a cortical
@@ -1285,7 +1316,7 @@ def make_cmap(
             'left',
             parcellation,
             colours,
-            null_value
+            null_value,
         )
         ret += [(cmap_left, clim_left)]
     if return_right or return_both:
@@ -1294,11 +1325,12 @@ def make_cmap(
             'right',
             parcellation,
             colours,
-            null_value
+            null_value,
         )
         ret += [(cmap_right, clim_right)]
     if return_both:
-        #TODO: Rewrite this to skip the unnecessary intermediate blocks above.
+        # TODO: Rewrite this to skip the unnecessary intermediate blocks
+        #       above.
         cmin = min(clim_left[0], clim_right[0])
         cmax = max(clim_left[1], clim_right[1])
         cmap = ListedColormap(colours[:, :3])

@@ -9,11 +9,11 @@ Unified plotting function for surface, volume, and network data.
 import dataclasses
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
-from matplotlib.cm import get_cmap
-from matplotlib.colors import Normalize
 import numpy as np
 import pandas as pd
 import pyvista as pv
+from matplotlib.cm import get_cmap
+from matplotlib.colors import Normalize
 
 from .surf import (
     CortexTriSurface,
@@ -37,12 +37,13 @@ def _get_hemisphere_parameters(
 ) -> Tuple[Mapping[str, Any], Mapping[str, Any]]:
     left = {}
     right = {}
+
     def assign_tuple(arg, name):
-        l, r = arg
-        left[name] = l
-        right[name] = r
+        left[name], right[name] = arg
+
     def assign_scalar(arg, name):
         left[name] = right[name] = arg
+
     def conditional_assign(condition, arg, name):
         if condition(arg):
             assign_tuple(arg, name)
@@ -52,7 +53,7 @@ def _get_hemisphere_parameters(
     conditional_assign(
         lambda x: len(x) == 2,
         surf_scalars_cmap,
-        'surf_scalars_cmap'
+        'surf_scalars_cmap',
     )
     conditional_assign(
         lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
@@ -64,9 +65,9 @@ def _get_hemisphere_parameters(
 
 def _get_color(color, cmap, clim):
     if (
-        isinstance(color, str) or
-        isinstance(color, tuple) or
-        isinstance(color, list)
+        isinstance(color, str)
+        or isinstance(color, tuple)
+        or isinstance(color, list)
     ):
         return color
     else:
@@ -80,7 +81,7 @@ def _get_color(color, cmap, clim):
 
 
 def _map_to_attr(values, attr, attr_range):
-    if attr == "index":
+    if attr == 'index':
         attr = np.array(values.index)
     else:
         attr = values[attr]
@@ -112,7 +113,7 @@ def _map_to_color(
     color: Union[str, Sequence],
     clim: Optional[Tuple[float, float]] = None,
 ) -> Sequence:
-    if color in values.columns or color == "index":
+    if color in values.columns or color == 'index':
         return _map_to_attr(values, color, clim)
     else:
         return (color,) * len(values)
@@ -124,9 +125,9 @@ def _map_to_opacity(
 ) -> Sequence:
     if isinstance(alpha, float):
         return (alpha,) * len(values)
-    #TODO: this will fail if you want to use the index as the opacity.
-    #      There's no legitimate reason you would want to do this
-    #      so it's a very low priority fix.
+    # TODO: this will fail if you want to use the index as the opacity.
+    #       There's no legitimate reason you would want to do this
+    #       so it's a very low priority fix.
     opa_min = max(0, values[alpha].min())
     opa_max = min(1, values[alpha].max())
     return _map_to_attr(values, alpha, (opa_min, opa_max))
@@ -134,15 +135,15 @@ def _map_to_opacity(
 
 def unified_plotter(
     *,
-    surf: Optional["CortexTriSurface"] = None,
-    surf_projection: str = "pial",
+    surf: Optional['CortexTriSurface'] = None,
+    surf_projection: str = 'pial',
     surf_alpha: float = 1.0,
     surf_scalars: Optional[str] = None,
-    surf_scalars_boundary_color: str = "black",
+    surf_scalars_boundary_color: str = 'black',
     surf_scalars_boundary_width: int = 0,
     surf_scalars_cmap: Any = (None, None),
-    surf_scalars_clim: Any = "robust",
-    surf_scalars_below_color: str = "black",
+    surf_scalars_clim: Any = 'robust',
+    surf_scalars_below_color: str = 'black',
     vol_coor: Optional[np.ndarray] = None,
     vol_scalars: Optional[np.ndarray] = None,
     vol_scalars_point_size: Optional[float] = None,
@@ -153,21 +154,21 @@ def unified_plotter(
     node_values: Optional[pd.DataFrame] = None,
     node_coor: Optional[np.ndarray] = None,
     node_parcel_scalars: Optional[str] = None,
-    node_color: Optional[str] = "black",
+    node_color: Optional[str] = 'black',
     node_radius: Union[float, str] = 3.0,
     node_radius_range: Tuple[float, float] = (2, 10),
-    node_cmap: Any = "viridis",
+    node_cmap: Any = 'viridis',
     node_clim: Tuple[float, float] = (0, 1),
     node_alpha: Union[float, str] = 1.0,
     node_lh: Optional[np.ndarray] = None,
     edge_values: Optional[pd.DataFrame] = None,
-    edge_color: Optional[str] = "edge_sgn",
-    edge_radius: Union[float, str] = "edge_val",
+    edge_color: Optional[str] = 'edge_sgn',
+    edge_radius: Union[float, str] = 'edge_val',
     edge_radius_range: Tuple[float, float] = (0.1, 1.8),
-    edge_cmap: Any = "RdYlBu",
+    edge_cmap: Any = 'RdYlBu',
     edge_clim: Tuple[float, float] = (0, 1),
     edge_alpha: Union[float, str] = 1.0,
-    hemisphere: Optional[Literal["left", "right"]] = None,
+    hemisphere: Optional[Literal['left', 'right']] = None,
     hemisphere_slack: Optional[Union[float, Literal['default']]] = 'default',
     off_screen: bool = True,
     copy_actors: bool = False,
@@ -354,14 +355,13 @@ def unified_plotter(
         direction = direction / length.reshape(-1, 1)
         return centre, direction, length
 
-    #TODO: cortex_theme doesn't work here for some reason. If the background
-    #      is transparent, all of the points are also made transparent. So
-    #      we're sticking with a white background for now.
+    # TODO: cortex_theme doesn't work here for some reason. If the background
+    #       is transparent, all of the points are also made transparent. So
+    #       we're sticking with a white background for now.
     theme = theme or pv.themes.DocumentTheme()
 
     hemispheres = (
-        (hemisphere,) if hemisphere is not None
-        else ("left", "right")
+        (hemisphere,) if hemisphere is not None else ('left', 'right')
     )
     hemi_params = _get_hemisphere_parameters(
         surf_scalars_cmap=surf_scalars_cmap,
@@ -389,10 +389,12 @@ def unified_plotter(
             hw_right = (surf.right.bounds[1] - surf.right.bounds[0]) / 2
             hemi_gap = surf.right.center[0] - surf.left.center[0]
         elif node_coor is not None and node_lh is not None:
-            hw_left = (node_coor[node_lh, 0].max() -
-                    node_coor[node_lh, 0].min()) / 2
-            hw_right = (node_coor[~node_lh, 0].max() -
-                        node_coor[~node_lh, 0].min()) / 2
+            hw_left = (
+                node_coor[node_lh, 0].max() - node_coor[node_lh, 0].min()
+            ) / 2
+            hw_right = (
+                node_coor[~node_lh, 0].max() - node_coor[~node_lh, 0].min()
+            ) / 2
             hemi_gap = (
                 node_coor[~node_lh, 0].max() + node_coor[~node_lh, 0].min()
             ) / 2 - (
@@ -400,10 +402,12 @@ def unified_plotter(
             ) / 2
         elif vol_coor is not None:
             left_mask = vol_coor[:, 0] < 0
-            hw_left = (vol_coor[left_mask, 0].max() -
-                    vol_coor[left_mask, 0].min()) / 2
-            hw_right = (vol_coor[~left_mask, 0].max() -
-                        vol_coor[~left_mask, 0].min()) / 2
+            hw_left = (
+                vol_coor[left_mask, 0].max() - vol_coor[left_mask, 0].min()
+            ) / 2
+            hw_right = (
+                vol_coor[~left_mask, 0].max() - vol_coor[~left_mask, 0].min()
+            ) / 2
             hemi_gap = (
                 vol_coor[~left_mask, 0].max() + vol_coor[~left_mask, 0].min()
             ) / 2 - (
@@ -437,14 +441,14 @@ def unified_plotter(
     if surf is not None:
         for hemisphere in hemispheres:
             hemi_surf = surf.__getattribute__(hemisphere)
-            #hemi_surf.project(surf_projection)
+            # hemi_surf.project(surf_projection)
             hemi_clim = hemi_params.get(hemisphere, 'surf_scalars_clim')
             hemi_cmap = hemi_params.get(hemisphere, 'surf_scalars_cmap')
             hemi_color = None if hemi_cmap else 'white'
-            if hemi_clim == "robust" and surf_scalars is not None:
+            if hemi_clim == 'robust' and surf_scalars is not None:
                 hemi_clim = robust_clim(hemi_surf, surf_scalars)
-            #TODO: copying the mesh seems like it could create memory issues.
-            #      A better solution would be delayed execution.
+            # TODO: copying the mesh seems like it could create memory issues.
+            #       A better solution would be delayed execution.
             p.add_mesh(
                 hemi_surf,
                 opacity=surf_alpha,
@@ -468,8 +472,9 @@ def unified_plotter(
                 )
 
     if vol_scalars is not None:
-        assert vol_coor is not None, (
-            "Volumetric scalars provided with unspecified coordinates")
+        assert (
+            vol_coor is not None
+        ), 'Volumetric scalars provided with unspecified coordinates'
         vol_scalars_point_size = vol_scalars_point_size or min(vol_voxdim[:3])
         p.add_points(
             vol_coor,
