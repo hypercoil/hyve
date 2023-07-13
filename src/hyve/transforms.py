@@ -71,12 +71,12 @@ def surf_from_archive(
     """
     archives = {
         'templateflow': CortexTriSurface.from_tflow,
-        'neuromaps': CortexTriSurface.from_nmaps
+        'neuromaps': CortexTriSurface.from_nmaps,
     }
     archives = {k: v for k, v in archives.items() if k in allowed}
     def transform(
         f: callable,
-        compositor: callable = direct_compositor
+        compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(surf_from_archive_p, archives=archives)
 
@@ -84,13 +84,13 @@ def surf_from_archive(
             *,
             template: str = 'fsLR',
             load_mask: bool = True,
-            projections: Optional[Sequence[str]] = ('veryinflated',),
+            surf_projection: Optional[Sequence[str]] = ('veryinflated',),
             **params: Mapping,
         ):
             return compositor(f, transformer_f)(**params)(
                 template=template,
                 load_mask=load_mask,
-                projections=projections,
+                projections=surf_projection,
             )
 
         return f_transformed
@@ -101,7 +101,7 @@ def scalars_from_cifti(
     scalars: str,
     is_masked: bool = True,
     apply_mask: bool = False,
-    null_value: Optional[float] = 0.,
+    null_value: Optional[float] = 0.0,
     plot: bool = False,
 ) -> callable:
     """
@@ -168,7 +168,7 @@ def scalars_from_cifti(
             return compositor(f, transformer_f)(**params)(
                 cifti=cifti,
                 surf=surf,
-                scalars_to_plot=scalars_to_plot
+                scalars_to_plot=scalars_to_plot,
             )
 
         return f_transformed
@@ -179,7 +179,7 @@ def scalars_from_gifti(
     scalars: str,
     is_masked: bool = True,
     apply_mask: bool = False,
-    null_value: Optional[float] = 0.,
+    null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
     plot: bool = False,
@@ -262,7 +262,7 @@ def scalars_from_gifti(
 def resample_to_surface(
     scalars: str,
     template: str = 'fsLR',
-    null_value: Optional[float] = 0.,
+    null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
     plot: bool = False,
@@ -310,7 +310,7 @@ def resample_to_surface(
     f_resample = templates[template]
     def transform(
         f: callable,
-        compositor: callable = direct_compositor
+        compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
             resample_to_surface_p,
@@ -328,7 +328,7 @@ def resample_to_surface(
             **params: Mapping,
         ):
             try:
-                nii = params.pop(f"{scalars}_nifti")
+                nifti = params.pop(f'{scalars}_nifti')
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
@@ -336,9 +336,9 @@ def resample_to_surface(
                 )
             scalars_to_plot = params.get('scalars', []) if plot else None
             return compositor(f, transformer_f)(**params)(
-                nii=nii,
+                nifti=nifti,
                 surf=surf,
-                scalars_to_plot=scalars_to_plot
+                scalars_to_plot=scalars_to_plot,
             )
 
         return f_transformed
@@ -376,12 +376,12 @@ def parcellate_colormap(
           ``cmap``, ``clim``, ``node_cmap``, or ``node_cmap_range``.
     """
     cmaps = {
-        "network": "viz/resources/cmap_network.nii",
-        "modal": "viz/resources/cmap_modal.nii",
+        'network': 'viz/resources/cmap_network.nii',
+        'modal': 'viz/resources/cmap_modal.nii',
     }
     cmap = pkgrf(
         'hypercoil',
-        cmaps[cmap_name]
+        cmaps[cmap_name],
     )
     def transform(
         f: callable,
@@ -408,7 +408,7 @@ def parcellate_colormap(
 def plot_to_image():
     def transform(
         f: callable,
-        compositor: callable = direct_compositor
+        compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = plot_to_image_p
 

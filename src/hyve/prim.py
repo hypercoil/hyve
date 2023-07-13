@@ -6,7 +6,6 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
-from pkg_resources import resource_filename as pkgrf
 from typing import (
     Any,
     Callable,
@@ -18,20 +17,20 @@ from typing import (
     Union,
 )
 
-from matplotlib.colors import ListedColormap
 import nibabel as nb
 import numpy as np
 import pandas as pd
 import pyvista as pv
-
 from conveyant import Primitive
-from conveyant.replicate import replicate, _flatten
+from conveyant.replicate import _flatten, replicate
+from matplotlib.colors import ListedColormap
+
 from .const import Tensor
 from .plot import unified_plotter
 from .surf import CortexTriSurface
 from .util import (
-    format_position_as_string,
     cortex_cameras,
+    format_position_as_string,
 )
 
 
@@ -49,11 +48,11 @@ def surf_from_archive_f(
                 projections=projections,
             )
             return surf, projections
-        except Exception as e:
+        except Exception:
             continue
     raise ValueError(
-        f"Could not load {template} with projections {projections} "
-        f"from any of {tuple(archives.keys())}."
+        f'Could not load {template} with projections {projections} '
+        f'from any of {tuple(archives.keys())}.'
     )
 
 
@@ -110,15 +109,15 @@ def scalars_from_gifti_f(
 def resample_to_surface_f(
     surf: CortexTriSurface,
     scalars: str,
-    nii: nb.Nifti1Image,
+    nifti: nb.Nifti1Image,
     f_resample: callable,
     scalars_to_plot: Sequence[str] = (),
-    null_value: Optional[float] = 0.,
+    null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
     plot: bool = False,
 ) -> Mapping:
-    left, right = f_resample(nii)
+    left, right = f_resample(nifti)
     scalar_names = surf.add_gifti_dataset(
         name=scalars,
         left_gifti=left,
@@ -242,12 +241,12 @@ def parcellate_colormap_f(
         cifti=cmap,
         is_masked=True,
         apply_mask=False,
-        null_value=0.
+        null_value=0.0,
     )
     (
         (cmap_left, clim_left),
         (cmap_right, clim_right),
-        (cmap, clim)
+        (cmap, clim),
     ) = make_cmap_f(
         surf, f'cmap_{cmap_name}', parcellation_name, return_both=True
     )
@@ -371,7 +370,8 @@ def automap_unified_plotter_f(
                 k: (v[i % len(v)] if k in repl_vars else v)
                 for k, v in params.items()
             }
-        ) for i in range(n_replicates)
+        )
+        for i in range(n_replicates)
     ]
     # for i, _p in enumerate(p):
     #     _p.show()
@@ -390,7 +390,7 @@ surf_from_archive_p = Primitive(
 scalars_from_cifti_p = Primitive(
     scalars_from_cifti_f,
     'scalars_from_cifti',
-    output=('surf', 'surf_scalars',),
+    output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 
@@ -398,7 +398,7 @@ scalars_from_cifti_p = Primitive(
 scalars_from_gifti_p = Primitive(
     scalars_from_gifti_f,
     'scalars_from_gifti',
-    output=('surf', 'surf_scalars',),
+    output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 

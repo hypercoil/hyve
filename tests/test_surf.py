@@ -62,7 +62,7 @@ def test_scalars():
             label='GM',
             resolution=2
         ),
-        projections=('pial',),
+        surf_projection=('pial',),
         hemisphere=['left', 'right'],
         #off_screen=False,
     )
@@ -82,16 +82,16 @@ def test_parcellation():
             omap(
                 plot_to_image(),
                 mapping={
-                    "hemisphere": ('left', 'right'),
-                    "basename": ('/tmp/left', '/tmp/right'),
+                    'hemisphere': ('left', 'right'),
+                    'basename': ('/tmp/left', '/tmp/right'),
                 }
             ),
             omap(
                 plot_to_image(),
                 mapping={
-                    "hemisphere": ('left', 'right'),
-                    "basename": ('/tmp/left', '/tmp/right'),
-                    "views": (((-20, 0, 0),), (((65, 65, 0), (0, 0, 0), (0, 0, 1)),))
+                    'hemisphere': ('left', 'right'),
+                    'basename': ('/tmp/left', '/tmp/right'),
+                    'views': (((-20, 0, 0),), (((65, 65, 0), (0, 0, 0), (0, 0, 1)),))
                 }
             ),
         )
@@ -104,50 +104,55 @@ def test_parcellation():
             'hypercoil',
             'viz/resources/nullexample.nii'
         ),
-        projections=('veryinflated',),
+        surf_projection=('veryinflated',),
         hemisphere=['left', 'right'],
         surf_scalars_boundary_color='black',
         surf_scalars_boundary_width=5,
     )
 
-# @pytest.mark.ci_unsupported
-# def test_parcellation_modal_cmap(self):
-#     i_chain = ichain(
-#         surf_from_archive(),
-#         scalars_from_cifti('parcellation', plot=True),
-#         parcellate_colormap('modal', 'parcellation')
-#     )
-#     o_chain = ochain(
-#         split_chain(
-#             map_over_sequence(
-#                 xfm=plot_and_save(),
-#                 mapping={
-#                     "basename": ('/tmp/leftmodal', '/tmp/rightmodal'),
-#                     "hemi": ('left', 'right'),
-#                 }
-#             ),
-#             map_over_sequence(
-#                 xfm=plot_and_save(),
-#                 mapping={
-#                     "basename": ('/tmp/leftmodal', '/tmp/rightmodal'),
-#                     "hemi": ('left', 'right'),
-#                     "views": (((-20, 0, 0),), (((65, 65, 0), (0, 0, 0), (0, 0, 1)),))
-#                 }
-#             ),
-#         )
-#     )
-#     f = iochain(plot_surf_scalars, i_chain, o_chain)
-#     f(
-#         template="fsLR",
-#         load_mask=True,
-#         parcellation_cifti=pkgrf(
-#             'hypercoil',
-#             'viz/resources/nullexample.nii'
-#         ),
-#         projection='veryinflated',
-#         boundary_color='black',
-#         boundary_width=5,
-#     )
+@pytest.mark.ci_unsupported
+def test_parcellation_modal_cmap():
+    i_chain = ichain(
+        surf_from_archive(),
+        scalars_from_gifti('parcellation', plot=True),
+        parcellate_colormap('modal', 'parcellation')
+    )
+    o_chain = ochain(
+        split_chain(
+            omap(
+                plot_to_image(),
+                mapping={
+                    'basename': ('/tmp/leftmodal', '/tmp/rightmodal'),
+                    'hemisphere': ('left', 'right'),
+                }
+            ),
+            omap(
+                plot_to_image(),
+                mapping={
+                    'basename': ('/tmp/leftmodal', '/tmp/rightmodal'),
+                    'hemisphere': ('left', 'right'),
+                    'views': (((-20, 0, 0),), (((65, 65, 0), (0, 0, 0), (0, 0, 1)),))
+                }
+            ),
+        )
+    )
+    f = iochain(automap_unified_plotter_p, i_chain, o_chain)
+    f(
+        template="fsLR",
+        load_mask=True,
+        parcellation_gifti_left=pkgrf(
+            'hypercoil',
+            'viz/resources/nullexample_L.gii'
+        ),
+        parcellation_gifti_right=pkgrf(
+            'hypercoil',
+            'viz/resources/nullexample_R.gii'
+        ),
+        surf_projection=('veryinflated',),
+        hemisphere=['left', 'right'],
+        surf_scalars_boundary_color='black',
+        surf_scalars_boundary_width=5,
+    )
 
 # @pytest.mark.ci_unsupported
 # def test_parcellation_html(self):

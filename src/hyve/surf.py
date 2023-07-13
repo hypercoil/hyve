@@ -652,6 +652,10 @@ class CortexTriSurface:
             ``CortexTriSurface`` if ``map_all=True``. If ``exclude=None``, all
             arrays will be mapped unless ``select`` is specified.
         """
+        if isinstance(left_gifti, str):
+            left_gifti = nb.load(left_gifti)
+        if isinstance(right_gifti, str):
+            right_gifti = nb.load(right_gifti)
         left_data = left_gifti.darrays if left_gifti else []
         right_data = right_gifti.darrays if right_gifti else []
         if map_all and len(left_data) > 1 and len(right_data) > 1:
