@@ -6,6 +6,7 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
+from pkg_resources import resource_filename as pkgrf
 from typing import (
     Any,
     Callable,
@@ -17,6 +18,7 @@ from typing import (
     Union,
 )
 
+from matplotlib.colors import ListedColormap
 import nibabel as nb
 import numpy as np
 import pandas as pd
@@ -24,6 +26,7 @@ import pyvista as pv
 
 from conveyant import Primitive
 from conveyant.replicate import replicate, _flatten
+from .const import Tensor
 from .plot import unified_plotter
 from .surf import CortexTriSurface
 from .util import (
@@ -45,7 +48,7 @@ def surf_from_archive_f(
                 load_mask=load_mask,
                 projections=projections,
             )
-            return surf
+            return surf, projections
         except Exception as e:
             continue
     raise ValueError(
@@ -54,12 +57,62 @@ def surf_from_archive_f(
     )
 
 
-def resample_to_surface_f(
-    nii: nb.Nifti1Image,
+def scalars_from_cifti_f(
     surf: CortexTriSurface,
     scalars: str,
+    cifti: nb.Cifti2Image,
+    scalars_to_plot: Sequence[str] = (),
+    is_masked: bool = True,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.0,
+    plot: bool = False,
+) -> Mapping:
+    surf.add_cifti_dataset(
+        name=scalars,
+        cifti=cifti,
+        is_masked=is_masked,
+        apply_mask=apply_mask,
+        null_value=null_value,
+    )
+    if plot:
+        scalars_to_plot = tuple(list(scalars_to_plot) + [scalars])
+    return surf, scalars_to_plot
+
+
+def scalars_from_gifti_f(
+    surf: CortexTriSurface,
+    scalars: str,
+    left_gifti: Optional[nb.gifti.GiftiImage] = None,
+    right_gifti: Optional[nb.gifti.GiftiImage] = None,
+    scalars_to_plot: Sequence[str] = (),
+    is_masked: bool = True,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.0,
+    select: Optional[Sequence[int]] = None,
+    exclude: Optional[Sequence[int]] = None,
+    plot: bool = False,
+) -> Mapping:
+    scalar_names = surf.add_gifti_dataset(
+        name=scalars,
+        left_gifti=left_gifti,
+        right_gifti=right_gifti,
+        is_masked=is_masked,
+        apply_mask=apply_mask,
+        null_value=null_value,
+        select=select,
+        exclude=exclude,
+    )
+    if plot:
+        scalars_to_plot = tuple(list(scalars_to_plot) + list(scalar_names))
+    return surf, scalars_to_plot
+
+
+def resample_to_surface_f(
+    surf: CortexTriSurface,
+    scalars: str,
+    nii: nb.Nifti1Image,
     f_resample: callable,
-    scalars_to_plot: Optional[Sequence[str]] = None,
+    scalars_to_plot: Sequence[str] = (),
     null_value: Optional[float] = 0.,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
@@ -77,14 +130,139 @@ def resample_to_surface_f(
         exclude=exclude,
     )
     if plot:
-        scalars_to_plot = tuple(
-            list(scalars_to_plot) + list(scalar_names)
-        )
+        scalars_to_plot = tuple(list(scalars_to_plot) + list(scalar_names))
     return surf, scalars_to_plot
 
 
+def _cmap_impl_hemisphere(
+    surf: CortexTriSurface,
+    hemisphere: Literal['left', 'right'],
+    parcellation: str,
+    colours: Tensor,
+    null_value: float,
+) -> Tuple[Tensor, Tuple[float, float]]:
+    """
+    Helper function used when creating a colormap for a cortical hemisphere.
+    """
+    parcellation = surf.point_data[hemisphere][parcellation]
+    start = int(np.min(parcellation[parcellation != null_value])) - 1
+    stop = int(np.max(parcellation))
+    cmap = ListedColormap(colours[start:stop, :3])
+    clim = (start + 0.1, stop + 0.9)
+    return cmap, clim
+
+
+def make_cmap_f(
+    surf: CortexTriSurface,
+    cmap: str,
+    parcellation: str,
+    null_value: float = 0,
+    return_left: bool = True,
+    return_right: bool = True,
+    return_both: bool = False,
+) -> Union[
+    Tuple[Tensor, Tuple[float, float]],
+    Tuple[
+        Tuple[Tensor, Tuple[float, float]],
+        Tuple[Tensor, Tuple[float, float]],
+    ],
+    Tuple[
+        Tuple[Tensor, Tuple[float, float]],
+        Tuple[Tensor, Tuple[float, float]],
+        Tuple[Tensor, Tuple[float, float]],
+    ],
+]:
+    """
+    Create a colormap for a parcellation dataset defined over a cortical
+    surface.
+
+    Parameters
+    ----------
+    surf : CortexTriSurface
+        The surface over which the parcellation is defined. It should include
+        both the parcellation dataset and a vertexwise colormap dataset.
+    cmap : str
+        The name of the vertex-wise colormap dataset to use.
+    parcellation : str
+        The name of the parcellation dataset to use.
+    null_value : float (default: 0)
+        The value to use for null values in the parcellation dataset.
+    return_left : bool (default: True)
+        Whether to return a colormap for the left hemisphere.
+    return_right : bool (default: True)
+        Whether to return a colormap for the right hemisphere.
+    return_both : bool (default: False)
+        Whether to return a colormap for both hemispheres.
+    """
+    colours = surf.parcellate_vertex_dataset(cmap, parcellation)
+    colours = np.minimum(colours, 1)
+    colours = np.maximum(colours, 0)
+
+    ret = []
+    if return_left or return_both:
+        cmap_left, clim_left = _cmap_impl_hemisphere(
+            surf,
+            'left',
+            parcellation,
+            colours,
+            null_value,
+        )
+        ret += [(cmap_left, clim_left)]
+    if return_right or return_both:
+        cmap_right, clim_right = _cmap_impl_hemisphere(
+            surf,
+            'right',
+            parcellation,
+            colours,
+            null_value,
+        )
+        ret += [(cmap_right, clim_right)]
+    if return_both:
+        # TODO: Rewrite this to skip the unnecessary intermediate blocks
+        #       above.
+        cmin = min(clim_left[0], clim_right[0])
+        cmax = max(clim_left[1], clim_right[1])
+        cmap = ListedColormap(colours[:, :3])
+        clim = (cmin, cmax)
+        ret += [(cmap, clim)]
+    if len(ret) == 1:
+        return ret[0]
+    else:
+        return tuple(ret)
+
+
+def parcellate_colormap_f(
+    surf: CortexTriSurface,
+    cmap_name: str,
+    parcellation_name: str,
+    cmap: str,
+):
+    surf.add_cifti_dataset(
+        name=f'cmap_{cmap_name}',
+        cifti=cmap,
+        is_masked=True,
+        apply_mask=False,
+        null_value=0.
+    )
+    (
+        (cmap_left, clim_left),
+        (cmap_right, clim_right),
+        (cmap, clim)
+    ) = make_cmap_f(
+        surf, f'cmap_{cmap_name}', parcellation_name, return_both=True
+    )
+
+    return (
+        surf,
+        (cmap_left, cmap_right),
+        (clim_left, clim_right),
+        cmap,
+        clim,
+    )
+
+
 def plot_to_image_f(
-    p: pv.Plotter,
+    plotter: pv.Plotter,
     views: Sequence = (
         'medial',
         'lateral',
@@ -106,18 +284,22 @@ def plot_to_image_f(
         ]
     ret = []
     try:
-        p.remove_scalar_bar()
+        plotter.remove_scalar_bar()
     except IndexError:
         pass
     for cpos, fname in zip(views, screenshot):
-        p.camera.zoom('tight')
-        p.show(
-            cpos=cortex_cameras(cpos, plotter=p, hemisphere=hemisphere),
+        plotter.camera.zoom('tight')
+        plotter.show(
+            cpos=cortex_cameras(cpos, plotter=plotter, hemisphere=hemisphere),
             auto_close=False,
         )
-        img = p.screenshot(fname, window_size=window_size, return_img=True)
+        img = plotter.screenshot(
+            fname,
+            window_size=window_size,
+            return_img=True,
+        )
         ret.append(img)
-    p.close()
+    plotter.close()
     return tuple(ret)
 
 
@@ -200,7 +382,23 @@ def automap_unified_plotter_f(
 surf_from_archive_p = Primitive(
     surf_from_archive_f,
     'surf_from_archive',
-    output=('surf',),
+    output=('surf', 'surf_projection'),
+    forward_unused=True,
+)
+
+
+scalars_from_cifti_p = Primitive(
+    scalars_from_cifti_f,
+    'scalars_from_cifti',
+    output=('surf', 'surf_scalars',),
+    forward_unused=True,
+)
+
+
+scalars_from_gifti_p = Primitive(
+    scalars_from_gifti_f,
+    'scalars_from_gifti',
+    output=('surf', 'surf_scalars',),
     forward_unused=True,
 )
 
@@ -209,6 +407,20 @@ resample_to_surface_p = Primitive(
     resample_to_surface_f,
     'resample_to_surface',
     output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+parcellate_colormap_p = Primitive(
+    parcellate_colormap_f,
+    'parcellate_colormap',
+    output=(
+        'surf',
+        'surf_scalars_cmap',
+        'surf_scalars_clim',
+        'node_cmap',
+        'node_clim',
+    ),
     forward_unused=True,
 )
 
@@ -224,6 +436,6 @@ plot_to_image_p = Primitive(
 automap_unified_plotter_p = Primitive(
     automap_unified_plotter_f,
     'automap_unified_plotter',
-    output=('p'),
+    output=('plotter',),
     forward_unused=True,
 )

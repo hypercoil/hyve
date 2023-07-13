@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import (
     Any,
     Iterable,
-    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -24,7 +23,6 @@ import nibabel as nb
 import numpy as np
 import pyvista as pv
 import templateflow.api as tflow
-from matplotlib.colors import ListedColormap
 from scipy.spatial.distance import cdist
 
 from .const import (
@@ -1243,100 +1241,3 @@ class CortexTriSurface:
             transpose=True,
         )
         return parcellation @ data[: parcellation.shape[-1]]
-
-
-def _cmap_impl_hemisphere(
-    surf: CortexTriSurface,
-    hemisphere: Literal['left', 'right'],
-    parcellation: str,
-    colours: Tensor,
-    null_value: float,
-) -> Tuple[Tensor, Tuple[float, float]]:
-    """
-    Helper function used when creating a colormap for a cortical hemisphere.
-    """
-    parcellation = surf.point_data[hemisphere][parcellation]
-    start = int(np.min(parcellation[parcellation != null_value])) - 1
-    stop = int(np.max(parcellation))
-    cmap = ListedColormap(colours[start:stop, :3])
-    clim = (start + 0.1, stop + 0.9)
-    return cmap, clim
-
-
-def make_cmap(
-    surf: CortexTriSurface,
-    cmap: str,
-    parcellation: str,
-    null_value: float = 0,
-    return_left: bool = True,
-    return_right: bool = True,
-    return_both: bool = False,
-) -> Union[
-    Tuple[Tensor, Tuple[float, float]],
-    Tuple[
-        Tuple[Tensor, Tuple[float, float]],
-        Tuple[Tensor, Tuple[float, float]],
-    ],
-    Tuple[
-        Tuple[Tensor, Tuple[float, float]],
-        Tuple[Tensor, Tuple[float, float]],
-        Tuple[Tensor, Tuple[float, float]],
-    ],
-]:
-    """
-    Create a colormap for a parcellation dataset defined over a cortical
-    surface.
-
-    Parameters
-    ----------
-    surf : CortexTriSurface
-        The surface over which the parcellation is defined. It should include
-        both the parcellation dataset and a vertexwise colormap dataset.
-    cmap : str
-        The name of the vertex-wise colormap dataset to use.
-    parcellation : str
-        The name of the parcellation dataset to use.
-    null_value : float (default: 0)
-        The value to use for null values in the parcellation dataset.
-    return_left : bool (default: True)
-        Whether to return a colormap for the left hemisphere.
-    return_right : bool (default: True)
-        Whether to return a colormap for the right hemisphere.
-    return_both : bool (default: False)
-        Whether to return a colormap for both hemispheres.
-    """
-    colours = surf.parcellate_vertex_dataset(cmap, parcellation)
-    colours = np.minimum(colours, 1)
-    colours = np.maximum(colours, 0)
-
-    ret = []
-    if return_left or return_both:
-        cmap_left, clim_left = _cmap_impl_hemisphere(
-            surf,
-            'left',
-            parcellation,
-            colours,
-            null_value,
-        )
-        ret += [(cmap_left, clim_left)]
-    if return_right or return_both:
-        cmap_right, clim_right = _cmap_impl_hemisphere(
-            surf,
-            'right',
-            parcellation,
-            colours,
-            null_value,
-        )
-        ret += [(cmap_right, clim_right)]
-    if return_both:
-        # TODO: Rewrite this to skip the unnecessary intermediate blocks
-        #       above.
-        cmin = min(clim_left[0], clim_right[0])
-        cmax = max(clim_left[1], clim_right[1])
-        cmap = ListedColormap(colours[:, :3])
-        clim = (cmin, cmax)
-        ret += [(cmap, clim)]
-    if len(ret) == 1:
-        return ret[0]
-    else:
-        return tuple(ret)
