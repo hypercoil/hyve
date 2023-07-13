@@ -133,6 +133,10 @@ def _map_to_opacity(
     return _map_to_attr(values, alpha, (opa_min, opa_max))
 
 
+def _null_writer(plotter):
+    return plotter
+
+
 def unified_plotter(
     *,
     surf: Optional['CortexTriSurface'] = None,
@@ -173,10 +177,7 @@ def unified_plotter(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
-    views: Sequence = (),
-    return_plotter: bool = False,
-    return_screenshot: bool = True,
-    return_html: bool = False,
+    writers: Optional[Sequence[Mapping[str, callable]]] = None,
 ) -> Optional[pv.Plotter]:
     """
     Plot a surface, volume, and/or graph in a single figure.
@@ -524,4 +525,7 @@ def unified_plotter(
                 opacity=opa,
             )
 
-    return p
+    if writers is None or len(writers) == 0:
+        writers = [_null_writer]
+    writers = [w if w is not None else _null_writer for w in writers]
+    return tuple(w(p) for w in writers)

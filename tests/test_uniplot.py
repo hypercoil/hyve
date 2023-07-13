@@ -24,7 +24,7 @@ def test_unified_plotter():
         surf=surf,
         surf_alpha=0.2,
         off_screen=False,
-    ).show()
+    )[0].show()
     unified_plotter(
         surf=surf,
         surf_alpha=0.2,
@@ -32,7 +32,7 @@ def test_unified_plotter():
         hemisphere='left',
         hemisphere_slack=1.2,
         surf_projection='inflated',
-    ).show()
+    )[0].show()
     surf.add_vertex_dataset(
         'data',
         data=np.random.rand(40962 * 2),
@@ -45,7 +45,7 @@ def test_unified_plotter():
         surf_alpha=0.2,
         hemisphere_slack=1.2,
         off_screen=False,
-    ).show()
+    )[0].show()
     vol = nb.load("/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz")
     vol_data = vol.get_fdata()
     vol_loc = np.where(vol_data > 0)
@@ -61,7 +61,7 @@ def test_unified_plotter():
         vol_voxdim=vol_voxdim,
         hemisphere_slack=1.2,
         off_screen=False,
-    ).show()
+    )[0].show()
     unified_plotter(
         surf=surf,
         surf_scalars='data',
@@ -72,7 +72,7 @@ def test_unified_plotter():
         vol_voxdim=vol_voxdim,
         hemisphere_slack=1.2,
         off_screen=False,
-    ).show()
+    )[0].show()
     parcellation = '/Users/rastkociric/Downloads/desc-schaefer_res-0400_atlas.nii'
     surf_lr = CortexTriSurface.from_tflow(load_mask=True, projections=('inflated',))
     surf_lr.add_vertex_dataset(
@@ -110,7 +110,7 @@ def test_unified_plotter():
         edge_clim=edge_clim,
         hemisphere_slack=1.2,
         off_screen=False,
-    ).show()
+    )[0].show()
     unified_plotter(
         surf=surf_lr,
         surf_projection='inflated',
@@ -129,4 +129,4 @@ def test_unified_plotter():
         edge_clim=edge_clim,
         hemisphere_slack=1.2,
         off_screen=False,
-    ).show()
+    )[0].show()

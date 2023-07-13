@@ -42,7 +42,7 @@ def print_params(**params):
 def test_scalars():
     i_chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gm_density', template='fsaverage', plot=True),
+        resample_to_surface('gmdensity', template='fsaverage', plot=True),
     )
     o_chain = omap(
         plot_to_image(),
@@ -55,7 +55,7 @@ def test_scalars():
     out = f(
         template='fsaverage',
         load_mask=True,
-        gm_density_nifti=tflow.get(
+        gmdensity_nifti=tflow.get(
             template='MNI152NLin2009cAsym',
             suffix='probseg',
             label='GM',
@@ -186,9 +186,9 @@ def test_parcellation_html():
 def test_parcellated_scalars():
     i_chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gm_density', template='fsLR'),
+        resample_to_surface('gmdensity', template='fsLR'),
         scalars_from_cifti('parcellation'),
-        parcellate_scalars('gm_density', 'parcellation'),
+        parcellate_scalars('gmdensity', 'parcellation'),
     )
     o_chain = ochain(
         omap(
@@ -207,7 +207,7 @@ def test_parcellated_scalars():
             'hypercoil',
             'viz/resources/nullexample.nii'
         ),
-        gm_density_nifti=tflow.get(
+        gmdensity_nifti=tflow.get(
             template='MNI152NLin2009cAsym',
             suffix='probseg',
             label="GM",

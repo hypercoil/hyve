@@ -391,12 +391,14 @@ def automap_unified_plotter_f(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    writers: Optional[Sequence[Mapping[str, callable]]] = None,
     # views: Sequence = (),
     # return_plotter: bool = False,
     # return_screenshot: bool = True,
     # return_html: bool = False,
     map_spec: Optional[Sequence] = None,
 ) -> Optional[pv.Plotter]:
+    params = locals()
     map_spec = map_spec or [
         'surf_projection',
         'surf_scalars',
@@ -404,28 +406,32 @@ def automap_unified_plotter_f(
         ('node_values', 'node_coor', 'node_parcel_scalars', 'edge_values'),
         'hemisphere',
     ]
-    params = locals()
     params.pop('map_spec')
     mapper = replicate(spec=map_spec)
+
+    writers = params.pop('writers', None)
+    writers = writers or {'plotter': None}
+    writer_names, writers = zip(*writers.items())
+
     repl_params = mapper(**params)
     repl_vars = set(_flatten(map_spec))
     repl_params = {k: v for k, v in repl_params.items() if k in repl_vars}
     other_params = {k: v for k, v in params.items() if k not in repl_vars}
     params = {**other_params, **repl_params}
     n_replicates = max([len(v) for v in repl_params.values()])
-    p = [
+    output = [
         unified_plotter(
             **{
                 k: (v[i % len(v)] if k in repl_vars else v)
                 for k, v in params.items()
-            }
+            },
+            writers=writers,
         )
         for i in range(n_replicates)
     ]
-    # for i, _p in enumerate(p):
-    #     _p.show()
+    output = {k: v for k, v in zip(writer_names, zip(*output))}
 
-    return p
+    return output
 
 
 surf_from_archive_p = Primitive(
@@ -509,6 +515,6 @@ plot_to_html_p = Primitive(
 automap_unified_plotter_p = Primitive(
     automap_unified_plotter_f,
     'automap_unified_plotter',
-    output=('plotter',),
+    output=None,
     forward_unused=True,
 )
