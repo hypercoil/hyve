@@ -177,7 +177,7 @@ def unified_plotter(
     return_plotter: bool = False,
     return_screenshot: bool = True,
     return_html: bool = False,
-) -> Optional[Sequence[pv.Plotter]]:
+) -> Optional[pv.Plotter]:
     """
     Plot a surface, volume, and/or graph in a single figure.
 
