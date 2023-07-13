@@ -26,10 +26,13 @@ from conveyant import (
 from .const import Tensor
 from .prim import (
     surf_from_archive_p,
+    scalars_from_cifti_p,
+    scalars_from_gifti_p,
     resample_to_surface_p,
+    parcellate_colormap_p,
     plot_to_image_p,
 )
-from .surf import CortexTriSurface, make_cmap
+from .surf import CortexTriSurface
 from .util import (
     auto_focus,
     filter_adjacency_data,
@@ -67,8 +70,8 @@ def surf_from_archive(
           (defaults to ``("veryinflated",)``).
     """
     archives = {
-        "templateflow": CortexTriSurface.from_tflow,
-        "neuromaps": CortexTriSurface.from_nmaps
+        'templateflow': CortexTriSurface.from_tflow,
+        'neuromaps': CortexTriSurface.from_nmaps
     }
     archives = {k: v for k, v in archives.items() if k in allowed}
     def transform(
@@ -88,6 +91,168 @@ def surf_from_archive(
                 template=template,
                 load_mask=load_mask,
                 projections=projections,
+            )
+
+        return f_transformed
+    return transform
+
+
+def scalars_from_cifti(
+    scalars: str,
+    is_masked: bool = True,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.,
+    plot: bool = False,
+) -> callable:
+    """
+    Load a scalar dataset from a CIFTI file onto a CortexTriSurface.
+
+    Parameters
+    ----------
+    scalars : str
+        The name that the scalar dataset loaded from the CIFTI file is given
+        on the surface.
+    is_masked : bool (default: True)
+        Indicates whether the CIFTI file contains a dataset that is already
+        masked.
+    apply_mask : bool (default: False)
+        Indicates whether the surface mask should be applied to the CIFTI
+        dataset.
+    null_value : float or None (default: 0.)
+        The value to use for masked-out vertices.
+    plot : bool (default: False)
+        Indicates whether the scalar dataset should be plotted.
+
+    Returns
+    -------
+    callable
+        A transform function. Transform functions accept a plotting
+        function and return a new plotting function with different input and
+        output arguments.
+        * The transformed plotter will now require a ``<scalars>_cifti``
+          argument, where ``<scalars>`` is the name of the scalar dataset
+          provided as an argument to this function. The value of this
+          argument should be either a ``Cifti2Image`` object or a path to a
+          CIFTI file. This is the CIFTI image whose data will be loaded onto
+          the surface.
+        * If ``plot`` is ``True``, the transformed function will automatically
+          add the scalar dataset obtained from the CIfTI image to the sequence
+          of scalars to plot.
+    """
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            scalars_from_cifti_p,
+            scalars=scalars,
+            is_masked=is_masked,
+            apply_mask=apply_mask,
+            null_value=null_value,
+            plot=plot,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            **params: Mapping,
+        ):
+            try:
+                cifti = params.pop(f'{scalars}_cifti')
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {scalars}_cifti'
+                )
+            scalars_to_plot = params.get('scalars', []) if plot else None
+            return compositor(f, transformer_f)(**params)(
+                cifti=cifti,
+                surf=surf,
+                scalars_to_plot=scalars_to_plot
+            )
+
+        return f_transformed
+    return transform
+
+
+def scalars_from_gifti(
+    scalars: str,
+    is_masked: bool = True,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.,
+    select: Optional[Sequence[int]] = None,
+    exclude: Optional[Sequence[int]] = None,
+    plot: bool = False,
+) -> callable:
+    """
+    Load a scalar dataset from a GIfTI file onto a CortexTriSurface.
+
+    Parameters
+    ----------
+    scalars : str
+        The name that the scalar dataset loaded from the GIfTI file is given
+        on the surface.
+    is_masked : bool (default: True)
+        Indicates whether the GIfTI file contains a dataset that is already
+        masked.
+    apply_mask : bool (default: False)
+        Indicates whether the surface mask should be applied to the GIfTI
+        dataset.
+    null_value : float or None (default: 0.)
+        The value to use for masked-out vertices.
+    plot : bool (default: False)
+        Indicates whether the scalar dataset should be plotted.
+
+    Returns
+    -------
+    callable
+        A transform function. Transform functions accept a plotting
+        function and return a new plotting function with different input and
+        output arguments.
+        * The transformed plotter will now require a ``<scalars>_gifti``
+          argument, where ``<scalars>`` is the name of the scalar dataset
+          provided as an argument to this function. The value of this
+          argument should be either a ``GIfTIImage`` object or a path to a
+          GIfTI file. This is the GIfTI image whose data will be loaded onto
+          the surface.
+        * If ``plot`` is ``True``, the transformed function will automatically
+          add the scalar dataset obtained from the GIfTI image to the sequence
+          of scalars to plot.
+    """
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            scalars_from_gifti_p,
+            scalars=scalars,
+            is_masked=is_masked,
+            apply_mask=apply_mask,
+            null_value=null_value,
+            select=select,
+            exclude=exclude,
+            plot=plot,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            **params: Mapping,
+        ):
+            left_gifti = params.pop(f'{scalars}_gifti_left', None)
+            right_gifti = params.pop(f'{scalars}_gifti_right', None)
+            if left_gifti is None and right_gifti is None:
+                raise TypeError(
+                    'Transformed plot function missing a required '
+                    f'keyword-only argument: either {scalars}_gifti_left or '
+                    f'{scalars}_gifti_right'
+                )
+            scalars_to_plot = params.get('scalars', []) if plot else None
+            return compositor(f, transformer_f)(**params)(
+                left_gifti=left_gifti,
+                right_gifti=right_gifti,
+                surf=surf,
+                scalars_to_plot=scalars_to_plot,
             )
 
         return f_transformed
@@ -175,6 +340,66 @@ def resample_to_surface(
                 surf=surf,
                 scalars_to_plot=scalars_to_plot
             )
+
+        return f_transformed
+    return transform
+
+
+def parcellate_colormap(
+    cmap_name: str,
+    parcellation_name: str,
+) -> callable:
+    """
+    Add a colormap to a surface, and then parcellate it to obtain colours for
+    each parcel.
+
+    Parameters
+    ----------
+    cmap_name : str
+        The name of the colormap to add to the surface. Currently, only
+        "network" and "modal" are supported. The "network" colormap colours
+        each parcel based on its overlap with the 7 resting-state networks
+        defined by Yeo et al. (2011). The "modal" colormap colours each
+        parcel based on its affiliation with the 3 modal domains defined by
+        Glasser et al. (2016).
+    parcellation_name : str
+        The name of the parcellation to use to parcellate the colormap. The
+        parcellation must be present on the surface.
+
+    Returns
+    -------
+    callable
+        A transform function. Transform functions accept a plotting
+        function and return a new plotting function with different input and
+        output arguments.
+        * The transformed function will no longer accept the arguments
+          ``cmap``, ``clim``, ``node_cmap``, or ``node_cmap_range``.
+    """
+    cmaps = {
+        "network": "viz/resources/cmap_network.nii",
+        "modal": "viz/resources/cmap_modal.nii",
+    }
+    cmap = pkgrf(
+        'hypercoil',
+        cmaps[cmap_name]
+    )
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            parcellate_colormap_p,
+            cmap_name=cmap_name,
+            parcellation_name=parcellation_name,
+            cmap=cmap,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(surf=surf)
 
         return f_transformed
     return transform
