@@ -18,7 +18,7 @@ from hyve.util import filter_adjacency_data, filter_node_data
 
 
 @pytest.mark.ci_unsupported
-def test_unified_plotter(self):
+def test_unified_plotter():
     surf = CortexTriSurface.from_nmaps(projections=('pial', 'inflated'))
     unified_plotter(
         surf=surf,
