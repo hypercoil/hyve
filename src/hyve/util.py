@@ -97,7 +97,7 @@ def cortex_cameras(
     position: Union[str, Sequence[Tuple[float, float, float]]],
     plotter: pv.Plotter,
     negative: bool = False,
-    hemi: Optional[Literal['left', 'right']] = None,
+    hemisphere: Optional[Literal['left', 'right']] = None,
 ) -> Tuple[
     Tuple[float, float, float],
     Tuple[float, float, float],
@@ -116,9 +116,9 @@ def cortex_cameras(
             #       way to do this.
             position = view_vectors(view=position, negative=negative)
         except ValueError as e:
-            if isinstance(hemi, str):
+            if isinstance(hemisphere, str):
                 try:
-                    vector, view_up = cortex_view_dict()[hemi][position]
+                    vector, view_up = cortex_view_dict()[hemisphere][position]
                     vector, focal_point = auto_focus(vector, plotter)
                     return (vector, focal_point, view_up)
                 except KeyError:
@@ -173,44 +173,6 @@ def format_position_as_string(
             f'focus-{_fmt_field(position[1])}_'
             f'viewup-{_fmt_field(position[2])}'
         )
-
-
-def plot_to_image(
-    p: pv.Plotter,
-    views: Sequence = (
-        'medial',
-        'lateral',
-        'dorsal',
-        'ventral',
-        'anterior',
-        'posterior',
-    ),
-    window_size: Tuple[int, int] = (1920, 1080),
-    basename: Optional[str] = None,
-    hemi: Optional[Literal['left', 'right', 'both']] = None,
-) -> Tuple[np.ndarray]:
-    if basename is None:
-        screenshot = [True] * len(views)
-    else:
-        screenshot = [
-            f'{basename}_{format_position_as_string(cpos)}.png'
-            for cpos in views
-        ]
-    ret = []
-    try:
-        p.remove_scalar_bar()
-    except IndexError:
-        pass
-    for cpos, fname in zip(views, screenshot):
-        p.camera.zoom('tight')
-        p.show(
-            cpos=cortex_cameras(cpos, plotter=p, hemi=hemi),
-            auto_close=False,
-        )
-        img = p.screenshot(fname, window_size=window_size, return_img=True)
-        ret.append(img)
-    p.close()
-    return tuple(ret)
 
 
 def filter_node_data(
