@@ -302,6 +302,15 @@ def plot_to_image_f(
     return tuple(ret)
 
 
+def plot_to_html_f(
+    plotter: pv.Plotter,
+    filename: str,
+    backend: str = 'panel',
+) -> str:
+    plotter.export_html(filename, backend=backend)
+    return filename
+
+
 def automap_unified_plotter_f(
     *,
     surf: Optional['CortexTriSurface'] = None,
@@ -429,6 +438,14 @@ plot_to_image_p = Primitive(
     plot_to_image_f,
     'plot_to_image',
     output=('screenshots',),
+    forward_unused=True,
+)
+
+
+plot_to_html_p = Primitive(
+    plot_to_html_f,
+    'plot_to_html',
+    output=('html',),
     forward_unused=True,
 )
 

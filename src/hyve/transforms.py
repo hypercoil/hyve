@@ -31,6 +31,7 @@ from .prim import (
     resample_to_surface_p,
     parcellate_colormap_p,
     plot_to_image_p,
+    plot_to_html_p,
 )
 from .surf import CortexTriSurface
 from .util import (
@@ -376,11 +377,11 @@ def parcellate_colormap(
           ``cmap``, ``clim``, ``node_cmap``, or ``node_cmap_range``.
     """
     cmaps = {
-        'network': 'viz/resources/cmap_network.nii',
-        'modal': 'viz/resources/cmap_modal.nii',
+        'network': 'data/cmap/cmap_network.nii',
+        'modal': 'data/cmap/cmap_modal.nii',
     }
     cmap = pkgrf(
-        'hypercoil',
+        'hyve',
         cmaps[cmap_name],
     )
     def transform(
@@ -433,6 +434,25 @@ def plot_to_image():
                 window_size=window_size,
                 hemisphere=hemisphere,
             )(hemisphere=hemisphere, **params)
+
+        return f_transformed
+    return transform
+
+
+def plot_to_html(
+    backend: Literal["panel", "pythreejs"] = "panel",
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            plot_to_html_p,
+            backend=backend,
+        )
+
+        def f_transformed(*, filename: str = None, **params):
+            return compositor(transformer_f, f)(filename=filename)(**params)
 
         return f_transformed
     return transform

@@ -19,7 +19,6 @@ from conveyant import (
     imap,
     omap,
 )
-from hyve.plot import unified_plotter
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
@@ -30,7 +29,7 @@ from hyve.transforms import (
     # parcellate_scalars,
     parcellate_colormap,
     # scatter_into_parcels,
-    # save_html,
+    plot_to_html,
 )
 
 
@@ -101,13 +100,13 @@ def test_parcellation():
         template="fsLR",
         load_mask=True,
         parcellation_cifti=pkgrf(
-            'hypercoil',
-            'viz/resources/nullexample.nii'
+            'hyve',
+            'data/examples/nullexample.nii'
         ),
         surf_projection=('veryinflated',),
-        hemisphere=['left', 'right'],
         surf_scalars_boundary_color='black',
         surf_scalars_boundary_width=5,
+        hemisphere=['left', 'right'],
     )
 
 @pytest.mark.ci_unsupported
@@ -141,46 +140,47 @@ def test_parcellation_modal_cmap():
         template="fsLR",
         load_mask=True,
         parcellation_gifti_left=pkgrf(
-            'hypercoil',
-            'viz/resources/nullexample_L.gii'
+            'hyve',
+            'data/examples/nullexample_L.gii'
         ),
         parcellation_gifti_right=pkgrf(
-            'hypercoil',
-            'viz/resources/nullexample_R.gii'
+            'hyve',
+            'data/examples/nullexample_R.gii'
         ),
         surf_projection=('veryinflated',),
-        hemisphere=['left', 'right'],
         surf_scalars_boundary_color='black',
         surf_scalars_boundary_width=5,
+        hemisphere=['left', 'right'],
     )
 
-# @pytest.mark.ci_unsupported
-# def test_parcellation_html(self):
-#     i_chain = ichain(
-#         surf_from_archive(),
-#         scalars_from_cifti('parcellation', plot=True),
-#         parcellate_colormap('network', 'parcellation')
-#     )
-#     o_chain = ochain(
-#         map_over_sequence(
-#             xfm=save_html(backend="panel"),
-#             mapping={
-#                 "filename": ('/tmp/left.html', '/tmp/right.html'),
-#             }
-#         ),
-#     )
-#     f = iochain(plot_surf_scalars, i_chain, o_chain)
-#     f(
-#         template="fsLR",
-#         load_mask=True,
-#         parcellation_cifti=pkgrf(
-#             'hypercoil',
-#             'viz/resources/nullexample.nii'
-#         ),
-#         projection='veryinflated',
-#         boundary_color='black',
-#         boundary_width=5,
-#     )
+@pytest.mark.ci_unsupported
+def test_parcellation_html():
+    i_chain = ichain(
+        surf_from_archive(),
+        scalars_from_cifti('parcellation', plot=True),
+        parcellate_colormap('network', 'parcellation')
+    )
+    o_chain = ochain(
+        omap(
+            plot_to_html(backend="panel"),
+            mapping={
+                "filename": ('/tmp/left.html', '/tmp/right.html'),
+            }
+        ),
+    )
+    f = iochain(automap_unified_plotter_p, i_chain, o_chain)
+    f(
+        template="fsLR",
+        load_mask=True,
+        parcellation_cifti=pkgrf(
+            'hyve',
+            'data/examples/nullexample.nii'
+        ),
+        surf_projection=['veryinflated'],
+        surf_scalars_boundary_color='black',
+        surf_scalars_boundary_width=5,
+        hemisphere=['left', 'right'],
+    )
 
 # @pytest.mark.ci_unsupported
 # def test_parcellated_scalars(self):
