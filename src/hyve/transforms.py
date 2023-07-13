@@ -30,6 +30,8 @@ from .prim import (
     scalars_from_gifti_p,
     resample_to_surface_p,
     parcellate_colormap_p,
+    parcellate_scalars_p,
+    scatter_into_parcels_p,
     plot_to_image_p,
     plot_to_html_p,
 )
@@ -401,6 +403,122 @@ def parcellate_colormap(
             **params: Mapping,
         ):
             return compositor(f, transformer_f)(**params)(surf=surf)
+
+        return f_transformed
+    return transform
+
+
+def parcellate_scalars(
+    scalars: str,
+    parcellation_name: str,
+    plot: bool = True,
+) -> callable:
+    """
+    Add a scalar dataset to a surface, and then parcellate it to obtain
+    values for each parcel.
+
+    Parameters
+    ----------
+    scalars : str
+        The name of the scalar dataset to add to the surface.
+    parcellation_name : str
+        The name of the parcellation to use to parcellate the scalar dataset.
+        The parcellation must be present on the surface.
+    plot : bool (default: True)
+        Indicates whether the parcellated scalar dataset should be plotted.
+
+    Returns
+    -------
+    callable
+        A transform function. Transform functions accept a plotting
+        function and return a new plotting function with different input and
+        output arguments.
+        * If ``plot`` is ``True``, the transformed function will automatically
+          add the parcellated scalar dataset to the sequence of scalars to plot.
+    """
+    sink = f"{scalars}_parcellated"
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            parcellate_scalars_p,
+            scalars=scalars,
+            parcellation_name=parcellation_name,
+            sink=sink,
+            plot=plot,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            **params: Mapping,
+        ):
+            scalars_to_plot = params.get("scalars", []) if plot else None
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                scalars_to_plot=scalars_to_plot,
+            )
+
+        return f_transformed
+    return transform
+
+
+def scatter_into_parcels(
+    scalars: str,
+    parcellation_name: str,
+    plot: bool = True,
+) -> callable:
+    """
+    Add a parcel-valued scalar dataset to a surface by scattering the
+    parcel-wise values into the vertices of the surface.
+
+    Parameters
+    ----------
+    scalars : str
+        The name of the scalar dataset to add to the surface.
+    parcellation_name : str
+        The name of the parcellation to use to parcellate the scalar dataset.
+        The parcellation must be present on the surface.
+    plot : bool (default: True)
+        Indicates whether the parcel-valued scalar dataset should be plotted.
+
+    Returns
+    -------
+    callable
+        A transform function. Transform functions accept a plotting
+        function and return a new plotting function with different input and
+        output arguments.
+        * If ``plot`` is ``True``, the transformed function will automatically
+          add the parcel-valued scalar dataset to the sequence of scalars to
+          plot.
+        * The transformed plotter requires the argument ``parcellated`` to be
+          defined. This argument should be a tensor of shape ``(N,)`` where
+          ``N`` is the number of parcels in the parcellation.
+    """
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            scatter_into_parcels_p,
+            scalars=scalars,
+            parcellation_name=parcellation_name,
+            plot=plot,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            parcellated: Tensor,
+            **params: Mapping,
+        ):
+            scalars_to_plot = params.get("scalars", []) if plot else None
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                parcellated=parcellated,
+                scalars_to_plot=scalars_to_plot,
+            )
 
         return f_transformed
     return transform

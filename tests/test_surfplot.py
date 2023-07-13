@@ -26,9 +26,9 @@ from hyve.transforms import (
     plot_to_image,
     scalars_from_cifti,
     scalars_from_gifti,
-    # parcellate_scalars,
     parcellate_colormap,
-    # scatter_into_parcels,
+    parcellate_scalars,
+    scatter_into_parcels,
     plot_to_html,
 )
 
@@ -182,68 +182,70 @@ def test_parcellation_html():
         hemisphere=['left', 'right'],
     )
 
-# @pytest.mark.ci_unsupported
-# def test_parcellated_scalars(self):
-#     i_chain = ichain(
-#         surf_from_archive(),
-#         resample_to_surface('gm_density', template='fsLR'),
-#         scalars_from_cifti('parcellation'),
-#         parcellate_scalars('gm_density', 'parcellation'),
-#     )
-#     o_chain = ochain(
-#         map_over_sequence(
-#             xfm=plot_and_save(),
-#             mapping={
-#                 "basename": ('/tmp/left_density_parc', '/tmp/right_density_parc'),
-#                 "hemi": ('left', 'right'),
-#             }
-#         )
-#     )
-#     f = iochain(plot_surf_scalars, i_chain, o_chain)
-#     out = f(
-#         template="fsLR",
-#         load_mask=True,
-#         parcellation_cifti=pkgrf(
-#             'hypercoil',
-#             'viz/resources/nullexample.nii'
-#         ),
-#         gm_density_nifti=tflow.get(
-#             template='MNI152NLin2009cAsym',
-#             suffix='probseg',
-#             label="GM",
-#             resolution=2
-#         ),
-#         projection='inflated',
-#         clim=(0.2, 0.9),
-#     )
-#     assert len(out.keys()) == 1
-#     assert "screenshots" in out.keys()
+@pytest.mark.ci_unsupported
+def test_parcellated_scalars():
+    i_chain = ichain(
+        surf_from_archive(),
+        resample_to_surface('gm_density', template='fsLR'),
+        scalars_from_cifti('parcellation'),
+        parcellate_scalars('gm_density', 'parcellation'),
+    )
+    o_chain = ochain(
+        omap(
+            plot_to_image(),
+            mapping={
+                "basename": ('/tmp/left_density_parc', '/tmp/right_density_parc'),
+                "hemisphere": ('left', 'right'),
+            }
+        )
+    )
+    f = iochain(automap_unified_plotter_p, i_chain, o_chain)
+    out = f(
+        template="fsLR",
+        load_mask=True,
+        parcellation_cifti=pkgrf(
+            'hypercoil',
+            'viz/resources/nullexample.nii'
+        ),
+        gm_density_nifti=tflow.get(
+            template='MNI152NLin2009cAsym',
+            suffix='probseg',
+            label="GM",
+            resolution=2
+        ),
+        surf_projection=['inflated'],
+        surf_scalars_clim=(0.2, 0.9),
+        hemisphere=['left', 'right'],
+    )
+    assert len(out.keys()) == 1
+    assert "screenshots" in out.keys()
 
-#     parcellated = np.random.rand(400)
-#     i_chain = ichain(
-#         surf_from_archive(),
-#         scalars_from_cifti('parcellation'),
-#         scatter_into_parcels('scalars', 'parcellation'),
-#     )
-#     o_chain = ochain(
-#         map_over_sequence(
-#             xfm=plot_and_save(),
-#             mapping={
-#                 "basename": ('/tmp/left_noise_parc', '/tmp/right_noise_parc'),
-#                 "hemi": ('left', 'right'),
-#             }
-#         )
-#     )
-#     f = iochain(plot_surf_scalars, i_chain, o_chain)
-#     out = f(
-#         template="fsLR",
-#         load_mask=True,
-#         parcellation_cifti=pkgrf(
-#             'hypercoil',
-#             'viz/resources/nullexample.nii'
-#         ),
-#         parcellated=parcellated,
-#         projection='inflated',
-#         clim=(0, 1),
-#         cmap='inferno',
-#     )
+    parcellated = np.random.rand(400)
+    i_chain = ichain(
+        surf_from_archive(),
+        scalars_from_cifti('parcellation'),
+        scatter_into_parcels('scalars', 'parcellation'),
+    )
+    o_chain = ochain(
+        omap(
+            plot_to_image(),
+            mapping={
+                "basename": ('/tmp/left_noise_parc', '/tmp/right_noise_parc'),
+                "hemisphere": ('left', 'right'),
+            }
+        )
+    )
+    f = iochain(automap_unified_plotter_p, i_chain, o_chain)
+    out = f(
+        template="fsLR",
+        load_mask=True,
+        parcellation_cifti=pkgrf(
+            'hypercoil',
+            'viz/resources/nullexample.nii'
+        ),
+        parcellated=parcellated,
+        surf_projection=['inflated'],
+        surf_scalars_clim=(0, 1),
+        cmap='inferno',
+        hemisphere=['left', 'right'],
+    )

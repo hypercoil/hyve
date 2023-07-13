@@ -260,6 +260,46 @@ def parcellate_colormap_f(
     )
 
 
+def parcellate_scalars_f(
+    surf: CortexTriSurface,
+    scalars: str,
+    sink: str,
+    parcellation_name: str,
+    scalars_to_plot: Optional[Sequence[str]] = None,
+    plot: bool = True,
+) -> Mapping:
+    parcellated = surf.parcellate_vertex_dataset(
+        name=scalars,
+        parcellation=parcellation_name
+    )
+    surf.scatter_into_parcels(
+        data=parcellated,
+        parcellation=parcellation_name,
+        sink=sink
+    )
+    if plot:
+        scalars_to_plot = tuple(list(scalars_to_plot) + [sink])
+    return surf, scalars_to_plot
+
+
+def scatter_into_parcels_f(
+    surf: CortexTriSurface,
+    scalars: str,
+    parcellated: Tensor,
+    parcellation_name: str,
+    scalars_to_plot: Optional[Sequence[str]] = None,
+    plot: bool = True,
+) -> Mapping:
+    surf.scatter_into_parcels(
+        data=parcellated,
+        parcellation=parcellation_name,
+        sink=scalars,
+    )
+    if plot:
+        scalars_to_plot = tuple(list(scalars_to_plot) + [scalars])
+    return surf, scalars_to_plot
+
+
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Sequence = (
@@ -430,6 +470,22 @@ parcellate_colormap_p = Primitive(
         'node_cmap',
         'node_clim',
     ),
+    forward_unused=True,
+)
+
+
+parcellate_scalars_p = Primitive(
+    parcellate_scalars_f,
+    'parcellate_scalars',
+    output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+scatter_into_parcels_p = Primitive(
+    scatter_into_parcels_f,
+    'scatter_into_parcels',
+    output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 
