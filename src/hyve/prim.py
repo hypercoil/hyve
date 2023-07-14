@@ -6,6 +6,7 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
+import dataclasses
 from typing import (
     Any,
     Callable,
@@ -21,12 +22,15 @@ import nibabel as nb
 import numpy as np
 import pandas as pd
 import pyvista as pv
-from conveyant import Primitive
-from conveyant.replicate import _flatten, replicate
+from conveyant import (
+    Primitive,
+)
+from conveyant.compositors import _dict_to_seq
+from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 
 from .const import Tensor
-from .plot import unified_plotter
+from .plot import unified_plotter, plotted_entities, _null_auxwriter
 from .surf import CortexTriSurface
 from .util import (
     cortex_cameras,
@@ -275,7 +279,7 @@ def parcellate_scalars_f(
     surf.scatter_into_parcels(
         data=parcellated,
         parcellation=parcellation_name,
-        sink=sink
+        sink=sink,
     )
     if plot:
         scalars_to_plot = tuple(list(scalars_to_plot) + [sink])
@@ -311,21 +315,16 @@ def plot_to_image_f(
         'posterior',
     ),
     window_size: Tuple[int, int] = (1920, 1080),
-    basename: Optional[str] = None,
     hemisphere: Optional[Literal['left', 'right', 'both']] = None,
+    plot_scalar_bar: bool = False,
 ) -> Tuple[np.ndarray]:
-    if basename is None:
-        screenshot = [True] * len(views)
-    else:
-        screenshot = [
-            f'{basename}_{format_position_as_string(cpos)}.png'
-            for cpos in views
-        ]
+    screenshot = [True] * len(views)
     ret = []
-    try:
-        plotter.remove_scalar_bar()
-    except IndexError:
-        pass
+    if not plot_scalar_bar:
+        try:
+            plotter.remove_scalar_bar()
+        except IndexError:
+            pass
     for cpos, fname in zip(views, screenshot):
         plotter.camera.zoom('tight')
         plotter.show(
@@ -340,6 +339,22 @@ def plot_to_image_f(
         ret.append(img)
     plotter.close()
     return tuple(ret)
+
+
+def plot_to_image_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    views: Sequence = (
+        'medial',
+        'lateral',
+        'dorsal',
+        'ventral',
+        'anterior',
+        'posterior',
+    ),
+) -> Mapping[str, Sequence[str]]:
+    views = [format_position_as_string(cpos) for cpos in views]
+    mapper = replicate(spec=['view'], broadcast_out_of_spec=True)
+    return mapper(**metadata, view=views)
 
 
 def plot_to_html_f(
@@ -391,11 +406,9 @@ def automap_unified_plotter_f(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
-    writers: Optional[Sequence[Mapping[str, callable]]] = None,
-    # views: Sequence = (),
-    # return_plotter: bool = False,
-    # return_screenshot: bool = True,
-    # return_html: bool = False,
+    postprocessors: Optional[
+        Sequence[Mapping[str, Tuple[callable, callable]]]
+    ] = None,
     map_spec: Optional[Sequence] = None,
 ) -> Optional[pv.Plotter]:
     params = locals()
@@ -409,9 +422,10 @@ def automap_unified_plotter_f(
     params.pop('map_spec')
     mapper = replicate(spec=map_spec)
 
-    writers = params.pop('writers', None)
-    writers = writers or {'plotter': None}
-    writer_names, writers = zip(*writers.items())
+    postprocessors = params.pop('postprocessors', None)
+    postprocessors = postprocessors or {'plotter': None}
+    postprocessor_names, postprocessors = zip(*postprocessors.items())
+    postprocessors, auxwriters = zip(*postprocessors)
 
     repl_params = mapper(**params)
     repl_vars = set(_flatten(map_spec))
@@ -419,17 +433,36 @@ def automap_unified_plotter_f(
     other_params = {k: v for k, v in params.items() if k not in repl_vars}
     params = {**other_params, **repl_params}
     n_replicates = max([len(v) for v in repl_params.values()])
+
     output = [
         unified_plotter(
             **{
                 k: (v[i % len(v)] if k in repl_vars else v)
                 for k, v in params.items()
             },
-            writers=writers,
+            postprocessors=postprocessors,
         )
         for i in range(n_replicates)
     ]
-    output = {k: v for k, v in zip(writer_names, zip(*output))}
+    output = {
+        k: tuple(_flatten_to_depth(v, 1))
+        for k, v in zip(postprocessor_names, zip(*output))
+    }
+    metadata = [
+        plotted_entities(
+            **{
+                k: (v[i % len(v)] if k in repl_vars else v)
+                for k, v in params.items()
+            },
+            entity_writers=auxwriters,
+        )
+        for i in range(n_replicates)
+    ]
+    metadata = {
+        k: tuple(_flatten_to_depth([_dict_to_seq(val) for val in v], 1))
+        for k, v in zip(postprocessor_names, zip(*metadata))
+    }
+    output = {k: tuple(zip(output[k], metadata[k])) for k in output.keys()}
 
     return output
 
@@ -492,14 +525,6 @@ scatter_into_parcels_p = Primitive(
     scatter_into_parcels_f,
     'scatter_into_parcels',
     output=('surf', 'surf_scalars'),
-    forward_unused=True,
-)
-
-
-plot_to_image_p = Primitive(
-    plot_to_image_f,
-    'plot_to_image',
-    output=('screenshots',),
     forward_unused=True,
 )
 
