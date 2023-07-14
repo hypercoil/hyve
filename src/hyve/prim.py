@@ -65,7 +65,7 @@ def scalars_from_cifti_f(
     surf: CortexTriSurface,
     scalars: str,
     cifti: nb.Cifti2Image,
-    scalars_to_plot: Sequence[str] = (),
+    surf_scalars: Sequence[str] = (),
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
@@ -79,8 +79,8 @@ def scalars_from_cifti_f(
         null_value=null_value,
     )
     if plot:
-        scalars_to_plot = tuple(list(scalars_to_plot) + [scalars])
-    return surf, scalars_to_plot
+        surf_scalars = tuple(list(surf_scalars) + [scalars])
+    return surf, surf_scalars
 
 
 def scalars_from_gifti_f(
@@ -88,7 +88,7 @@ def scalars_from_gifti_f(
     scalars: str,
     left_gifti: Optional[nb.gifti.GiftiImage] = None,
     right_gifti: Optional[nb.gifti.GiftiImage] = None,
-    scalars_to_plot: Sequence[str] = (),
+    surf_scalars: Sequence[str] = (),
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
@@ -107,8 +107,8 @@ def scalars_from_gifti_f(
         exclude=exclude,
     )
     if plot:
-        scalars_to_plot = tuple(list(scalars_to_plot) + list(scalar_names))
-    return surf, scalars_to_plot
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
+    return surf, surf_scalars
 
 
 def resample_to_surface_f(
@@ -116,7 +116,7 @@ def resample_to_surface_f(
     scalars: str,
     nifti: nb.Nifti1Image,
     f_resample: callable,
-    scalars_to_plot: Sequence[str] = (),
+    surf_scalars: Sequence[str] = (),
     null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
@@ -134,8 +134,8 @@ def resample_to_surface_f(
         exclude=exclude,
     )
     if plot:
-        scalars_to_plot = tuple(list(scalars_to_plot) + list(scalar_names))
-    return surf, scalars_to_plot
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
+    return surf, surf_scalars
 
 
 def _cmap_impl_hemisphere(
@@ -270,9 +270,9 @@ def parcellate_scalars_f(
     scalars: str,
     sink: str,
     parcellation_name: str,
-    scalars_to_plot: Optional[Sequence[str]] = None,
+    surf_scalars: Sequence[str] = (),
     plot: bool = True,
-) -> Mapping:
+) -> Tuple[CortexTriSurface, Sequence[str]]:
     parcellated = surf.parcellate_vertex_dataset(
         name=scalars,
         parcellation=parcellation_name
@@ -283,8 +283,8 @@ def parcellate_scalars_f(
         sink=sink,
     )
     if plot:
-        scalars_to_plot = tuple(list(scalars_to_plot) + [sink])
-    return surf, scalars_to_plot
+        surf_scalars = tuple(list(surf_scalars) + [sink])
+    return surf, surf_scalars
 
 
 def scatter_into_parcels_f(
@@ -292,17 +292,29 @@ def scatter_into_parcels_f(
     scalars: str,
     parcellated: Tensor,
     parcellation_name: str,
-    scalars_to_plot: Optional[Sequence[str]] = None,
+    surf_scalars: Sequence[str] = (),
     plot: bool = True,
-) -> Mapping:
+) -> Tuple[CortexTriSurface, Sequence[str]]:
     surf.scatter_into_parcels(
         data=parcellated,
         parcellation=parcellation_name,
         sink=scalars,
     )
     if plot:
-        scalars_to_plot = tuple(list(scalars_to_plot) + [scalars])
-    return surf, scalars_to_plot
+        surf_scalars = tuple(list(surf_scalars) + [scalars])
+    return surf, surf_scalars
+
+
+def vertex_to_face_f(
+    surf: CortexTriSurface,
+    scalars: Sequence[str],
+    interpolation: Literal['mode', 'mean'] = 'mode',
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    surf.vertex_to_face(
+        name=scalars,
+        interpolation=interpolation,
+    )
+    return surf
 
 
 def add_postprocessor_f(
@@ -583,6 +595,14 @@ scatter_into_parcels_p = Primitive(
     scatter_into_parcels_f,
     'scatter_into_parcels',
     output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+vertex_to_face_p = Primitive(
+    vertex_to_face_f,
+    'vertex_to_face',
+    output=('surf',),
     forward_unused=True,
 )
 

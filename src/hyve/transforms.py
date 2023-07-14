@@ -33,6 +33,7 @@ from .prim import (
     parcellate_colormap_p,
     parcellate_scalars_p,
     scatter_into_parcels_p,
+    vertex_to_face_p,
     add_postprocessor_p,
     plot_to_image_f,
     plot_to_image_aux_p,
@@ -171,11 +172,11 @@ def scalars_from_cifti(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {scalars}_cifti'
                 )
-            scalars_to_plot = params.get('scalars', []) if plot else None
+            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 cifti=cifti,
                 surf=surf,
-                scalars_to_plot=scalars_to_plot,
+                surf_scalars=surf_scalars,
             )
 
         return f_transformed
@@ -254,12 +255,12 @@ def scalars_from_gifti(
                     f'keyword-only argument: either {scalars}_gifti_left or '
                     f'{scalars}_gifti_right'
                 )
-            scalars_to_plot = params.get('scalars', []) if plot else None
+            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 left_gifti=left_gifti,
                 right_gifti=right_gifti,
                 surf=surf,
-                scalars_to_plot=scalars_to_plot,
+                surf_scalars=surf_scalars,
             )
 
         return f_transformed
@@ -341,11 +342,11 @@ def resample_to_surface(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {scalars}_nifti'
                 )
-            scalars_to_plot = params.get('scalars', []) if plot else None
+            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
                 surf=surf,
-                scalars_to_plot=scalars_to_plot,
+                surf_scalars=surf_scalars,
             )
 
         return f_transformed
@@ -458,10 +459,10 @@ def parcellate_scalars(
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            scalars_to_plot = params.get('scalars', []) if plot else None
+            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
-                scalars_to_plot=scalars_to_plot,
+                surf_scalars=surf_scalars,
             )
 
         return f_transformed
@@ -517,11 +518,64 @@ def scatter_into_parcels(
             parcellated: Tensor,
             **params: Mapping,
         ):
-            scalars_to_plot = params.get('scalars', []) if plot else None
+            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 parcellated=parcellated,
-                scalars_to_plot=scalars_to_plot,
+                surf_scalars=surf_scalars,
+            )
+
+        return f_transformed
+    return transform
+
+
+def vertex_to_face(
+    scalars: str,
+    interpolation: Literal['mode', 'mean'] = 'mode',
+) -> callable:
+    """
+    Resample a scalar dataset defined on the vertices of a surface to a
+    scalar dataset defined on the faces of the surface. The vertex-valued
+    scalar dataset must be defined on the surface (i.e., in its ``point_data``
+    dictionary).
+
+    Parameters
+    ----------
+    scalars : str
+        The name of the scalar dataset to resample.
+    interpolation : {'mode', 'mean'} (default: 'mode')
+        The interpolation method to use. If ``'mode'``, the value of the
+        scalar dataset for each face is the mode of the values of the
+        vertices that make up the face. If ``'mean'``, the value of the
+        scalar dataset for each face is the mean of the values of the
+        vertices that make up the face.
+
+    Returns
+    -------
+    callable
+        A transform function. Transform functions accept a plotting
+        function and return a new plotting function with different input and
+        output arguments.
+    """
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            vertex_to_face_p,
+            scalars=scalars,
+            interpolation=interpolation,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            surf_scalars: Sequence[str] = (),
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                surf_scalars=surf_scalars,
             )
 
         return f_transformed
