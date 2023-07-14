@@ -133,8 +133,12 @@ def _map_to_opacity(
     return _map_to_attr(values, alpha, (opa_min, opa_max))
 
 
-def _null_writer(plotter):
+def _null_postprocessor(plotter):
     return plotter
+
+
+def _null_auxwriter(metadata):
+    return metadata
 
 
 def unified_plotter(
@@ -177,7 +181,7 @@ def unified_plotter(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
-    writers: Optional[Sequence[Mapping[str, callable]]] = None,
+    postprocessors: Optional[Sequence[callable]] = None,
 ) -> Optional[pv.Plotter]:
     """
     Plot a surface, volume, and/or graph in a single figure.
@@ -525,7 +529,49 @@ def unified_plotter(
                 opacity=opa,
             )
 
-    if writers is None or len(writers) == 0:
-        writers = [_null_writer]
-    writers = [w if w is not None else _null_writer for w in writers]
-    return tuple(w(p) for w in writers)
+    if postprocessors is None or len(postprocessors) == 0:
+        postprocessors = [_null_postprocessor]
+    postprocessors = [
+        w if w is not None else _null_postprocessor for w in postprocessors
+    ]
+    for i, w in enumerate(postprocessors):
+        try:
+            postprocessors[i] = w.bind(**locals())
+        except AttributeError:
+            pass
+    out = tuple(w(plotter=p) for w in postprocessors)
+    return out
+
+
+def plotted_entities(
+    *,
+    entity_writers: Optional[Sequence[callable]] = None,
+    plot_index: Optional[int] = None,
+    **params,
+) -> Mapping[str, Sequence[str]]:
+    metadata = {}
+    surface = params.get('surf', None)
+    node = params.get('node_values', None)
+    edge = params.get('edge_values', None)
+    if surface is not None:
+        metadata['scalars'] = [params.get('surf_scalars', None)]
+        metadata['projection'] = [params.get('surf_projection', None)]
+    if node is not None:
+        metadata['parcellation'] = [params.get('node_parcel_scalars', None)]
+        metadata['nodecolor'] = [params.get('node_color', None)]
+        metadata['noderadius'] = [params.get('node_radius', None)]
+        metadata['nodealpha'] = [params.get('node_alpha', None)]
+    if edge is not None:
+        metadata['edgecolor'] = [params.get('edge_color', None)]
+        metadata['edgeradius'] = [params.get('edge_radius', None)]
+        metadata['edgealpha'] = [params.get('edge_alpha', None)]
+    metadata['hemisphere'] = [params.get('hemisphere', 'both')]
+    metadata['plot_index'] = [plot_index]
+    metadata = {k: v for k, v in metadata.items() if isinstance(v[0], str)}
+    if entity_writers is None:
+        entity_writers = [_null_auxwriter]
+    entity_writers = [
+        w if w is not None else _null_auxwriter for w in entity_writers
+    ]
+    metadata = tuple(w(metadata=metadata) for w in entity_writers)
+    return metadata
