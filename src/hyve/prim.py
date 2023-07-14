@@ -6,7 +6,6 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
-import dataclasses
 from typing import (
     Any,
     Callable,
@@ -24,6 +23,8 @@ import pandas as pd
 import pyvista as pv
 from conveyant import (
     Primitive,
+)
+from conveyant import (
     SanitisedFunctionWrapper as F,
 )
 from conveyant.compositors import _dict_to_seq
@@ -31,7 +32,7 @@ from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 
 from .const import Tensor
-from .plot import unified_plotter, plotted_entities, _null_auxwriter
+from .plot import _null_auxwriter, plotted_entities, unified_plotter
 from .surf import CortexTriSurface
 from .util import (
     cortex_cameras,
@@ -275,7 +276,7 @@ def parcellate_scalars_f(
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     parcellated = surf.parcellate_vertex_dataset(
         name=scalars,
-        parcellation=parcellation_name
+        parcellation=parcellation_name,
     )
     surf.scatter_into_parcels(
         data=parcellated,

@@ -610,7 +610,7 @@ def plot_to_image():
                 views=views,
                 window_size=window_size,
                 plot_scalar_bar=plot_scalar_bar,
-                __allowed__=('hemisphere',)
+                __allowed__=('hemisphere',),
             )
             auxwriter = Partial(
                 _auxwriter,

@@ -29,6 +29,7 @@ from hyve.transforms import (
     parcellate_colormap,
     parcellate_scalars,
     scatter_into_parcels,
+    vertex_to_face,
     plot_to_html,
     save_screenshots,
 )
@@ -67,45 +68,66 @@ def test_scalars():
     )
 
 
-# @pytest.mark.ci_unsupported
-# def test_parcellation():
-#     i_chain = ichain(
-#         surf_from_archive(),
-#         scalars_from_cifti('parcellation', plot=True),
-#         parcellate_colormap('network', 'parcellation')
-#     )
-#     o_chain = ochain(
-#         split_chain(
-#             omap(
-#                 plot_to_image(),
-#                 mapping={
-#                     'hemisphere': ('left', 'right'),
-#                     'basename': ('/tmp/left', '/tmp/right'),
-#                 }
-#             ),
-#             omap(
-#                 plot_to_image(),
-#                 mapping={
-#                     'hemisphere': ('left', 'right'),
-#                     'basename': ('/tmp/left', '/tmp/right'),
-#                     'views': (((-20, 0, 0),), (((65, 65, 0), (0, 0, 0), (0, 0, 1)),))
-#                 }
-#             ),
-#         )
-#     )
-#     f = iochain(automap_unified_plotter_p, i_chain, o_chain)
-#     f(
-#         template="fsLR",
-#         load_mask=True,
-#         parcellation_cifti=pkgrf(
-#             'hyve',
-#             'data/examples/nullexample.nii'
-#         ),
-#         surf_projection=('veryinflated',),
-#         surf_scalars_boundary_color='black',
-#         surf_scalars_boundary_width=5,
-#         hemisphere=['left', 'right'],
-#     )
+@pytest.mark.ci_unsupported
+def test_parcellation():
+    chain = ichain(
+        surf_from_archive(),
+        scalars_from_cifti('parcellation', plot=True),
+        parcellate_colormap('network', 'parcellation'),
+        vertex_to_face('parcellation'),
+        plot_to_image(),
+        save_screenshots(
+            fname_spec=(
+                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_mode-face'
+            ),
+        ),
+    )
+    plot_f = iochain(automap_unified_plotter_p, chain)
+    plot_f(
+        template="fsLR",
+        load_mask=True,
+        parcellation_cifti=pkgrf(
+            'hyve',
+            'data/examples/nullexample.nii'
+        ),
+        surf_projection=('veryinflated',),
+        hemisphere=['left', 'right'],
+        views=[
+            'lateral', 'medial', 'ventral', 'dorsal', 'anterior', 'posterior',
+            (-20, 0, 0), ((65, 65, 0), (0, 0, 0), (0, 0, 1))
+        ],
+        output_dir='/tmp',
+    )
+
+    chain = ichain(
+        surf_from_archive(),
+        scalars_from_cifti('parcellation', plot=True),
+        parcellate_colormap('network', 'parcellation'),
+        plot_to_image(),
+        save_screenshots(
+            fname_spec=(
+                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_mode-vertex'
+            ),
+        ),
+    )
+    plot_f = iochain(automap_unified_plotter_p, chain)
+    plot_f(
+        template="fsLR",
+        load_mask=True,
+        parcellation_cifti=pkgrf(
+            'hyve',
+            'data/examples/nullexample.nii'
+        ),
+        surf_projection=('veryinflated',),
+        surf_scalars_boundary_color='black',
+        surf_scalars_boundary_width=5,
+        hemisphere=['left', 'right'],
+        views=[
+            'lateral', 'medial', 'ventral', 'dorsal', 'anterior', 'posterior',
+            (-20, 0, 0), ((65, 65, 0), (0, 0, 0), (0, 0, 1))
+        ],
+        output_dir='/tmp',
+    )
 
 # @pytest.mark.ci_unsupported
 # def test_parcellation_modal_cmap():
