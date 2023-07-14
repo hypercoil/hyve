@@ -109,6 +109,7 @@ def cortex_cameras(
     "dorsal", "ventral", etc.) as the ``position`` argument, and returns the
     corresponding camera position, focal point, and view up vector.
     """
+    hemisphere = hemisphere or 'both'
     if isinstance(position, str):
         try:
             # TODO: I'm a little bit concerned that ``view_vectors`` is not
@@ -164,14 +165,14 @@ def format_position_as_string(
         )
 
     if isinstance(position, str):
-        return f'view-{position}'
+        return f'{position}'
     elif isinstance(position[0], float) or isinstance(position[0], int):
-        return f'vector-{_fmt_field(position)}'
+        return f'vector{_fmt_field(position)}'
     else:
         return (
-            f'vector-{_fmt_field(position[0])}_'
-            f'focus-{_fmt_field(position[1])}_'
-            f'viewup-{_fmt_field(position[2])}'
+            f'vector{_fmt_field(position[0])}AND'
+            f'focus{_fmt_field(position[1])}AND'
+            f'viewup{_fmt_field(position[2])}'
         )
 
 

@@ -24,6 +24,7 @@ import pandas as pd
 import pyvista as pv
 from conveyant import (
     Primitive,
+    SanitisedFunctionWrapper as F,
 )
 from conveyant.compositors import _dict_to_seq
 from conveyant.replicate import _flatten, _flatten_to_depth, replicate
@@ -304,6 +305,20 @@ def scatter_into_parcels_f(
     return surf, scalars_to_plot
 
 
+def add_postprocessor_f(
+    name: str,
+    postprocessor: Callable,
+    auxwriter: Optional[Callable] = None,
+    postprocessors: Optional[Sequence[Callable]] = None,
+) -> Sequence[Callable]:
+    if postprocessors is None:
+        postprocessors = {}
+    if auxwriter is None:
+        auxwriter = F(_null_auxwriter)
+    postprocessors[name] = (postprocessor, auxwriter)
+    return postprocessors
+
+
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Sequence = (
@@ -364,6 +379,49 @@ def plot_to_html_f(
 ) -> str:
     plotter.export_html(filename, backend=backend)
     return filename
+
+
+def save_screenshots_f(
+    screenshots: Sequence[Tuple[np.ndarray, Mapping[str, str]]],
+    output_dir: str,
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = None,
+    extension: str = 'png',
+) -> None:
+    def writer(img, fname):
+        from PIL import Image
+        img = Image.fromarray(img)
+        img.save(fname)
+
+    for cimg, cmeta in screenshots:
+        write_f(
+            writer=writer,
+            argument=cimg,
+            entities=cmeta,
+            output_dir=output_dir,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
+        )
+
+
+def write_f(
+    writer: Callable,
+    argument: Any,
+    entities: Mapping[str, str],
+    *,
+    output_dir: str,
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = None,
+    extension: str,
+) -> None:
+    if fname_spec is None:
+        fname_spec = '_'.join(f'{k}-{{{k}}}' for k in entities.keys())
+    if suffix is not None:
+        fname_spec = f'{fname_spec}_{suffix}'
+    fname_spec = f'{output_dir}/{fname_spec}.{extension}'
+    fname = fname_spec.format(**entities)
+    writer(argument, fname)
 
 
 def automap_unified_plotter_f(
@@ -529,10 +587,34 @@ scatter_into_parcels_p = Primitive(
 )
 
 
+add_postprocessor_p = Primitive(
+    add_postprocessor_f,
+    'add_postprocessor',
+    output=('postprocessors',),
+    forward_unused=True,
+)
+
+
+plot_to_image_aux_p = Primitive(
+    plot_to_image_aux_f,
+    'plot_to_image_aux',
+    output=None,
+    forward_unused=False,
+)
+
+
 plot_to_html_p = Primitive(
     plot_to_html_f,
     'plot_to_html',
     output=('html',),
+    forward_unused=True,
+)
+
+
+save_screenshots_p = Primitive(
+    save_screenshots_f,
+    'save_screenshots',
+    output=(),
     forward_unused=True,
 )
 
