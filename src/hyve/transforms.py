@@ -22,6 +22,7 @@ import pyvista as pv
 from conveyant import (
     direct_compositor,
     SanitisedPartialApplication as Partial,
+    SanitisedFunctionWrapper as F,
 )
 from .const import Tensor
 from .prim import (
@@ -32,8 +33,11 @@ from .prim import (
     parcellate_colormap_p,
     parcellate_scalars_p,
     scatter_into_parcels_p,
-    plot_to_image_p,
+    add_postprocessor_p,
+    plot_to_image_f,
+    plot_to_image_aux_p,
     plot_to_html_p,
+    save_screenshots_p,
 )
 from .surf import CortexTriSurface
 from .util import (
@@ -436,7 +440,7 @@ def parcellate_scalars(
         * If ``plot`` is ``True``, the transformed function will automatically
           add the parcellated scalar dataset to the sequence of scalars to plot.
     """
-    sink = f"{scalars}_parcellated"
+    sink = f'{scalars}_parcellated'
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
@@ -454,7 +458,7 @@ def parcellate_scalars(
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            scalars_to_plot = params.get("scalars", []) if plot else None
+            scalars_to_plot = params.get('scalars', []) if plot else None
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 scalars_to_plot=scalars_to_plot,
@@ -513,7 +517,7 @@ def scatter_into_parcels(
             parcellated: Tensor,
             **params: Mapping,
         ):
-            scalars_to_plot = params.get("scalars", []) if plot else None
+            scalars_to_plot = params.get('scalars', []) if plot else None
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 parcellated=parcellated,
@@ -529,11 +533,12 @@ def plot_to_image():
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        transformer_f = plot_to_image_p
+        transformer_f = add_postprocessor_p
+        _postprocessor = F(plot_to_image_f)
+        _auxwriter = plot_to_image_aux_p
 
         def f_transformed(
             *,
-            basename: str = None,
             views: Sequence = (
                 'medial',
                 'lateral',
@@ -543,34 +548,80 @@ def plot_to_image():
                 'posterior',
             ),
             window_size: Tuple[int, int] = (1300, 1000),
-            hemisphere: Optional[Literal['left', 'right', 'both']] = None,
+            plot_scalar_bar: bool = False,
             **params,
         ):
-            return compositor(transformer_f, f)(
-                basename=basename,
+            postprocessor = Partial(
+                _postprocessor,
                 views=views,
                 window_size=window_size,
-                hemisphere=hemisphere,
-            )(hemisphere=hemisphere, **params)
+                plot_scalar_bar=plot_scalar_bar,
+                __allowed__=('hemisphere',)
+            )
+            auxwriter = Partial(
+                _auxwriter,
+                views=views,
+            )
+            postprocessors = params.get('postprocessors', None)
+            return compositor(f, transformer_f)(**params)(
+                name='screenshots',
+                postprocessor=postprocessor,
+                postprocessors=postprocessors,
+                auxwriter=auxwriter,
+            )
 
         return f_transformed
     return transform
 
 
 def plot_to_html(
-    backend: Literal["panel", "pythreejs"] = "panel",
+    backend: Literal['panel', 'pythreejs'] = 'panel',
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = add_postprocessor_p
+        _postprocessor = Partial(
+            plot_to_html_p,
+            backend=backend,
+            __allowed__=(),
+        )
+
+        def f_transformed(*, filename: str = None, **params):
+            postprocessor = _postprocessor.bind(
+                filename=filename,
+            )
+            postprocessors = params.get('postprocessors', [])
+            return compositor(transformer_f, f)(
+                postprocessor=postprocessor,
+                postprocessors=postprocessors,
+            )(**params)
+
+        return f_transformed
+    return transform
+
+
+def save_screenshots(
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = 'scene',
+    extension: str = 'png',
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            plot_to_html_p,
-            backend=backend,
+            save_screenshots_p,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
         )
 
-        def f_transformed(*, filename: str = None, **params):
-            return compositor(transformer_f, f)(filename=filename)(**params)
+        def f_transformed(output_dir: str, **params):
+            return compositor(transformer_f, f)(
+                output_dir=output_dir,
+            )(**params)
 
         return f_transformed
     return transform
