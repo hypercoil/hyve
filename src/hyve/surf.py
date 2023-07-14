@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import (
     Any,
     Iterable,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -902,6 +903,42 @@ class CortexTriSurface:
             self.right.point_data[sink] = scattered_right
         return (scattered_left, scattered_right)
 
+    def vertex_to_face(
+        self,
+        name: str,
+        interpolation: Literal['mode', 'mean'] = 'mode',
+    ):
+        """
+        Resample a vertex-wise scalar dataset onto mesh faces. The face-valued
+        scalar dataset will be added to the ``ProjectedPolyData`` as a face
+        dataset.
+
+        Parameters
+        ----------
+        name : str
+            Name of the dataset.
+        interpolation : str (default: ``'mode'``)
+            Interpolation method to use. Must be one of ``'mode'`` or
+            ``'mean'``. ``'mode'`` will assign the most common value of the
+            neighbouring vertices to the face. ``'mean'`` will assign the mean
+            value of the neighbouring vertices to the face.
+        """
+        if interpolation not in ('mode', 'mean'):
+            raise ValueError(
+                'Interpolation method must be one of "mode" or "mean".'
+            )
+        points_name = f'{name}_points'
+        self.left.cell_data[name] = self._hemisphere_resample_v2f_impl(
+            name, interpolation, 'left'
+        )
+        self.left.point_data[points_name] = self.left.point_data[name]
+        self.left.point_data.remove(name)
+        self.right.cell_data[name] = self._hemisphere_resample_v2f_impl(
+            name, interpolation, 'right'
+        )
+        self.right.point_data[points_name] = self.right.point_data[name]
+        self.right.point_data.remove(name)
+
     def parcel_centres_of_mass(
         self,
         parcellation: str,
@@ -1245,3 +1282,27 @@ class CortexTriSurface:
             transpose=True,
         )
         return parcellation @ data[: parcellation.shape[-1]]
+
+    def _hemisphere_resample_v2f_impl(
+        self,
+        name: str,
+        interpolation: str,
+        hemisphere: str,
+    ) -> Tensor:
+        faces = self.__getattribute__(hemisphere).faces.reshape(-1, 4)[..., 1:]
+        scalars = self.__getattribute__(hemisphere).point_data[name]
+        scalars = scalars[faces]
+        if interpolation == 'mode':
+            scalars = np.where(
+                scalars[..., 1] == scalars[..., 2],
+                scalars[..., 1],
+                scalars[..., 0],
+            )
+        elif interpolation == 'mean':
+            scalars = scalars.mean(axis=-1)
+        else:
+            raise ValueError(
+                f'Interpolation must be either "mode" or "mean", but '
+                f'{interpolation} was given.'
+            )
+        return scalars
