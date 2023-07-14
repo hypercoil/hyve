@@ -465,7 +465,11 @@ def unified_plotter(
                 below_color=surf_scalars_below_color,
                 copy_mesh=copy_actors,
             )
-            if surf_scalars_boundary_width > 0 and surf_scalars is not None:
+            if (
+                surf_scalars_boundary_width > 0 and
+                surf_scalars is not None and
+                not hemi_surf.cell_data.get(surf_scalars, None)
+            ):
                 p.add_mesh(
                     hemi_surf.contour(
                         isosurfaces=range(
