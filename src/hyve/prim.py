@@ -6,6 +6,7 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
+from io import StringIO
 from typing import (
     Any,
     Callable,
@@ -385,13 +386,12 @@ def plot_to_image_aux_f(
     return mapper(**metadata, view=views)
 
 
-def plot_to_html_f(
+def plot_to_html_buffer_f(
     plotter: pv.Plotter,
-    filename: str,
-    backend: str = 'panel',
-) -> str:
-    plotter.export_html(filename, backend=backend)
-    return filename
+    window_size: Tuple[int, int] = (1920, 1080),
+) -> StringIO:
+    plotter.window_size = window_size
+    return plotter.export_html(filename=None)
 
 
 def save_screenshots_f(
@@ -410,6 +410,29 @@ def save_screenshots_f(
         write_f(
             writer=writer,
             argument=cimg,
+            entities=cmeta,
+            output_dir=output_dir,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
+        )
+
+
+def save_html_f(
+    html_buffer: Sequence[Tuple[StringIO, Mapping[str, str]]],
+    output_dir: str,
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = None,
+    extension: str = 'html',
+) -> None:
+    def writer(buffer, fname):
+        with open(fname, 'w', encoding='utf-8') as f:
+            f.write(buffer.read())
+
+    for chtml, cmeta in html_buffer:
+        write_f(
+            writer=writer,
+            argument=chtml,
             entities=cmeta,
             output_dir=output_dir,
             fname_spec=fname_spec,
@@ -624,17 +647,16 @@ plot_to_image_aux_p = Primitive(
 )
 
 
-plot_to_html_p = Primitive(
-    plot_to_html_f,
-    'plot_to_html',
-    output=('html',),
-    forward_unused=True,
-)
-
-
 save_screenshots_p = Primitive(
     save_screenshots_f,
     'save_screenshots',
+    output=(),
+    forward_unused=True,
+)
+
+save_html_p = Primitive(
+    save_html_f,
+    'save_html',
     output=(),
     forward_unused=True,
 )

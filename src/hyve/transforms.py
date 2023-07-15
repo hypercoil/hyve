@@ -37,8 +37,9 @@ from .prim import (
     add_postprocessor_p,
     plot_to_image_f,
     plot_to_image_aux_p,
-    plot_to_html_p,
+    plot_to_html_buffer_f,
     save_screenshots_p,
+    save_html_p,
 )
 from .surf import CortexTriSurface
 from .util import (
@@ -217,12 +218,12 @@ def scalars_from_gifti(
         A transform function. Transform functions accept a plotting
         function and return a new plotting function with different input and
         output arguments.
-        * The transformed plotter will now require a ``<scalars>_gifti``
-          argument, where ``<scalars>`` is the name of the scalar dataset
-          provided as an argument to this function. The value of this
-          argument should be either a ``GIfTIImage`` object or a path to a
-          GIfTI file. This is the GIfTI image whose data will be loaded onto
-          the surface.
+        * The transformed plotter will now require a ``<scalars>_gifti_left``
+          and/or ``<scalars>_gifti_right`` argument, where ``<scalars>`` is
+          the name of the scalar dataset provided as an argument to this
+          function. The value provided for each of these arguments should be
+          either a ``GIfTIImage`` object or a path to a GIfTI file. These are
+          the GIfTI images whose data will be loaded onto the surface.
         * If ``plot`` is ``True``, the transformed function will automatically
           add the scalar dataset obtained from the GIfTI image to the sequence
           of scalars to plot.
@@ -441,7 +442,7 @@ def parcellate_scalars(
         * If ``plot`` is ``True``, the transformed function will automatically
           add the parcellated scalar dataset to the sequence of scalars to plot.
     """
-    sink = f'{scalars}_parcellated'
+    sink = f'{scalars}Parcellated'
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
@@ -497,9 +498,11 @@ def scatter_into_parcels(
         * If ``plot`` is ``True``, the transformed function will automatically
           add the parcel-valued scalar dataset to the sequence of scalars to
           plot.
-        * The transformed plotter requires the argument ``parcellated`` to be
-          defined. This argument should be a tensor of shape ``(N,)`` where
-          ``N`` is the number of parcels in the parcellation.
+        * The transformed plotter requires the ``<scalars>_parcellated``
+          argument, where ``<scalars>`` is the name of the scalar dataset
+          provided as an argument to this function. The value of this
+          argument should be a tensor of shape ``(N,)`` where ``N`` is the
+          number of parcels in the parcellation.
     """
     def transform(
         f: callable,
@@ -515,9 +518,15 @@ def scatter_into_parcels(
         def f_transformed(
             *,
             surf: CortexTriSurface,
-            parcellated: Tensor,
             **params: Mapping,
         ):
+            try:
+                parcellated = params.pop(f'{scalars}_parcellated')
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {scalars}_parcellated'
+                )
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
@@ -629,28 +638,44 @@ def plot_to_image():
 
 
 def plot_to_html(
-    backend: Literal['panel', 'pythreejs'] = 'panel',
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = 'scene',
+    extension: str = 'html',
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        transformer_f = add_postprocessor_p
-        _postprocessor = Partial(
-            plot_to_html_p,
-            backend=backend,
-            __allowed__=(),
+        transformer_fi = add_postprocessor_p
+        transformer_fo = Partial(
+            save_html_p,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
         )
+        _postprocessor = F(plot_to_html_buffer_f)
 
-        def f_transformed(*, filename: str = None, **params):
-            postprocessor = _postprocessor.bind(
-                filename=filename,
+        def f_transformed(
+            *,
+            output_dir: str,
+            window_size: Tuple[int, int] = (1920, 1080),
+            **params,
+        ):
+            postprocessor = Partial(
+                _postprocessor,
+                window_size=window_size,
+                __allowed__=(),
             )
-            postprocessors = params.get('postprocessors', [])
-            return compositor(transformer_f, f)(
+            postprocessors = params.get('postprocessors', None)
+            _f_transformed = compositor(
+                transformer_fo,
+                compositor(f, transformer_fi)(**params),
+            )
+            return _f_transformed(output_dir=output_dir)(
+                name='html_buffer',
                 postprocessor=postprocessor,
                 postprocessors=postprocessors,
-            )(**params)
+            )
 
         return f_transformed
     return transform
