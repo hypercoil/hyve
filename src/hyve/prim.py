@@ -46,7 +46,7 @@ def surf_from_archive_f(
     load_mask: bool,
     projections: Sequence[str],
     archives: Mapping[str, Callable],
-):
+) -> Tuple[CortexTriSurface, Sequence[str]]:
     for archive, constructor in archives.items():
         try:
             surf = constructor(
@@ -72,7 +72,7 @@ def scalars_from_cifti_f(
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
     plot: bool = False,
-) -> Mapping:
+) -> Tuple[CortexTriSurface, Sequence[str]]:
     surf.add_cifti_dataset(
         name=scalars,
         cifti=cifti,
@@ -97,7 +97,7 @@ def scalars_from_gifti_f(
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
     plot: bool = False,
-) -> Mapping:
+) -> Tuple[CortexTriSurface, Sequence[str]]:
     scalar_names = surf.add_gifti_dataset(
         name=scalars,
         left_gifti=left_gifti,
@@ -111,6 +111,24 @@ def scalars_from_gifti_f(
     if plot:
         surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
     return surf, surf_scalars
+
+
+def scalars_from_nifti_f(
+    nifti: nb.Nifti1Image,
+    threshold: float = 0.0
+) -> Mapping:
+    if not isinstance(nifti, nb.Nifti1Image):
+        nifti = nb.load(nifti)
+    vol = nifti.get_fdata()
+    loc = np.where(vol > threshold)
+
+    vol_scalars = vol[loc]
+    vol_coor = np.stack(loc)
+    vol_coor = (nifti.affine @ np.concatenate(
+        (vol_coor, np.ones((1, vol_coor.shape[-1])))
+    ))[:3].T
+    vol_voxdim = nifti.header.get_zooms()
+    return vol_scalars, vol_coor, vol_voxdim
 
 
 def resample_to_surface_f(
@@ -344,9 +362,13 @@ def plot_to_image_f(
         'posterior',
     ),
     window_size: Tuple[int, int] = (1920, 1080),
-    hemisphere: Optional[Literal['left', 'right', 'both']] = None,
+    hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
     plot_scalar_bar: bool = False,
 ) -> Tuple[np.ndarray]:
+    if len(hemispheres) == 1:
+        hemisphere = hemispheres[0]
+    else:
+        hemisphere = 'both'
     screenshot = [True] * len(views)
     ret = []
     if not plot_scalar_bar:
@@ -585,6 +607,14 @@ scalars_from_gifti_p = Primitive(
 )
 
 
+scalars_from_nifti_p = Primitive(
+    scalars_from_nifti_f,
+    'scalars_from_nifti',
+    output=('vol_scalars', 'vol_coor', 'vol_voxdim'),
+    forward_unused=True,
+)
+
+
 resample_to_surface_p = Primitive(
     resample_to_surface_f,
     'resample_to_surface',
@@ -653,6 +683,7 @@ save_screenshots_p = Primitive(
     output=(),
     forward_unused=True,
 )
+
 
 save_html_p = Primitive(
     save_html_f,

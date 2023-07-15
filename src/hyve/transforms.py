@@ -29,6 +29,7 @@ from .prim import (
     surf_from_archive_p,
     scalars_from_cifti_p,
     scalars_from_gifti_p,
+    scalars_from_nifti_p,
     resample_to_surface_p,
     parcellate_colormap_p,
     parcellate_scalars_p,
@@ -263,6 +264,35 @@ def scalars_from_gifti(
                 surf=surf,
                 surf_scalars=surf_scalars,
             )
+
+        return f_transformed
+    return transform
+
+
+#TODO: replace threshold arg with the option to provide one of our hypermaths
+#      expressions.
+def scalars_from_nifti(
+    scalars: str,
+    threshold: float = 0.0,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            scalars_from_nifti_p,
+            threshold=threshold,
+        )
+
+        def f_transformed(**params: Mapping):
+            try:
+                nifti = params.pop(f'{scalars}_nifti')
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {scalars}_nifti'
+                )
+            return compositor(f, transformer_f)(**params)(nifti=nifti)
 
         return f_transformed
     return transform
@@ -619,7 +649,7 @@ def plot_to_image():
                 views=views,
                 window_size=window_size,
                 plot_scalar_bar=plot_scalar_bar,
-                __allowed__=('hemisphere',),
+                __allowed__=('hemispheres',),
             )
             auxwriter = Partial(
                 _auxwriter,
