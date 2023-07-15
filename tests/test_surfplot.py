@@ -13,11 +13,7 @@ import templateflow.api as tflow
 
 from conveyant import (
     ichain,
-    ochain,
     iochain,
-    split_chain,
-    imap,
-    omap,
 )
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
