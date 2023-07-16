@@ -114,6 +114,20 @@ def test_unified_plotter():
     unified_plotter(
         surf=surf_lr,
         surf_projection='inflated',
+        surf_alpha=0.2,
+        node_values=node_data,
+        node_coor=node_coor,
+        node_clim=node_clim,
+        node_color='node_val',
+        node_lh=node_lh,
+        edge_values=edge_data,
+        edge_clim=edge_clim,
+        hemisphere_slack=1.2,
+        off_screen=False,
+    )[0].show()
+    unified_plotter(
+        surf=surf_lr,
+        surf_projection='inflated',
         surf_scalars='data',
         surf_scalars_cmap='magma',
         surf_alpha=0.2,
