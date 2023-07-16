@@ -734,14 +734,7 @@ def plot_to_image():
 
         def f_transformed(
             *,
-            views: Sequence = (
-                'medial',
-                'lateral',
-                'dorsal',
-                'ventral',
-                'anterior',
-                'posterior',
-            ),
+            views: Union[Sequence, Literal['__default__']] = '__default__',
             window_size: Tuple[int, int] = (1300, 1000),
             plot_scalar_bar: bool = False,
             **params,
@@ -753,9 +746,16 @@ def plot_to_image():
                 plot_scalar_bar=plot_scalar_bar,
                 __allowed__=('hemispheres',),
             )
+            # The inconsistent naming of the `hemisphere` parameter is
+            # intentional, but not ideal. The `hemispheres` variable is
+            # defined in the local scope of the ``unified_plotter`` function
+            # but remains undefined in the metadata function, so we currently
+            # have to use the `hemisphere` parameter in the metadata function
+            # as a workaround.
             auxwriter = Partial(
                 _auxwriter,
                 views=views,
+                __allowed__=('hemisphere',),
             )
             postprocessors = params.get('postprocessors', None)
             return compositor(f, transformer_f)(**params)(

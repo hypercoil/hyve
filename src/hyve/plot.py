@@ -581,5 +581,10 @@ def plotted_entities(
     entity_writers = [
         w if w is not None else _null_auxwriter for w in entity_writers
     ]
+    for i, w in enumerate(entity_writers):
+        try:
+            entity_writers[i] = w.bind(**{**params, **metadata})
+        except AttributeError:
+            pass
     metadata = tuple(w(metadata=metadata) for w in entity_writers)
     return metadata

@@ -62,6 +62,17 @@ def auto_focus(
     return vector, focal_point
 
 
+def set_default_views(
+    hemisphere: str,
+) -> Sequence[str]:
+    common = ('dorsal', 'ventral', 'anterior', 'posterior')
+    if hemisphere == 'both':
+        views = ('left', 'right') + common
+    else:
+        views = ('lateral', 'medial') + common
+    return views
+
+
 def cortex_view_dict() -> Dict[str, Tuple[Sequence[float], Sequence[float]]]:
     """
     Return a dict containing tuples of (vector, viewup) pairs for each

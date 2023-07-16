@@ -36,10 +36,12 @@ from .const import Tensor
 from .plot import _null_auxwriter, plotted_entities, unified_plotter
 from .surf import CortexTriSurface
 from .util import (
+    auto_focus,
     cortex_cameras,
     filter_adjacency_data,
     filter_node_data,
     format_position_as_string,
+    set_default_views,
 )
 
 
@@ -429,14 +431,7 @@ def add_postprocessor_f(
 
 def plot_to_image_f(
     plotter: pv.Plotter,
-    views: Sequence = (
-        'medial',
-        'lateral',
-        'dorsal',
-        'ventral',
-        'anterior',
-        'posterior',
-    ),
+    views: Union[Sequence, Literal['__default__']] = '__default__',
     window_size: Tuple[int, int] = (1920, 1080),
     hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
     plot_scalar_bar: bool = False,
@@ -445,6 +440,8 @@ def plot_to_image_f(
         hemisphere = hemispheres[0]
     else:
         hemisphere = 'both'
+    if views == '__default__':
+        views = set_default_views(hemisphere)
     screenshot = [True] * len(views)
     ret = []
     if not plot_scalar_bar:
@@ -470,15 +467,17 @@ def plot_to_image_f(
 
 def plot_to_image_aux_f(
     metadata: Mapping[str, Sequence[str]],
-    views: Sequence = (
-        'medial',
-        'lateral',
-        'dorsal',
-        'ventral',
-        'anterior',
-        'posterior',
-    ),
+    hemisphere: Sequence[Literal['left', 'right', 'both']],
+    views: Union[Sequence, Literal['__default__']] = '__default__',
 ) -> Mapping[str, Sequence[str]]:
+    if hemisphere is None:
+        hemisphere = 'both'
+    elif len(hemisphere) == 1:
+        hemisphere = hemisphere[0]
+    else:
+        hemisphere = 'both'
+    if views == '__default__':
+        views = set_default_views(hemisphere)
     views = [format_position_as_string(cpos) for cpos in views]
     mapper = replicate(spec=['view'], broadcast_out_of_spec=True)
     return mapper(**metadata, view=views)
