@@ -179,7 +179,7 @@ def format_position_as_string(
 def filter_node_data(
     val: np.ndarray,
     name: str = 'node',
-    threshold: Union[float, int] = 0.0,
+    threshold: Optional[Union[float, int]] = 0.0,
     percent_threshold: bool = False,
     topk_threshold: bool = False,
     absolute: bool = True,
@@ -202,7 +202,7 @@ def filter_node_data(
         node_incl[indices[int(threshold) :]] = 0
     elif percent_threshold:
         node_incl[val < np.percentile(val[node_incl], 100 * threshold)] = 0
-    else:
+    elif threshold is not None:
         node_incl[val < threshold] = 0
 
     if removed_val is not None:

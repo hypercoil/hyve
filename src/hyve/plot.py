@@ -368,6 +368,10 @@ def unified_plotter(
     hemispheres = (
         (hemisphere,) if hemisphere is not None else ('left', 'right')
     )
+    # Sometimes by construction surf_scalars is an empty tuple or list, which
+    # causes problems later on. So we convert it to None if it's empty.
+    if surf_scalars is not None:
+        surf_scalars = None if len(surf_scalars) == 0 else surf_scalars
     hemi_params = _get_hemisphere_parameters(
         surf_scalars_cmap=surf_scalars_cmap,
         surf_scalars_clim=surf_scalars_clim,

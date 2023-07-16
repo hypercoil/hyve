@@ -37,6 +37,8 @@ from .plot import _null_auxwriter, plotted_entities, unified_plotter
 from .surf import CortexTriSurface
 from .util import (
     cortex_cameras,
+    filter_adjacency_data,
+    filter_node_data,
     format_position_as_string,
 )
 
@@ -260,6 +262,7 @@ def parcellate_colormap_f(
     cmap_name: str,
     parcellation_name: str,
     cmap: str,
+    target: Union[str, Sequence[str]] = ('surf_scalars', 'node'),
 ):
     surf.add_cifti_dataset(
         name=f'cmap_{cmap_name}',
@@ -276,13 +279,16 @@ def parcellate_colormap_f(
         surf, f'cmap_{cmap_name}', parcellation_name, return_both=True
     )
 
-    return (
-        surf,
-        (cmap_left, cmap_right),
-        (clim_left, clim_right),
-        cmap,
-        clim,
-    )
+    ret = {'surf': surf}
+    if isinstance(target, str):
+        target = [target]
+    if 'surf_scalars' in target:
+        ret['surf_scalars_cmap'] = (cmap_left, cmap_right)
+        ret['surf_scalars_clim'] = (clim_left, clim_right)
+    if 'node' in target:
+        ret['node_cmap'] = cmap
+        ret['node_clim'] = clim
+    return ret
 
 
 def parcellate_scalars_f(
@@ -335,6 +341,76 @@ def vertex_to_face_f(
         interpolation=interpolation,
     )
     return surf
+
+
+def add_node_variable_f(
+    name: str = "node",
+    val: Union[np.ndarray, str] = None,
+    threshold: Union[float, int] = 0.0,
+    percent_threshold: bool = False,
+    topk_threshold: bool = False,
+    absolute: bool = True,
+    node_selection: Optional[np.ndarray] = None,
+    incident_edge_selection: Optional[np.ndarray] = None,
+    removed_val: Optional[float] = None,
+    surviving_val: Optional[float] = 1.0,
+) -> pd.DataFrame:
+    if isinstance(val, str):
+        val = pd.read_csv(val, sep='\t', header=None).values
+
+    node_df = filter_node_data(
+        val=val,
+        name=name,
+        threshold=threshold,
+        percent_threshold=percent_threshold,
+        topk_threshold=topk_threshold,
+        absolute=absolute,
+        node_selection=node_selection,
+        incident_edge_selection=incident_edge_selection,
+        removed_val=removed_val,
+        surviving_val=surviving_val,
+    )
+
+    return node_df
+
+
+def add_edge_variable_f(
+    name: str,
+    adj: Union[np.ndarray, str] = None,
+    threshold: float = 0.0,
+    percent_threshold: bool = False,
+    topk_threshold_nodewise: bool = False,
+    absolute: bool = True,
+    incident_node_selection: Optional[np.ndarray] = None,
+    connected_node_selection: Optional[np.ndarray] = None,
+    edge_selection: Optional[np.ndarray] = None,
+    removed_val: Optional[float] = None,
+    surviving_val: Optional[float] = 1.0,
+    emit_degree: Union[bool, Literal["abs", "+", "-"]] = False,
+    emit_incident_nodes: Union[bool, tuple] = False,
+) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    if isinstance(adj, str):
+        adj = pd.read_csv(adj, sep='\t', header=None).values
+
+    ret = filter_adjacency_data(
+        adj=adj,
+        name=name,
+        threshold=threshold,
+        percent_threshold=percent_threshold,
+        topk_threshold_nodewise=topk_threshold_nodewise,
+        absolute=absolute,
+        incident_node_selection=incident_node_selection,
+        connected_node_selection=connected_node_selection,
+        edge_selection=edge_selection,
+        removed_val=removed_val,
+        surviving_val=surviving_val,
+        emit_degree=emit_degree,
+        emit_incident_nodes=emit_incident_nodes,
+    )
+
+    if emit_degree is not False or emit_incident_nodes is not False:
+        return ret
+    return ret, None
 
 
 def add_postprocessor_f(
@@ -536,7 +612,7 @@ def automap_unified_plotter_f(
         'hemisphere',
     ]
     params.pop('map_spec')
-    mapper = replicate(spec=map_spec)
+    mapper = replicate(spec=map_spec, weave_type='maximal')
 
     postprocessors = params.pop('postprocessors', None)
     postprocessors = postprocessors or {'plotter': None}
@@ -548,7 +624,10 @@ def automap_unified_plotter_f(
     repl_params = {k: v for k, v in repl_params.items() if k in repl_vars}
     other_params = {k: v for k, v in params.items() if k not in repl_vars}
     params = {**other_params, **repl_params}
-    n_replicates = max([len(v) for v in repl_params.values()])
+    try:
+        n_replicates = max([len(v) for v in repl_params.values()])
+    except ValueError:
+        n_replicates = 1
 
     output = [
         unified_plotter(
@@ -626,13 +705,7 @@ resample_to_surface_p = Primitive(
 parcellate_colormap_p = Primitive(
     parcellate_colormap_f,
     'parcellate_colormap',
-    output=(
-        'surf',
-        'surf_scalars_cmap',
-        'surf_scalars_clim',
-        'node_cmap',
-        'node_clim',
-    ),
+    output=None,
     forward_unused=True,
 )
 
@@ -657,6 +730,22 @@ vertex_to_face_p = Primitive(
     vertex_to_face_f,
     'vertex_to_face',
     output=('surf',),
+    forward_unused=True,
+)
+
+
+add_node_variable_p = Primitive(
+    add_node_variable_f,
+    'add_node_variable',
+    output=('node_values',),
+    forward_unused=True,
+)
+
+
+add_edge_variable_p = Primitive(
+    add_edge_variable_f,
+    'add_edge_variable',
+    output=('edge_values', 'node_values'),
     forward_unused=True,
 )
 

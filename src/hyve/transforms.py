@@ -35,6 +35,8 @@ from .prim import (
     parcellate_scalars_p,
     scatter_into_parcels_p,
     vertex_to_face_p,
+    add_node_variable_p,
+    add_edge_variable_p,
     add_postprocessor_p,
     plot_to_image_f,
     plot_to_image_aux_p,
@@ -387,6 +389,7 @@ def resample_to_surface(
 def parcellate_colormap(
     cmap_name: str,
     parcellation_name: str,
+    target: Union[str, Sequence[str]] = ('surf_scalars', 'node'),
 ) -> callable:
     """
     Add a colormap to a surface, and then parcellate it to obtain colours for
@@ -431,6 +434,7 @@ def parcellate_colormap(
             cmap_name=cmap_name,
             parcellation_name=parcellation_name,
             cmap=cmap,
+            target=target,
         )
 
         def f_transformed(
@@ -616,6 +620,104 @@ def vertex_to_face(
                 surf=surf,
                 surf_scalars=surf_scalars,
             )
+
+        return f_transformed
+    return transform
+
+
+def add_node_variable(
+    name: str = "node",
+    threshold: Union[float, int] = 0.0,
+    percent_threshold: bool = False,
+    topk_threshold: bool = False,
+    absolute: bool = True,
+    node_selection: Optional[np.ndarray] = None,
+    incident_edge_selection: Optional[np.ndarray] = None,
+    removed_val: Optional[float] = None,
+    surviving_val: Optional[float] = 1.0,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            add_node_variable_p,
+            name=name,
+            threshold=threshold,
+            percent_threshold=percent_threshold,
+            topk_threshold=topk_threshold,
+            absolute=absolute,
+            node_selection=node_selection,
+            incident_edge_selection=incident_edge_selection,
+            removed_val=removed_val,
+            surviving_val=surviving_val,
+        )
+
+        def f_transformed(**params: Mapping):
+            try:
+                val = params[f"{name}_nodal"]
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {name}_nodal'
+                )
+            params = {
+                k: v for k, v in params.items()
+                if k != f"{name}_nodal"
+            }
+            return compositor(f, transformer_f)(**params)(val=val)
+
+        return f_transformed
+    return transform
+
+
+def add_edge_variable(
+    name: str,
+    threshold: float = 0.0,
+    percent_threshold: bool = False,
+    topk_threshold_nodewise: bool = False,
+    absolute: bool = True,
+    incident_node_selection: Optional[np.ndarray] = None,
+    connected_node_selection: Optional[np.ndarray] = None,
+    edge_selection: Optional[np.ndarray] = None,
+    removed_val: Optional[float] = None,
+    surviving_val: Optional[float] = 1.0,
+    emit_degree: Union[bool, Literal["abs", "+", "-"]] = False,
+    emit_incident_nodes: Union[bool, tuple] = False,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            add_edge_variable_p,
+            name=name,
+            threshold=threshold,
+            percent_threshold=percent_threshold,
+            topk_threshold_nodewise=topk_threshold_nodewise,
+            absolute=absolute,
+            incident_node_selection=incident_node_selection,
+            connected_node_selection=connected_node_selection,
+            edge_selection=edge_selection,
+            removed_val=removed_val,
+            surviving_val=surviving_val,
+            emit_degree=emit_degree,
+            emit_incident_nodes=emit_incident_nodes,
+        )
+
+        def f_transformed(**params: Mapping):
+            try:
+                adj = params[f"{name}_adjacency"]
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {name}_adjacency'
+                )
+            params = {
+                k: v for k, v in params.items()
+                if k != f"{name}_adjacency"
+            }
+            return compositor(f, transformer_f)(**params)(adj=adj)
 
         return f_transformed
     return transform
