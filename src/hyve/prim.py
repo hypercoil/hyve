@@ -558,6 +558,81 @@ def scalar_focus_camera_aux_f(
     return mapper(**metadata)
 
 
+def closest_ortho_camera_f(
+    surf: CortexTriSurface,
+    hemispheres: Optional[str],
+    surf_scalars: str,
+    surf_projection: str,
+    n_ortho: int,
+    plotter: Optional[pv.Plotter] = None,
+) -> Mapping:
+    metric = 'euclidean'
+    # if projection == 'sphere':
+    #     metric = 'spherical'
+    #     cur_proj = surf.projection
+    #     surf.left.project('sphere')
+    #     surf.right.project('sphere')
+    # else:
+    #     metric = 'euclidean'
+    hemispheres = hemispheres or ('left', 'right')
+    if hemispheres == 'both' or 'both' in hemispheres:
+        hemispheres = ('left', 'right')
+    closest_poles = []
+    hemispheres_out = []
+    for hemisphere in hemispheres:
+        coor = surf.scalars_centre_of_mass(
+            hemisphere=hemisphere,
+            scalars=surf_scalars,
+            projection=surf_projection,
+        )
+        closest_poles_hemisphere = surf.closest_poles(
+            hemisphere=hemisphere,
+            coors=coor,
+            metric=metric,
+            n_poles=n_ortho,
+        ).squeeze().tolist()
+        hemispheres_out += [hemisphere] * n_ortho
+        # You really shouldn't be using this autocamera when rendering both
+        # hemispheres, but if you do, this will make sure that the camera
+        # provides valid views.
+        if hemispheres == ('left', 'right') or hemispheres == 'both':
+            other_hemisphere = 'right' if hemisphere == 'left' else 'left'
+            closest_poles_hemisphere = [
+                p if p != 'lateral' else hemisphere
+                for p in closest_poles_hemisphere
+            ]
+            closest_poles_hemisphere = [
+                p if p != 'medial' else other_hemisphere
+                for p in closest_poles_hemisphere
+            ]
+        closest_poles += closest_poles_hemisphere
+    # if surf_projection == 'sphere':
+    #     surf.left.project(cur_proj)
+    #     surf.right.project(cur_proj)
+    return plotter, closest_poles, hemispheres_out
+
+
+def closest_ortho_camera_aux_f(
+    surf: CortexTriSurface,
+    hemisphere: Optional[str],
+    surf_scalars: str,
+    surf_projection: str,
+    n_ortho: int,
+    metadata: Mapping[str, Sequence[str]],
+) -> Mapping:
+    # TODO: We're duplicating work here, since we're calculating the closest
+    #       poles twice. It's not a huge deal since the computations are
+    #       relatively cheap, but it would be nice to avoid this.
+    _, poles, hemisphere = closest_ortho_camera_f(
+        surf=surf,
+        hemispheres=hemisphere,
+        surf_scalars=surf_scalars,
+        surf_projection=surf_projection,
+        n_ortho=n_ortho,
+    )
+    return metadata, poles, hemisphere
+
+
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Union[Sequence, Literal['__default__']] = '__default__',
@@ -913,6 +988,22 @@ scalar_focus_camera_aux_p = Primitive(
     scalar_focus_camera_aux_f,
     'scalar_focus_camera_aux',
     output=None,
+    forward_unused=False,
+)
+
+
+closest_ortho_camera_p = Primitive(
+    closest_ortho_camera_f,
+    'closest_ortho_camera',
+    output=('plotter', 'views', 'hemispheres'),
+    forward_unused=True,
+)
+
+
+closest_ortho_camera_aux_p = Primitive(
+    closest_ortho_camera_aux_f,
+    'closest_ortho_camera_aux',
+    output=('metadata', 'views', 'hemisphere'),
     forward_unused=False,
 )
 

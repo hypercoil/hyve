@@ -1120,13 +1120,15 @@ class CortexTriSurface:
         poles = self.poles(hemisphere)
         poles_coors = np.array(list(poles.values()))
         if metric == 'euclidean':
-            dists = cdist(coors, poles_coors)
+            pass
         elif metric == 'spherical':
+            # TODO: spherical distance is implemented downstream in
+            #       hypercoil but relies on JAX, which we don't want as a
+            #       dependency here. We should implement it here.
             warnings.warn(
                 'Spherical distance is not currently implemented. '
                 'Fallback to Euclidean distance.'
             )
-            dists = cdist(coors, poles_coors)
             # proj = self.projection
             # self.__getattribute__(hemisphere).project("sphere")
             # dists = spherical_geodesic(coors, poles_coors)
@@ -1138,6 +1140,7 @@ class CortexTriSurface:
                 f'Metric must currently be either euclidean or spherical, '
                 f'but {metric} was given.'
             )
+        dists = cdist(np.atleast_2d(coors), np.atleast_2d(poles_coors))
         pole_index = np.argsort(dists, axis=1)[:, :n_poles]
         pole_names = np.array(list(poles.keys()))
         # TODO: need to use tuple indexing here

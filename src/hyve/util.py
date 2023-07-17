@@ -121,6 +121,11 @@ def cortex_cameras(
     corresponding camera position, focal point, and view up vector.
     """
     hemisphere = hemisphere or 'both'
+    # if not isinstance(hemisphere, str):
+    #     if len(hemisphere) == 1:
+    #         hemisphere = hemisphere[0]
+    #     else:
+    #         hemisphere = 'both'
     if isinstance(position, str):
         try:
             # TODO: I'm a little bit concerned that ``view_vectors`` is not
