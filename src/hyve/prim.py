@@ -493,6 +493,71 @@ def transform_postprocessor_f(
     return postprocessors
 
 
+def scalar_focus_camera_f(
+    surf: CortexTriSurface,
+    hemispheres: Optional[str],
+    surf_scalars: str,
+    surf_projection: str,
+    kind: str,
+    plotter: Optional[pv.Plotter] = None,
+) -> Mapping:
+    hemispheres = hemispheres or ('left', 'right')
+    views = []
+    for hemisphere in hemispheres:
+        if kind == "centroid":
+            coor = surf.scalars_centre_of_mass(
+                hemisphere=hemisphere,
+                scalars=surf_scalars,
+                projection=surf_projection,
+            )
+        elif kind == "peak":
+            coor = surf.scalars_peak(
+                hemisphere=hemisphere,
+                scalars=surf_scalars,
+                projection=surf_projection,
+            )
+        vector, focus = auto_focus(
+            vector=coor,
+            plotter=surf.__getattribute__(hemisphere),
+            slack=2,
+        )
+        if np.any(np.isnan(vector)):
+            # TODO: Let's figure out a good way to signal that there are no
+            #       valid coordinates for this hemisphere, and to handle the
+            #       plot outputs (since dropping them could disrupt plotting
+            #       grids specified by the user).
+            # logging.warning(
+            #     f"NaN detected in focus coordinates for {hemisphere}, "
+            #     f"skipping hemisphere"
+            # )
+            vector = (0, 0, 0)
+        views.append(
+            (vector, focus, (0, 0, 1))
+        )
+    return plotter, views, hemispheres
+
+
+def scalar_focus_camera_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    kind: str,
+    hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
+) -> Mapping:
+    if hemisphere is None:
+        metadata['hemisphere'] = ['both']
+        metadata['view'] = ['focusedleft', 'focusedright']
+    elif len(hemisphere) == 1 and hemisphere[0] != 'both':
+        metadata['view'] = ['focused']
+    else:
+        metadata['hemisphere'] = ['both']
+        metadata['view'] = ['focusedleft', 'focusedright']
+    metadata['focus'] = [kind]
+    mapper = replicate(
+        spec=('view', 'focus', 'hemisphere'),
+        broadcast_out_of_spec=True,
+    )
+    return mapper(**metadata)
+
+
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Union[Sequence, Literal['__default__']] = '__default__',
@@ -831,6 +896,22 @@ transform_postprocessor_p = Primitive(
 plot_to_image_aux_p = Primitive(
     plot_to_image_aux_f,
     'plot_to_image_aux',
+    output=None,
+    forward_unused=False,
+)
+
+
+scalar_focus_camera_p = Primitive(
+    scalar_focus_camera_f,
+    'scalar_focus_camera',
+    output=('plotter', 'views', 'hemispheres'),
+    forward_unused=True,
+)
+
+
+scalar_focus_camera_aux_p = Primitive(
+    scalar_focus_camera_aux_f,
+    'scalar_focus_camera_aux',
     output=None,
     forward_unused=False,
 )
