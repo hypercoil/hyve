@@ -574,6 +574,8 @@ def plotted_entities(
         metadata['edgeradius'] = [params.get('edge_radius', None)]
         metadata['edgealpha'] = [params.get('edge_alpha', None)]
     metadata['hemisphere'] = [params.get('hemisphere', 'both')]
+    if metadata['hemisphere'][0] is None:
+        metadata['hemisphere'] = ['both']
     metadata['plot_index'] = [plot_index]
     metadata = {k: v for k, v in metadata.items() if isinstance(v[0], str)}
     if entity_writers is None:

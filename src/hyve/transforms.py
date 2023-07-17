@@ -38,8 +38,11 @@ from .prim import (
     add_node_variable_p,
     add_edge_variable_p,
     add_postprocessor_p,
+    transform_postprocessor_p,
     plot_to_image_f,
     plot_to_image_aux_p,
+    scalar_focus_camera_p,
+    scalar_focus_camera_aux_p,
     plot_to_html_buffer_f,
     save_screenshots_p,
     save_html_p,
@@ -723,7 +726,48 @@ def add_edge_variable(
     return transform
 
 
-def plot_to_image():
+def scalar_focus_camera(
+    kind: Literal["centroid", "peak"] = "centroid",
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            transform_postprocessor_p,
+            name='screenshots',
+            transformer=Partial(
+                scalar_focus_camera_p,
+                kind=kind,
+                __allowed__=(
+                    'surf',
+                    'hemispheres',
+                    'surf_scalars',
+                    'surf_projection',
+                ),
+            ),
+            auxwriter=Partial(
+                scalar_focus_camera_aux_p,
+                kind=kind,
+                __allowed__=(
+                    'hemisphere',
+                ),
+            ),
+        )
+
+        def f_transformed(
+            postprocessors: Optional[Sequence[callable]] = None,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                postprocessors=postprocessors,
+            )
+
+        return f_transformed
+    return transform
+
+
+def plot_to_image() -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
