@@ -23,12 +23,17 @@ import numpy as np
 import pandas as pd
 import pyvista as pv
 from conveyant import (
+    Composition,
     Primitive,
 )
 from conveyant import (
     SanitisedFunctionWrapper as F,
 )
-from conveyant.compositors import _dict_to_seq
+from conveyant.compositors import (
+    _dict_to_seq,
+    direct_compositor,
+    reversed_args_compositor
+)
 from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 
@@ -429,6 +434,65 @@ def add_postprocessor_f(
     return postprocessors
 
 
+def transform_postprocessor_f(
+    name: str,
+    transformer: Optional[Callable] = None,
+    postprocessor_params: Optional[Mapping] = None,
+    aux_transformer: Optional[Callable] = None,
+    auxwriter: Optional[Callable] = None,
+    auxwriter_params: Optional[Mapping] = None,
+    postprocessors: Optional[Sequence[Callable]] = None,
+    composition_order: Literal['pre', 'post'] = 'pre',
+) -> Sequence[Callable]:
+    notfound = False
+    if postprocessors is None:
+        notfound = True
+    postprocessor, _auxwriter = postprocessors.get(name, (None, None))
+    if postprocessor is None:
+        notfound = True
+    if notfound:
+        raise ValueError(
+            f'Postprocessor {name} not found in postprocessors '
+            f'{postprocessors}'
+        )
+    if postprocessor_params is None:
+        postprocessor_params = {}
+    if transformer is not None:
+        if composition_order == 'pre':
+            postprocessor = Composition(
+                compositor=direct_compositor,
+                outer=postprocessor,
+                inner=transformer,
+            ).bind_curried(**postprocessor_params)
+        else:
+            postprocessor = Composition(
+                compositor=reversed_args_compositor,
+                outer=transformer,
+                inner=postprocessor,
+            ).bind_curried(**postprocessor_params)
+    if aux_transformer is not None:
+        if auxwriter is not None:
+            raise ValueError(
+                'Cannot specify both aux_transformer and auxwriter'
+            )
+        if auxwriter_params is None:
+            auxwriter_params = {}
+        if composition_order == 'pre':
+            auxwriter = Composition(
+                compositor=direct_compositor,
+                outer=_auxwriter,
+                inner=aux_transformer,
+            ).bind_curried(**auxwriter_params)
+        else:
+            auxwriter = Composition(
+                compositor=reversed_args_compositor,
+                outer=aux_transformer,
+                inner=_auxwriter,
+            ).bind_curried(**auxwriter_params)
+    postprocessors[name] = (postprocessor, auxwriter)
+    return postprocessors
+
+
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Union[Sequence, Literal['__default__']] = '__default__',
@@ -442,21 +506,20 @@ def plot_to_image_f(
         hemisphere = 'both'
     if views == '__default__':
         views = set_default_views(hemisphere)
-    screenshot = [True] * len(views)
     ret = []
     if not plot_scalar_bar:
         try:
             plotter.remove_scalar_bar()
         except IndexError:
             pass
-    for cpos, fname in zip(views, screenshot):
+    for cpos in views:
         plotter.camera.zoom('tight')
         plotter.show(
             cpos=cortex_cameras(cpos, plotter=plotter, hemisphere=hemisphere),
             auto_close=False,
         )
         img = plotter.screenshot(
-            fname,
+            True,
             window_size=window_size,
             return_img=True,
         )
@@ -467,16 +530,16 @@ def plot_to_image_f(
 
 def plot_to_image_aux_f(
     metadata: Mapping[str, Sequence[str]],
-    hemisphere: Sequence[Literal['left', 'right', 'both']],
+    hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
     views: Union[Sequence, Literal['__default__']] = '__default__',
 ) -> Mapping[str, Sequence[str]]:
-    if hemisphere is None:
-        hemisphere = 'both'
-    elif len(hemisphere) == 1:
-        hemisphere = hemisphere[0]
-    else:
-        hemisphere = 'both'
     if views == '__default__':
+        if hemisphere is None:
+            hemisphere = 'both'
+        elif len(hemisphere) == 1:
+            hemisphere = hemisphere[0]
+        else:
+            hemisphere = 'both'
         views = set_default_views(hemisphere)
     views = [format_position_as_string(cpos) for cpos in views]
     mapper = replicate(spec=['view'], broadcast_out_of_spec=True)
@@ -752,6 +815,14 @@ add_edge_variable_p = Primitive(
 add_postprocessor_p = Primitive(
     add_postprocessor_f,
     'add_postprocessor',
+    output=('postprocessors',),
+    forward_unused=True,
+)
+
+
+transform_postprocessor_p = Primitive(
+    transform_postprocessor_f,
+    'transform_postprocessor',
     output=('postprocessors',),
     forward_unused=True,
 )
