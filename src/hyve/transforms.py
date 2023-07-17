@@ -43,6 +43,8 @@ from .prim import (
     plot_to_image_aux_p,
     scalar_focus_camera_p,
     scalar_focus_camera_aux_p,
+    closest_ortho_camera_p,
+    closest_ortho_camera_aux_p,
     plot_to_html_buffer_f,
     save_screenshots_p,
     save_html_p,
@@ -751,6 +753,50 @@ def scalar_focus_camera(
                 kind=kind,
                 __allowed__=(
                     'hemisphere',
+                ),
+            ),
+        )
+
+        def f_transformed(
+            postprocessors: Optional[Sequence[callable]] = None,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                postprocessors=postprocessors,
+            )
+
+        return f_transformed
+    return transform
+
+
+def closest_ortho_camera(
+    n_ortho: int = 3,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            transform_postprocessor_p,
+            name='screenshots',
+            transformer=Partial(
+                closest_ortho_camera_p,
+                n_ortho=n_ortho,
+                __allowed__=(
+                    'surf',
+                    'hemispheres',
+                    'surf_scalars',
+                    'surf_projection',
+                ),
+            ),
+            aux_transformer=Partial(
+                closest_ortho_camera_aux_p,
+                n_ortho=n_ortho,
+                __allowed__=(
+                    'surf',
+                    'hemisphere',
+                    'surf_scalars',
+                    'surf_projection',
                 ),
             ),
         )
