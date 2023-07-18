@@ -789,14 +789,11 @@ def closest_ortho_camera(
                     'surf_projection',
                 ),
             ),
-            aux_transformer=Partial(
+            auxwriter=Partial(
                 closest_ortho_camera_aux_p,
                 n_ortho=n_ortho,
                 __allowed__=(
-                    'surf',
                     'hemisphere',
-                    'surf_scalars',
-                    'surf_projection',
                 ),
             ),
         )

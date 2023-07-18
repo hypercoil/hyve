@@ -609,28 +609,30 @@ def closest_ortho_camera_f(
     # if surf_projection == 'sphere':
     #     surf.left.project(cur_proj)
     #     surf.right.project(cur_proj)
-    return plotter, closest_poles, hemispheres_out
+    return plotter, closest_poles, hemispheres
 
 
 def closest_ortho_camera_aux_f(
-    surf: CortexTriSurface,
-    hemisphere: Optional[str],
-    surf_scalars: str,
-    surf_projection: str,
-    n_ortho: int,
     metadata: Mapping[str, Sequence[str]],
+    n_ortho: int,
+    hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
 ) -> Mapping:
-    # TODO: We're duplicating work here, since we're calculating the closest
-    #       poles twice. It's not a huge deal since the computations are
-    #       relatively cheap, but it would be nice to avoid this.
-    _, poles, hemisphere = closest_ortho_camera_f(
-        surf=surf,
-        hemispheres=hemisphere,
-        surf_scalars=surf_scalars,
-        surf_projection=surf_projection,
-        n_ortho=n_ortho,
+    metadata['index'] = [str(i) for i in range(n_ortho)]
+    if hemisphere is None:
+        metadata['hemisphere'] = ['both']
+        metadata['view'] = ['ortholeft', 'orthoright']
+        #metadata['index'] *= 2
+    elif len(hemisphere) == 1 and hemisphere[0] != 'both':
+        metadata['view'] = ['ortho']
+    else:
+        metadata['hemisphere'] = ['both']
+        metadata['view'] = ['ortholeft', 'orthoright']
+        #metadata['index'] *= 2
+    mapper = replicate(
+        spec=(['view', 'index'], 'hemisphere'),
+        broadcast_out_of_spec=True,
     )
-    return metadata, poles, hemisphere
+    return mapper(**metadata)
 
 
 def plot_to_image_f(
@@ -642,8 +644,10 @@ def plot_to_image_f(
 ) -> Tuple[np.ndarray]:
     if len(hemispheres) == 1:
         hemisphere = hemispheres[0]
-    else:
+    elif tuple(hemispheres) == ('left', 'right'):
         hemisphere = 'both'
+    else:
+        hemisphere = hemispheres
     if views == '__default__':
         views = set_default_views(hemisphere)
     ret = []
@@ -1003,7 +1007,7 @@ closest_ortho_camera_p = Primitive(
 closest_ortho_camera_aux_p = Primitive(
     closest_ortho_camera_aux_f,
     'closest_ortho_camera_aux',
-    output=('metadata', 'views', 'hemisphere'),
+    output=None,
     forward_unused=False,
 )
 
