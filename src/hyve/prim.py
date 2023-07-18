@@ -621,13 +621,102 @@ def closest_ortho_camera_aux_f(
     if hemisphere is None:
         metadata['hemisphere'] = ['both']
         metadata['view'] = ['ortholeft', 'orthoright']
-        #metadata['index'] *= 2
     elif len(hemisphere) == 1 and hemisphere[0] != 'both':
         metadata['view'] = ['ortho']
     else:
         metadata['hemisphere'] = ['both']
         metadata['view'] = ['ortholeft', 'orthoright']
-        #metadata['index'] *= 2
+    mapper = replicate(
+        spec=(['view', 'index'], 'hemisphere'),
+        broadcast_out_of_spec=True,
+    )
+    return mapper(**metadata)
+
+
+def planar_sweep_camera_f(
+    surf: CortexTriSurface,
+    hemispheres: Optional[str],
+    initial: Sequence,
+    normal: Optional[Sequence[float]] = None,
+    n_steps: int = 10,
+    require_planar: bool = True,
+    plotter: Optional[pv.Plotter] = None,
+) -> Mapping:
+    if normal is None:
+        _x, _y, _z = initial
+        if (_x, _y, _z) == (0, 0, 1) or (_x, _y, _z) == (0, 0, -1):
+            normal = (1, 0, 0)
+        elif (_x, _y, _z) == (0, 0, 0):
+            raise ValueError("initial view cannot be (0, 0, 0)")
+        else:
+            ref = np.asarray((0, 0, 1))
+            initial = np.asarray(initial) / np.linalg.norm(initial)
+            rejection = ref - np.dot(ref, initial) * initial
+            normal = rejection / np.linalg.norm(rejection)
+
+    if require_planar:
+        assert np.isclose(np.dot(initial, normal), 0), (
+            'Initial and normal must be orthogonal for a planar sweep. '
+            'Got initial: {}, normal: {}. '
+            'Set require_planar=False to allow conical sweeps.'
+        )
+    angles = np.linspace(0, 2 * np.pi, n_steps, endpoint=False)
+    cos = np.cos(angles)
+    sin = np.sin(angles)
+    ax_x = initial / np.linalg.norm(initial)
+    ax_z = np.asarray(normal) / np.linalg.norm(normal)
+    ax_y = np.cross(ax_z, ax_x)
+    ax = np.stack((ax_x, ax_y, ax_z), axis=-1)
+
+    lin = np.zeros((n_steps, 3, 3))
+    lin[:, 0, 0] = cos
+    lin[:, 0, 1] = -sin
+    lin[:, 1, 0] = sin
+    lin[:, 1, 1] = cos
+    lin[:, -1, -1] = 1
+
+    lin = ax @ lin
+    vectors = lin @ np.asarray(initial)
+
+    if hemispheres is None:
+        _hemi = ("left", "right")
+    elif isinstance(hemispheres, str):
+        _hemi = (hemispheres,)
+    else:
+        _hemi = hemispheres
+    views = []
+    for h in _hemi:
+        if h == "left":
+            vecs_hemi = vectors.copy()
+            vecs_hemi[:, 0] = -vecs_hemi[:, 0]
+        else:
+            vecs_hemi = vectors
+        for vector in vecs_hemi:
+            v, focus = auto_focus(
+                vector=vector,
+                plotter=surf.__getattribute__(h),
+                slack=2,
+            )
+            views.append(
+                (v, focus, (0, 0, 1))
+            )
+    return plotter, views, hemispheres
+
+
+def planar_sweep_camera_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    n_steps: int,
+    hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
+) -> Mapping:
+    metadata['index'] = [str(i) for i in range(n_steps)]
+    if hemisphere is None:
+        metadata['hemisphere'] = ['both']
+        metadata['view'] = ['planarleft', 'planarright']
+    elif len(hemisphere) == 1 and hemisphere[0] != 'both':
+        metadata['view'] = ['planar']
+    else:
+        metadata['hemisphere'] = ['both']
+        metadata['view'] = ['planarleft', 'planarright']
     mapper = replicate(
         spec=(['view', 'index'], 'hemisphere'),
         broadcast_out_of_spec=True,
@@ -1007,6 +1096,22 @@ closest_ortho_camera_p = Primitive(
 closest_ortho_camera_aux_p = Primitive(
     closest_ortho_camera_aux_f,
     'closest_ortho_camera_aux',
+    output=None,
+    forward_unused=False,
+)
+
+
+planar_sweep_camera_p = Primitive(
+    planar_sweep_camera_f,
+    'planar_sweep_camera',
+    output=('plotter', 'views', 'hemispheres'),
+    forward_unused=True,
+)
+
+
+planar_sweep_camera_aux_p = Primitive(
+    planar_sweep_camera_aux_f,
+    'planar_sweep_camera_aux',
     output=None,
     forward_unused=False,
 )

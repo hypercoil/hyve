@@ -45,6 +45,8 @@ from .prim import (
     scalar_focus_camera_aux_p,
     closest_ortho_camera_p,
     closest_ortho_camera_aux_p,
+    planar_sweep_camera_p,
+    planar_sweep_camera_aux_p,
     plot_to_html_buffer_f,
     save_screenshots_p,
     save_html_p,
@@ -792,6 +794,51 @@ def closest_ortho_camera(
             auxwriter=Partial(
                 closest_ortho_camera_aux_p,
                 n_ortho=n_ortho,
+                __allowed__=(
+                    'hemisphere',
+                ),
+            ),
+        )
+
+        def f_transformed(
+            postprocessors: Optional[Sequence[callable]] = None,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                postprocessors=postprocessors,
+            )
+
+        return f_transformed
+    return transform
+
+
+def planar_sweep_camera(
+    initial: Sequence,
+    normal: Optional[Sequence[float]] = None,
+    n_steps: int = 10,
+    require_planar: bool = True,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            transform_postprocessor_p,
+            name='screenshots',
+            transformer=Partial(
+                planar_sweep_camera_p,
+                initial=initial,
+                normal=normal,
+                n_steps=n_steps,
+                require_planar=require_planar,
+                __allowed__=(
+                    'surf',
+                    'hemispheres',
+                ),
+            ),
+            auxwriter=Partial(
+                planar_sweep_camera_aux_p,
+                n_steps=n_steps,
                 __allowed__=(
                     'hemisphere',
                 ),
