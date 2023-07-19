@@ -32,7 +32,7 @@ from conveyant import (
 from conveyant.compositors import (
     _dict_to_seq,
     direct_compositor,
-    reversed_args_compositor
+    reversed_args_compositor,
 )
 from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap

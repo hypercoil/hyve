@@ -472,7 +472,7 @@ def unified_plotter(
             if (
                 surf_scalars_boundary_width > 0
                 and surf_scalars is not None
-                and not surf_scalars in hemi_surf.cell_data
+                and surf_scalars not in hemi_surf.cell_data
             ):
                 p.add_mesh(
                     hemi_surf.contour(
