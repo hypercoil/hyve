@@ -47,6 +47,61 @@ def half_width(
     )
 
 
+def _relabel_parcels_hemi(
+    data: np.ndarray,
+    null_value: int = 0,
+) -> np.ndarray:
+    data = data.astype(np.int32)
+    data[data == null_value] = -1
+    _, data = np.unique(data, return_inverse=True)
+    data[data == -1] = null_value
+    return data + 1
+
+
+def relabel_parcels(
+    left_data: np.ndarray,
+    right_data: np.ndarray,
+    null_value: int = 0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Relabel the parcels in the left and right hemisphere data arrays so that
+    they are contiguous and start at 1.
+
+    Parameters
+    ----------
+    left_data : np.ndarray
+        Array of parcel values for the left hemisphere.
+    right_data : np.ndarray
+        Array of parcel values for the right hemisphere.
+    null_value : int, optional
+        The value to use for null (or background) values in the data arrays.
+        By default, this is 0.
+
+    Returns
+    -------
+    left_data : np.ndarray
+        Array of parcel values for the left hemisphere, with contiguous parcel
+        values starting at 1.
+    right_data : np.ndarray
+        Array of parcel values for the right hemisphere, with contiguous parcel
+        values starting at the maximum value in left_data, plus 1.
+
+    Notes
+    -----
+    What utter wickedness is this?! This function was written almost entirely
+    by GitHub Copilot.
+    """
+    # Relabel the parcels in the left hemisphere
+    left_data = _relabel_parcels_hemi(left_data, null_value=null_value)
+    offset = np.max(left_data)
+
+    # Relabel the parcels in the right hemisphere
+    right_data = _relabel_parcels_hemi(right_data, null_value=null_value)
+    right_data[right_data != null_value] += offset
+
+    return left_data, right_data
+
+
 def auto_focus(
     vector: Sequence[float],
     plotter: pv.Plotter,

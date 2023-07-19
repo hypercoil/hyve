@@ -32,6 +32,7 @@ from .const import (
     neuromaps_fetch_fn,
     template_dict,
 )
+from .util import relabel_parcels
 
 
 def is_path_like(obj: Any) -> bool:
@@ -821,6 +822,12 @@ class CortexTriSurface:
         offset = 0
         if coerce_to_scalar:
             left_data, right_data = left_data.squeeze(), right_data.squeeze()
+        if not allow_multihemisphere:
+            left_data, right_data = relabel_parcels(
+                left_data,
+                right_data,
+                null_value=null_value,
+            )
         if left_data is not None:
             scalars_names_L = self._assign_hemisphere_vertex_data(
                 name=name,
@@ -835,13 +842,6 @@ class CortexTriSurface:
                 coerce_to_scalar=coerce_to_scalar,
             )
         if right_data is not None:
-            if not allow_multihemisphere:
-                offset = len(scalars_names_L)
-                if (
-                    right_data.ndim == 1
-                    and right_data.min() < left_data.max()
-                ):
-                    right_data += offset
             scalars_names_R = self._assign_hemisphere_vertex_data(
                 name=name,
                 data=right_data,
