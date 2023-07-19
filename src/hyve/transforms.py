@@ -391,6 +391,8 @@ def resample_to_surface(
     threshold: Optional[float] = None,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = True,
 ) -> callable:
     """
@@ -447,6 +449,8 @@ def resample_to_surface(
             threshold=threshold,
             select=select,
             exclude=exclude,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
             plot=plot,
         )
 
