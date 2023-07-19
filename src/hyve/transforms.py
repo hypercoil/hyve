@@ -47,6 +47,8 @@ from .prim import (
     closest_ortho_camera_aux_p,
     planar_sweep_camera_p,
     planar_sweep_camera_aux_p,
+    auto_camera_p,
+    auto_camera_aux_p,
     plot_to_html_buffer_f,
     save_screenshots_p,
     save_html_p,
@@ -121,7 +123,7 @@ def scalars_from_cifti(
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
-    plot: bool = False,
+    plot: bool = True,
 ) -> callable:
     """
     Load a scalar dataset from a CIFTI file onto a CortexTriSurface.
@@ -201,7 +203,7 @@ def scalars_from_gifti(
     null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
-    plot: bool = False,
+    plot: bool = True,
 ) -> callable:
     """
     Load a scalar dataset from a GIfTI file onto a CortexTriSurface.
@@ -310,10 +312,12 @@ def scalars_from_nifti(
 def resample_to_surface(
     scalars: str,
     template: str = 'fsLR',
+    method: Literal['nearest', 'linear'] = 'linear',
     null_value: Optional[float] = 0.0,
+    threshold: float = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
-    plot: bool = False,
+    plot: bool = True,
 ) -> callable:
     """
     Resample a scalar dataset from volumetric MNI152 space to a surface.
@@ -352,8 +356,8 @@ def resample_to_surface(
           add the resampled scalar dataset to the sequence of scalars to plot.
     """
     templates = {
-        'fsLR': mni152_to_fslr,
-        'fsaverage': mni152_to_fsaverage,
+        'fsLR': F(mni152_to_fslr),
+        'fsaverage': F(mni152_to_fsaverage),
     }
     f_resample = templates[template]
     def transform(
@@ -364,7 +368,9 @@ def resample_to_surface(
             resample_to_surface_p,
             scalars=scalars,
             f_resample=f_resample,
+            method=method,
             null_value=null_value,
+            threshold=threshold,
             select=select,
             exclude=exclude,
             plot=plot,
@@ -839,6 +845,57 @@ def planar_sweep_camera(
             auxwriter=Partial(
                 planar_sweep_camera_aux_p,
                 n_steps=n_steps,
+                __allowed__=(
+                    'hemisphere',
+                ),
+            ),
+        )
+
+        def f_transformed(
+            postprocessors: Optional[Sequence[callable]] = None,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                postprocessors=postprocessors,
+            )
+
+        return f_transformed
+    return transform
+
+
+def auto_camera(
+    n_ortho: int = 0,
+    focus: Optional[Literal["centroid", "peak"]] = None,
+    n_angles: int = 0,
+    initial_angle: Tuple[float, float, float] = (1, 0, 0),
+    normal_vector: Optional[Tuple[float, float, float]] = None,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            transform_postprocessor_p,
+            name='screenshots',
+            transformer=Partial(
+                auto_camera_p,
+                n_ortho=n_ortho,
+                focus=focus,
+                n_angles=n_angles,
+                initial_angle=initial_angle,
+                normal_vector=normal_vector,
+                __allowed__=(
+                    'surf',
+                    'hemispheres',
+                    'surf_scalars',
+                    'surf_projection',
+                ),
+            ),
+            auxwriter=Partial(
+                auto_camera_aux_p,
+                n_ortho=n_ortho,
+                focus=focus,
+                n_angles=n_angles,
                 __allowed__=(
                     'hemisphere',
                 ),

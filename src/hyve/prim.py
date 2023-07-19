@@ -145,13 +145,15 @@ def resample_to_surface_f(
     scalars: str,
     nifti: nb.Nifti1Image,
     f_resample: callable,
+    method: Literal['nearest', 'linear'] = 'linear',
     surf_scalars: Sequence[str] = (),
     null_value: Optional[float] = 0.0,
+    threshold: float = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
     plot: bool = False,
 ) -> Mapping:
-    left, right = f_resample(nifti)
+    left, right = f_resample(nifti, method=method, threshold=threshold)
     scalar_names = surf.add_gifti_dataset(
         name=scalars,
         left_gifti=left,
@@ -724,6 +726,96 @@ def planar_sweep_camera_aux_f(
     return mapper(**metadata)
 
 
+def auto_camera_f(
+    surf: CortexTriSurface,
+    surf_scalars: Optional[str],
+    surf_projection: str,
+    hemispheres: Optional[str],
+    n_ortho: int = 0,
+    focus: Optional[Literal["centroid", "peak"]] = None,
+    n_angles: int = 0,
+    initial_angle: Tuple[float, float, float] = (1, 0, 0),
+    normal_vector: Optional[Tuple[float, float, float]] = None,
+    plotter: Optional[pv.Plotter] = None,
+) -> Mapping:
+    views_ortho = views_focused = views_planar = []
+    if n_ortho > 0:
+        _, views_ortho, _ = closest_ortho_camera_f(
+            surf=surf,
+            hemispheres=hemispheres,
+            surf_scalars=surf_scalars,
+            surf_projection=surf_projection,
+            n_ortho=n_ortho,
+            plotter=plotter,
+        )
+    if focus is not None:
+        _, views_focused, _ = scalar_focus_camera_f(
+            surf=surf,
+            hemispheres=hemispheres,
+            surf_scalars=surf_scalars,
+            surf_projection=surf_projection,
+            kind=focus,
+            plotter=plotter,
+        )
+    if n_angles > 0:
+        _, views_planar, _ = planar_sweep_camera_f(
+            surf=surf,
+            hemispheres=hemispheres,
+            n_steps=n_angles,
+            initial=initial_angle,
+            normal=normal_vector,
+            plotter=plotter,
+        )
+    views = tuple(views_ortho + views_focused + views_planar)
+    return plotter, views, hemispheres
+
+
+def auto_camera_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    n_ortho: int = 0,
+    focus: Optional[Literal["centroid", "peak"]] = None,
+    n_angles: int = 0,
+    hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
+) -> Mapping:
+    viewbuilder = metadata.copy() # There shouldn't be any nesting
+    viewbuilder = closest_ortho_camera_aux_f(
+        metadata=viewbuilder,
+        n_ortho=n_ortho,
+        hemisphere=hemisphere,
+    )
+    view += viewbuilder['view']
+    extra += viewbuilder['index']
+    hemi += viewbuilder['hemisphere']
+    viewbuilder = metadata.copy()
+    viewbuilder = scalar_focus_camera_aux_f(
+        metadata=viewbuilder,
+        kind=focus,
+        hemisphere=hemisphere,
+    )
+    view, extra, hemi = (
+        viewbuilder['view'],
+        viewbuilder['focus'],
+        viewbuilder['hemisphere'],
+    )
+    viewbuilder = metadata.copy()
+    viewbuilder = planar_sweep_camera_aux_f(
+        metadata=viewbuilder,
+        n_steps=n_angles,
+        hemisphere=hemisphere,
+    )
+    view += viewbuilder['view']
+    extra += viewbuilder['index']
+    hemi += viewbuilder['hemisphere']
+    metadata['view'] = view
+    metadata['index'] = extra
+    metadata['hemisphere'] = hemi
+    mapper = replicate(
+        spec=('view', 'index', 'hemisphere'),
+        broadcast_out_of_spec=True,
+    )
+    return mapper(**metadata)
+
+
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Union[Sequence, Literal['__default__']] = '__default__',
@@ -1112,6 +1204,22 @@ planar_sweep_camera_p = Primitive(
 planar_sweep_camera_aux_p = Primitive(
     planar_sweep_camera_aux_f,
     'planar_sweep_camera_aux',
+    output=None,
+    forward_unused=False,
+)
+
+
+auto_camera_p = Primitive(
+    auto_camera_f,
+    'auto_camera',
+    output=('plotter', 'views', 'hemispheres'),
+    forward_unused=True,
+)
+
+
+auto_camera_aux_p = Primitive(
+    auto_camera_aux_f,
+    'auto_camera_aux',
     output=None,
     forward_unused=False,
 )
