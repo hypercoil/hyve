@@ -30,6 +30,7 @@ from .prim import (
     scalars_from_cifti_p,
     scalars_from_gifti_p,
     scalars_from_nifti_p,
+    scalars_from_array_p,
     resample_to_surface_p,
     parcellate_colormap_p,
     parcellate_scalars_p,
@@ -274,6 +275,59 @@ def scalars_from_gifti(
                 right_gifti=right_gifti,
                 surf=surf,
                 surf_scalars=surf_scalars,
+            )
+
+        return f_transformed
+    return transform
+
+
+def scalars_from_array(
+    scalars: str,
+    left_slice: Optional[slice] = None,
+    right_slice: Optional[slice] = None,
+    default_slices: bool = True,
+    is_masked: bool = True,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.0,
+    plot: bool = True,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            scalars_from_array_p,
+            scalars=scalars,
+            left_slice=left_slice,
+            right_slice=right_slice,
+            default_slices=default_slices,
+            is_masked=is_masked,
+            apply_mask=apply_mask,
+            null_value=null_value,
+            plot=plot,
+        )
+
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            **params: Mapping,
+        ):
+            left_array = params.pop(f'{scalars}_array_left', None)
+            right_array = params.pop(f'{scalars}_array_right', None)
+            array = params.pop(f'{scalars}_array', None)
+            if left_array is None and right_array is None and array is None:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {scalars}_array or '
+                    f'{scalars}_array_left and/or {scalars}_array_right'
+                )
+            surf_scalars = params.pop('surf_scalars', ())
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                surf_scalars=surf_scalars,
+                array=array,
+                left_array=left_array,
+                right_array=right_array,
             )
 
         return f_transformed

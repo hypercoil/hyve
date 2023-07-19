@@ -140,6 +140,38 @@ def scalars_from_nifti_f(
     return vol_scalars, vol_coor, vol_voxdim
 
 
+def scalars_from_array_f(
+    surf: CortexTriSurface,
+    scalars: str,
+    surf_scalars: Sequence[str] = (),
+    array: Optional[np.ndarray] = None,
+    left_array: Optional[np.ndarray] = None,
+    right_array: Optional[np.ndarray] = None,
+    left_slice: Optional[slice] = None,
+    right_slice: Optional[slice] = None,
+    default_slices: bool = True,
+    is_masked: bool = False,
+    apply_mask: bool = True,
+    null_value: Optional[float] = 0.0,
+    plot: bool = False,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    surf.add_vertex_dataset(
+        name=scalars,
+        data=array,
+        left_data=left_array,
+        right_data=right_array,
+        left_slice=left_slice,
+        right_slice=right_slice,
+        default_slices=default_slices,
+        is_masked=is_masked,
+        apply_mask=apply_mask,
+        null_value=null_value,
+    )
+    if plot:
+        surf_scalars = tuple(list(surf_scalars) + [scalars])
+    return surf, surf_scalars
+
+
 def resample_to_surface_f(
     surf: CortexTriSurface,
     scalars: str,
@@ -1068,6 +1100,14 @@ scalars_from_cifti_p = Primitive(
 scalars_from_gifti_p = Primitive(
     scalars_from_gifti_f,
     'scalars_from_gifti',
+    output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+scalars_from_array_p = Primitive(
+    scalars_from_array_f,
+    'scalars_from_array',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
