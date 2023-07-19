@@ -545,6 +545,10 @@ class CortexTriSurface:
         is_masked: bool = False,
         apply_mask: bool = True,
         null_value: Optional[float] = 0.0,
+        select: Optional[Sequence[int]] = None,
+        exclude: Optional[Sequence[int]] = None,
+        allow_multihemisphere: bool = True,
+        coerce_to_scalar: bool = True,
     ):
         """
         Add a CIFTI dataset to the ``CortexTriSurface``.
@@ -587,6 +591,8 @@ class CortexTriSurface:
                 slices[hemi] = slice(start, stop)
                 offset = stop
 
+        # Hmm, why are we casting to float32 here? No harm, but it's not
+        # obvious why we're doing it instead of something more principled.
         data = cifti.get_fdata(dtype='float32')
         while data.shape[0] == 1:
             data = data[0]
@@ -599,6 +605,10 @@ class CortexTriSurface:
             is_masked=is_masked,
             apply_mask=apply_mask,
             null_value=null_value,
+            select=select,
+            exclude=exclude,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
         )
 
     def add_gifti_dataset(
@@ -609,10 +619,10 @@ class CortexTriSurface:
         is_masked: bool = False,
         apply_mask: bool = True,
         null_value: Optional[float] = 0.0,
-        map_all: bool = True,
-        arr_idx: int = 0,
         select: Optional[Sequence[int]] = None,
         exclude: Optional[Sequence[int]] = None,
+        allow_multihemisphere: bool = True,
+        coerce_to_scalar: bool = True,
     ):
         """
         Add a GIFTI dataset (or datasets) to the ``CortexTriSurface``.
@@ -659,45 +669,25 @@ class CortexTriSurface:
             right_gifti = nb.load(right_gifti)
         left_data = left_gifti.darrays if left_gifti else []
         right_data = right_gifti.darrays if right_gifti else []
-        if map_all and len(left_data) > 1 and len(right_data) > 1:
-            if left_data and right_data and len(left_data) != len(right_data):
-                raise ValueError(
-                    'Left and right hemisphere gifti images must have the '
-                    'same number of data arrays.'
-                )
-            n_darrays = max(len(left_data), len(right_data))
-            exclude = exclude or []
-            names = []
-            if select is not None and exclude is None:
-                exclude = [i for i in range(n_darrays) if i not in select]
-            for i in range(n_darrays):
-                if i in exclude:
-                    continue
-                name_i = f'{name}_{i}'
-                names.append(name_i)
-                data_l = left_data[i].data if left_gifti else None
-                data_r = right_data[i].data if right_gifti else None
-                self.add_vertex_dataset(
-                    name=name_i,
-                    left_data=data_l,
-                    right_data=data_r,
-                    is_masked=is_masked,
-                    apply_mask=apply_mask,
-                    null_value=null_value,
-                )
-            return names
-        else:
-            left_data = left_data[arr_idx].data if left_gifti else None
-            right_data = right_data[arr_idx].data if right_gifti else None
-            self.add_vertex_dataset(
-                name=name,
-                left_data=left_data,
-                right_data=right_data,
-                is_masked=is_masked,
-                apply_mask=apply_mask,
-                null_value=null_value,
-            )
-            return (name,)
+
+        left_array = right_array = None
+        if left_gifti and len(left_data) > 0:
+            left_array = np.stack([d.data for d in left_data], axis=0)
+        if right_gifti and len(right_data) > 0:
+            right_array = np.stack([d.data for d in right_data], axis=0)
+
+        return self.add_vertex_dataset(
+            name=name,
+            left_data=left_array,
+            right_data=right_array,
+            is_masked=is_masked,
+            apply_mask=apply_mask,
+            null_value=null_value,
+            select=select,
+            exclude=exclude,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
+        )
 
     def add_vertex_dataset(
         self,
@@ -711,6 +701,10 @@ class CortexTriSurface:
         is_masked: bool = False,
         apply_mask: bool = True,
         null_value: Optional[float] = 0.0,
+        select: Optional[Sequence[int]] = None,
+        exclude: Optional[Sequence[int]] = None,
+        allow_multihemisphere: bool = True,
+        coerce_to_scalar: bool = True,
     ):
         """
         Add a vertex-wise dataset to the ``CortexTriSurface``.
@@ -824,14 +818,43 @@ class CortexTriSurface:
                 'was provided to slice the data into left and right '
                 'hemispheres.'
             )
+        offset = 0
+        if coerce_to_scalar:
+            left_data, right_data = left_data.squeeze(), right_data.squeeze()
         if left_data is not None:
-            self.left.point_data[name] = self._hemisphere_vertex_data_impl(
-                left_data, is_masked, apply_mask, null_value, 'left'
+            scalars_names_L = self._assign_hemisphere_vertex_data(
+                name=name,
+                data=left_data,
+                is_masked=is_masked,
+                apply_mask=apply_mask,
+                null_value=null_value,
+                hemisphere='left',
+                select=select,
+                exclude=exclude,
+                offset=offset,
+                coerce_to_scalar=coerce_to_scalar,
             )
         if right_data is not None:
-            self.right.point_data[name] = self._hemisphere_vertex_data_impl(
-                right_data, is_masked, apply_mask, null_value, 'right'
+            if not allow_multihemisphere:
+                offset = len(scalars_names_L)
+                if (
+                    right_data.ndim == 1
+                    and right_data.min() < left_data.max()
+                ):
+                    right_data += offset
+            scalars_names_R = self._assign_hemisphere_vertex_data(
+                name=name,
+                data=right_data,
+                is_masked=is_masked,
+                apply_mask=apply_mask,
+                null_value=null_value,
+                hemisphere='right',
+                select=select,
+                exclude=exclude,
+                offset=offset,
+                coerce_to_scalar=coerce_to_scalar,
             )
+        return scalars_names_L + scalars_names_R
 
     def parcellate_vertex_dataset(
         self,
@@ -1178,6 +1201,50 @@ class CortexTriSurface:
                 mask = nb.load(mask)
             mask = mask.darrays[0].data.astype(bool)
         return data, mask
+
+    def _assign_hemisphere_vertex_data(
+        self,
+        name: str,
+        data: Tensor,
+        is_masked: bool,
+        apply_mask: bool,
+        null_value: Optional[float],
+        hemisphere: str,
+        select: Optional[Sequence[int]] = None,
+        exclude: Optional[Sequence[int]] = None,
+        offset: int = 0,
+        coerce_to_scalar: bool = True,
+    ) -> None:
+        data = self._hemisphere_vertex_data_impl(
+            data,
+            is_masked,
+            apply_mask,
+            null_value,
+            hemisphere,
+        )
+        if data.ndim == 2 and coerce_to_scalar:
+            n_scalars = data.shape[-1]
+
+            exclude = exclude or []
+            names = []
+            # TODO: Do we want to support select and exclude when we don't
+            #       coerce to scalar? i.e., dropping rows/columns of a 2D
+            #       array that is then loaded as a single matrix-valued
+            #       point dataset.
+            if select is not None and exclude is None:
+                exclude = [i for i in range(n_scalars) if i not in select]
+
+            names = [
+                f'{name}_{i + offset}'
+                for i in range(n_scalars)
+                if i not in exclude
+            ]
+            for n, d in zip(names, data.T):
+                self.__getattribute__(hemisphere).point_data.set_array(d, n)
+        else:
+            names = [name]
+            self.__getattribute__(hemisphere).point_data.set_array(data, name)
+        return names
 
     def _hemisphere_vertex_data_impl(
         self,
