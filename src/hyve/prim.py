@@ -80,6 +80,10 @@ def scalars_from_cifti_f(
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
+    select: Optional[Sequence[int]] = None,
+    exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = False,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     surf.add_cifti_dataset(
@@ -88,6 +92,10 @@ def scalars_from_cifti_f(
         is_masked=is_masked,
         apply_mask=apply_mask,
         null_value=null_value,
+        select=select,
+        exclude=exclude,
+        allow_multihemisphere=allow_multihemisphere,
+        coerce_to_scalar=coerce_to_scalar,
     )
     if plot:
         surf_scalars = tuple(list(surf_scalars) + [scalars])
@@ -105,6 +113,8 @@ def scalars_from_gifti_f(
     null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = False,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     scalar_names = surf.add_gifti_dataset(
@@ -116,6 +126,8 @@ def scalars_from_gifti_f(
         null_value=null_value,
         select=select,
         exclude=exclude,
+        allow_multihemisphere=allow_multihemisphere,
+        coerce_to_scalar=coerce_to_scalar,
     )
     if plot:
         surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
@@ -153,6 +165,10 @@ def scalars_from_array_f(
     is_masked: bool = False,
     apply_mask: bool = True,
     null_value: Optional[float] = 0.0,
+    select: Optional[Sequence[int]] = None,
+    exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = False,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     surf.add_vertex_dataset(
@@ -166,6 +182,10 @@ def scalars_from_array_f(
         is_masked=is_masked,
         apply_mask=apply_mask,
         null_value=null_value,
+        select=select,
+        exclude=exclude,
+        allow_multihemisphere=allow_multihemisphere,
+        coerce_to_scalar=coerce_to_scalar,
     )
     if plot:
         surf_scalars = tuple(list(surf_scalars) + [scalars])
@@ -180,9 +200,11 @@ def resample_to_surface_f(
     method: Literal['nearest', 'linear'] = 'linear',
     surf_scalars: Sequence[str] = (),
     null_value: Optional[float] = 0.0,
-    threshold: float = 0.0,
+    threshold: Optional[float] = None,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = False,
 ) -> Mapping:
     left, right = f_resample(nifti, method=method, threshold=threshold)
@@ -195,6 +217,8 @@ def resample_to_surface_f(
         null_value=null_value,
         select=select,
         exclude=exclude,
+        allow_multihemisphere=allow_multihemisphere,
+        coerce_to_scalar=coerce_to_scalar,
     )
     if plot:
         surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
@@ -311,6 +335,7 @@ def parcellate_colormap_f(
         is_masked=True,
         apply_mask=False,
         null_value=0.0,
+        coerce_to_scalar=False,
     )
     (
         (cmap_left, clim_left),
@@ -815,20 +840,20 @@ def auto_camera_aux_f(
         n_ortho=n_ortho,
         hemisphere=hemisphere,
     )
-    view += viewbuilder['view']
-    extra += viewbuilder['index']
-    hemi += viewbuilder['hemisphere']
+    view, extra, hemi = (
+        viewbuilder['view'],
+        viewbuilder['index'],
+        viewbuilder['hemisphere'],
+    )
     viewbuilder = metadata.copy()
     viewbuilder = scalar_focus_camera_aux_f(
         metadata=viewbuilder,
         kind=focus,
         hemisphere=hemisphere,
     )
-    view, extra, hemi = (
-        viewbuilder['view'],
-        viewbuilder['focus'],
-        viewbuilder['hemisphere'],
-    )
+    view += viewbuilder['view']
+    extra += viewbuilder['focus']
+    hemi += viewbuilder['hemisphere']
     viewbuilder = metadata.copy()
     viewbuilder = planar_sweep_camera_aux_f(
         metadata=viewbuilder,
@@ -911,8 +936,8 @@ def plot_to_html_buffer_f(
     return plotter.export_html(filename=None)
 
 
-def save_screenshots_f(
-    screenshots: Sequence[Tuple[np.ndarray, Mapping[str, str]]],
+def save_snapshots_f(
+    snapshots: Sequence[Tuple[np.ndarray, Mapping[str, str]]],
     output_dir: str,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -923,7 +948,7 @@ def save_screenshots_f(
         img = Image.fromarray(img)
         img.save(fname)
 
-    for cimg, cmeta in screenshots:
+    for cimg, cmeta in snapshots:
         write_f(
             writer=writer,
             argument=cimg,
@@ -1265,9 +1290,9 @@ auto_camera_aux_p = Primitive(
 )
 
 
-save_screenshots_p = Primitive(
-    save_screenshots_f,
-    'save_screenshots',
+save_snapshots_p = Primitive(
+    save_snapshots_f,
+    'save_snapshots',
     output=(),
     forward_unused=True,
 )

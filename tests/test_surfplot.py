@@ -27,7 +27,7 @@ from hyve.transforms import (
     scatter_into_parcels,
     vertex_to_face,
     plot_to_html,
-    save_screenshots,
+    save_snapshots,
 )
 
 
@@ -42,7 +42,7 @@ def test_scalars():
         surf_from_archive(),
         resample_to_surface('gmdensity', template='fsaverage', plot=True),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}'
             ),
@@ -72,7 +72,7 @@ def test_parcellation():
         parcellate_colormap('network', 'parcellation'),
         vertex_to_face('parcellation'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-network_mode-face'
             ),
@@ -100,7 +100,7 @@ def test_parcellation():
         scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-network_mode-vertex'
             ),
@@ -133,7 +133,7 @@ def test_parcellation_modal_cmap():
         parcellate_colormap('modal', 'parcellation'),
         vertex_to_face('parcellation'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-modal_mode-face'
             ),
@@ -165,7 +165,7 @@ def test_parcellation_modal_cmap():
         scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('modal', 'parcellation'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-modal_mode-vertex'
             ),
@@ -228,7 +228,7 @@ def test_parcellated_scalars():
         parcellate_scalars('gmdensity', 'parcellation'),
         vertex_to_face('gmdensityParcellated', interpolation='mode'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
             ),
@@ -261,7 +261,7 @@ def test_parcellated_scalars():
         scatter_into_parcels('noise', 'parcellation'),
         vertex_to_face('noise', interpolation='mode'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
             ),

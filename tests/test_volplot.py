@@ -19,7 +19,7 @@ from hyve.transforms import (
     surf_from_archive,
     scalars_from_nifti,
     plot_to_image,
-    save_screenshots,
+    save_snapshots,
 )
 
 
@@ -29,7 +29,7 @@ def test_vol_scalars():
         surf_from_archive(),
         scalars_from_nifti('pain'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'scalars-pain_view-{view}'
             ),

@@ -22,7 +22,7 @@ from hyve.transforms import (
     add_node_variable,
     add_edge_variable,
     plot_to_image,
-    save_screenshots,
+    save_snapshots,
 )
 
 
@@ -61,7 +61,7 @@ def test_net():
         scalars_from_cifti('parcellation'),
         parcellate_colormap('network', 'parcellation', target='node'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'network-schaefer400_view-{view}'
             ),
@@ -120,7 +120,7 @@ def test_net_highlight():
         scalars_from_cifti('parcellation'),
         parcellate_colormap('modal', 'parcellation', target='node'),
         plot_to_image(),
-        save_screenshots(
+        save_snapshots(
             fname_spec=(
                 'network-schaefer400_desc-visual_view-{view}'
             ),

@@ -51,7 +51,7 @@ from .prim import (
     auto_camera_p,
     auto_camera_aux_p,
     plot_to_html_buffer_f,
-    save_screenshots_p,
+    save_snapshots_p,
     save_html_p,
 )
 from .surf import CortexTriSurface
@@ -124,6 +124,10 @@ def scalars_from_cifti(
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
+    select: Optional[Sequence[int]] = None,
+    exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = True,
 ) -> callable:
     """
@@ -171,6 +175,10 @@ def scalars_from_cifti(
             is_masked=is_masked,
             apply_mask=apply_mask,
             null_value=null_value,
+            select=select,
+            exclude=exclude,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
             plot=plot,
         )
 
@@ -204,6 +212,8 @@ def scalars_from_gifti(
     null_value: Optional[float] = 0.0,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = True,
 ) -> callable:
     """
@@ -253,6 +263,8 @@ def scalars_from_gifti(
             null_value=null_value,
             select=select,
             exclude=exclude,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
             plot=plot,
         )
 
@@ -289,6 +301,10 @@ def scalars_from_array(
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
+    select: Optional[Sequence[int]] = None,
+    exclude: Optional[Sequence[int]] = None,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = True,
     plot: bool = True,
 ) -> callable:
     def transform(
@@ -304,6 +320,10 @@ def scalars_from_array(
             is_masked=is_masked,
             apply_mask=apply_mask,
             null_value=null_value,
+            select=select,
+            exclude=exclude,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
             plot=plot,
         )
 
@@ -368,7 +388,7 @@ def resample_to_surface(
     template: str = 'fsLR',
     method: Literal['nearest', 'linear'] = 'linear',
     null_value: Optional[float] = 0.0,
-    threshold: float = 0.0,
+    threshold: Optional[float] = None,
     select: Optional[Sequence[int]] = None,
     exclude: Optional[Sequence[int]] = None,
     plot: bool = True,
@@ -799,7 +819,7 @@ def scalar_focus_camera(
     ) -> callable:
         transformer_f = Partial(
             transform_postprocessor_p,
-            name='screenshots',
+            name='snapshots',
             transformer=Partial(
                 scalar_focus_camera_p,
                 kind=kind,
@@ -840,7 +860,7 @@ def closest_ortho_camera(
     ) -> callable:
         transformer_f = Partial(
             transform_postprocessor_p,
-            name='screenshots',
+            name='snapshots',
             transformer=Partial(
                 closest_ortho_camera_p,
                 n_ortho=n_ortho,
@@ -884,7 +904,7 @@ def planar_sweep_camera(
     ) -> callable:
         transformer_f = Partial(
             transform_postprocessor_p,
-            name='screenshots',
+            name='snapshots',
             transformer=Partial(
                 planar_sweep_camera_p,
                 initial=initial,
@@ -930,7 +950,7 @@ def auto_camera(
     ) -> callable:
         transformer_f = Partial(
             transform_postprocessor_p,
-            name='screenshots',
+            name='snapshots',
             transformer=Partial(
                 auto_camera_p,
                 n_ortho=n_ortho,
@@ -1004,7 +1024,7 @@ def plot_to_image() -> callable:
             )
             postprocessors = params.get('postprocessors', None)
             return compositor(f, transformer_f)(**params)(
-                name='screenshots',
+                name='snapshots',
                 postprocessor=postprocessor,
                 postprocessors=postprocessors,
                 auxwriter=auxwriter,
@@ -1058,7 +1078,7 @@ def plot_to_html(
     return transform
 
 
-def save_screenshots(
+def save_snapshots(
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = 'scene',
     extension: str = 'png',
@@ -1068,7 +1088,7 @@ def save_screenshots(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            save_screenshots_p,
+            save_snapshots_p,
             fname_spec=fname_spec,
             suffix=suffix,
             extension=extension,
