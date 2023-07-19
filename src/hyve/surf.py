@@ -878,16 +878,15 @@ class CortexTriSurface:
         parcellated_data : Tensor
             Parcellated data.
         """
-        parcellation_left = self._hemisphere_parcellate_impl(
+        l_num, l_denom = self._hemisphere_parcellate_impl(
             name, parcellation, 'left'
         )
-        parcellation_right = self._hemisphere_parcellate_impl(
+        r_num, r_denom = self._hemisphere_parcellate_impl(
             name, parcellation, 'right'
         )
-        parcellation_left, parcellation_right = extend_to_max(
-            parcellation_left, parcellation_right, axis=0
-        )
-        return parcellation_left + parcellation_right
+        l_num, r_num = extend_to_max(l_num, r_num, axis=0)
+        l_denom, r_denom = extend_to_max(l_denom, r_denom, axis=0)
+        return (l_num + r_num) / (l_denom + r_denom)
 
     def scatter_into_parcels(
         self,
@@ -1312,7 +1311,7 @@ class CortexTriSurface:
         else:
             denom = parcellation.sum(axis=0, keepdims=True)
         denom = np.where(denom == 0, 1, denom)
-        return parcellation / denom
+        return parcellation, denom
 
     def _hemisphere_parcellate_impl(
         self,
@@ -1327,11 +1326,11 @@ class CortexTriSurface:
             point_data = self.point_data[hemisphere]
         except KeyError:
             return None
-        parcellation = self._hemisphere_parcellation_impl(
+        parcellation, denom = self._hemisphere_parcellation_impl(
             point_data,
             parcellation=parcellation,
         )
-        return parcellation.T @ point_data[name]
+        return parcellation.T @ point_data[name], denom.T
 
     def _hemisphere_into_parcels_impl(
         self,
