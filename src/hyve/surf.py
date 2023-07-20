@@ -841,6 +841,8 @@ class CortexTriSurface:
                 offset=offset,
                 coerce_to_scalar=coerce_to_scalar,
             )
+        if not allow_multihemisphere:
+            offset = len(scalars_names_L)
         if right_data is not None:
             scalars_names_R = self._assign_hemisphere_vertex_data(
                 name=name,
@@ -1234,7 +1236,7 @@ class CortexTriSurface:
                 exclude = [i for i in range(n_scalars) if i not in select]
 
             names = [
-                f'{name}_{i + offset}'
+                f'{name}{i + offset}'
                 for i in range(n_scalars)
                 if i not in exclude
             ]

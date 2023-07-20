@@ -91,6 +91,8 @@ def relabel_parcels(
     What utter wickedness is this?! This function was written almost entirely
     by GitHub Copilot.
     """
+    if left_data.squeeze().ndim == 2:
+        return left_data, right_data
     # Relabel the parcels in the left hemisphere
     left_data = _relabel_parcels_hemi(left_data, null_value=null_value)
     offset = np.max(left_data)

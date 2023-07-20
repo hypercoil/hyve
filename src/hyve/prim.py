@@ -86,7 +86,7 @@ def scalars_from_cifti_f(
     coerce_to_scalar: bool = True,
     plot: bool = False,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
-    surf.add_cifti_dataset(
+    scalar_names = surf.add_cifti_dataset(
         name=scalars,
         cifti=cifti,
         is_masked=is_masked,
@@ -98,7 +98,7 @@ def scalars_from_cifti_f(
         coerce_to_scalar=coerce_to_scalar,
     )
     if plot:
-        surf_scalars = tuple(list(surf_scalars) + [scalars])
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
     return surf, surf_scalars
 
 
@@ -171,7 +171,7 @@ def scalars_from_array_f(
     coerce_to_scalar: bool = True,
     plot: bool = False,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
-    surf.add_vertex_dataset(
+    scalar_names = surf.add_vertex_dataset(
         name=scalars,
         data=array,
         left_data=left_array,
@@ -188,7 +188,7 @@ def scalars_from_array_f(
         coerce_to_scalar=coerce_to_scalar,
     )
     if plot:
-        surf_scalars = tuple(list(surf_scalars) + [scalars])
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
     return surf, surf_scalars
 
 
