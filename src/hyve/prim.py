@@ -601,13 +601,9 @@ def scalar_focus_camera_aux_f(
     kind: str,
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
 ) -> Mapping:
-    if hemisphere is None:
-        metadata['hemisphere'] = ['both']
-        metadata['view'] = ['focusedleft', 'focusedright']
-    elif len(hemisphere) == 1 and hemisphere[0] != 'both':
+    if len(hemisphere) == 1 and hemisphere[0] != 'both':
         metadata['view'] = ['focused']
     else:
-        metadata['hemisphere'] = ['both']
         metadata['view'] = ['focusedleft', 'focusedright']
     metadata['focus'] = [kind]
     mapper = replicate(
@@ -677,13 +673,9 @@ def closest_ortho_camera_aux_f(
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
 ) -> Mapping:
     metadata['index'] = [str(i) for i in range(n_ortho)]
-    if hemisphere is None:
-        metadata['hemisphere'] = ['both']
-        metadata['view'] = ['ortholeft', 'orthoright']
-    elif len(hemisphere) == 1 and hemisphere[0] != 'both':
+    if len(hemisphere) == 1 and hemisphere[0] != 'both':
         metadata['view'] = ['ortho']
     else:
-        metadata['hemisphere'] = ['both']
         metadata['view'] = ['ortholeft', 'orthoright']
     mapper = replicate(
         spec=(['view', 'index'], 'hemisphere'),
@@ -768,13 +760,9 @@ def planar_sweep_camera_aux_f(
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
 ) -> Mapping:
     metadata['index'] = [str(i) for i in range(n_steps)]
-    if hemisphere is None:
-        metadata['hemisphere'] = ['both']
-        metadata['view'] = ['planarleft', 'planarright']
-    elif len(hemisphere) == 1 and hemisphere[0] != 'both':
+    if len(hemisphere) == 1 and hemisphere[0] != 'both':
         metadata['view'] = ['planar']
     else:
-        metadata['hemisphere'] = ['both']
         metadata['view'] = ['planarleft', 'planarright']
     mapper = replicate(
         spec=(['view', 'index'], 'hemisphere'),

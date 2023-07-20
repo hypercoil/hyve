@@ -30,6 +30,35 @@ class HemisphereParameters:
         return self.__getattribute__(hemi)[param]
 
 
+def _cfg_hemispheres(
+    hemisphere: Optional[Literal['left', 'right']] = None,
+    surf_scalars: Optional[Union[str, Sequence[str]]] = None,
+    surf: Optional[CortexTriSurface] = None,
+):
+    hemispheres = (
+        (hemisphere,) if hemisphere is not None else ('left', 'right')
+    )
+    # TODO: Later on, we're going to add plot layering, which will allow us to
+    #       plot multiple scalars at once by blending colours. One of these
+    #       scalars can be the "key", which will be used to automatically
+    #       remove any hemispheres that the scalar isn't present in. For now,
+    #       we just use the only scalar that's present.
+    key_scalars = surf_scalars
+    if surf is not None and surf_scalars is not None:
+        hemispheres = tuple(
+            hemi for hemi in hemispheres
+            if key_scalars is None or (
+                key_scalars in surf.__getattribute__(hemi).point_data
+                or key_scalars in surf.__getattribute__(hemi).cell_data
+            )
+        )
+    if len(hemispheres) == 1:
+        hemispheres_str = hemispheres[0]
+    else:
+        hemispheres_str = 'both'
+    return hemispheres, hemispheres_str
+
+
 def _get_hemisphere_parameters(
     *,
     surf_scalars_cmap: Any,
@@ -365,13 +394,15 @@ def unified_plotter(
     #       we're sticking with a white background for now.
     theme = theme or pv.themes.DocumentTheme()
 
-    hemispheres = (
-        (hemisphere,) if hemisphere is not None else ('left', 'right')
-    )
     # Sometimes by construction surf_scalars is an empty tuple or list, which
     # causes problems later on. So we convert it to None if it's empty.
     if surf_scalars is not None:
         surf_scalars = None if len(surf_scalars) == 0 else surf_scalars
+    hemispheres, hemisphere_str = _cfg_hemispheres(
+        hemisphere=hemisphere,
+        surf_scalars=surf_scalars,
+        surf=surf,
+    )
     hemi_params = _get_hemisphere_parameters(
         surf_scalars_cmap=surf_scalars_cmap,
         surf_scalars_clim=surf_scalars_clim,
@@ -573,7 +604,12 @@ def plotted_entities(
         metadata['edgecolor'] = [params.get('edge_color', None)]
         metadata['edgeradius'] = [params.get('edge_radius', None)]
         metadata['edgealpha'] = [params.get('edge_alpha', None)]
-    metadata['hemisphere'] = [params.get('hemisphere', 'both')]
+    _, hemisphere_str = _cfg_hemispheres(
+        hemisphere=params.get('hemisphere', None),
+        surf_scalars=params.get('surf_scalars', None),
+        surf=params.get('surf', None),
+    )
+    metadata['hemisphere'] = [hemisphere_str]
     if metadata['hemisphere'][0] is None:
         metadata['hemisphere'] = ['both']
     metadata['plot_index'] = [plot_index]

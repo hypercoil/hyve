@@ -1345,12 +1345,12 @@ class CortexTriSurface:
             point_data = self.point_data[hemisphere]
         except KeyError:
             return None
-        parcellation = self._hemisphere_parcellation_impl(
+        parcellation, denom = self._hemisphere_parcellation_impl(
             point_data,
             parcellation=parcellation,
             transpose=True,
         )
-        return parcellation @ data[: parcellation.shape[-1]]
+        return (parcellation / denom) @ data[: parcellation.shape[-1]]
 
     def _hemisphere_resample_v2f_impl(
         self,
