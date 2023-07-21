@@ -24,7 +24,7 @@ from hyve.transforms import (
 
 
 def test_vol_scalars():
-    nii = nb.load("/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz")
+    nii = nb.load('/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz')
     chain = ichain(
         surf_from_archive(),
         scalars_from_nifti('pain'),
@@ -43,6 +43,6 @@ def test_vol_scalars():
         pain_nifti=nii,
         cmap='magma',
         basename='/tmp/vol',
-        views=("dorsal", "left", "anterior"),
+        views=('dorsal', 'left', 'anterior'),
         output_dir='/tmp',
     )
