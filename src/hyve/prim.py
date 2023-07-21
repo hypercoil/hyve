@@ -38,7 +38,12 @@ from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 
 from .const import Tensor
-from .plot import _null_auxwriter, plotted_entities, unified_plotter
+from .plot import (
+    _null_auxwriter,
+    _null_postprocessor,
+    plotted_entities,
+    unified_plotter,
+)
 from .surf import CortexTriSurface
 from .util import (
     auto_focus,
@@ -878,9 +883,11 @@ def plot_to_image_f(
         views = set_default_views(hemisphere)
     ret = []
     if not plot_scalar_bar:
+        # TODO: This breaks if there's more than one scalar bar. We'll
+        #       overhaul the bar plotter system when we add overlays.
         try:
             plotter.remove_scalar_bar()
-        except IndexError:
+        except (IndexError, ValueError):
             pass
     for cpos in views:
         plotter.camera.zoom('tight')
@@ -901,7 +908,11 @@ def plot_to_image_f(
 def plot_to_image_aux_f(
     metadata: Mapping[str, Sequence[str]],
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
-    views: Union[Sequence, Literal['__default__']] = '__default__',
+    views: Union[
+        Sequence,
+        Literal['__default__', '__final__'],
+    ] = '__default__',
+    n_scenes: int = 1,
 ) -> Mapping[str, Sequence[str]]:
     if views == '__default__':
         if hemisphere is None:
@@ -911,9 +922,37 @@ def plot_to_image_aux_f(
         else:
             hemisphere = 'both'
         views = set_default_views(hemisphere)
-    views = [format_position_as_string(cpos) for cpos in views]
+    elif views == '__final__':
+        views = [f'final{i}' for i in range(n_scenes)]
+    if views != '__final__':
+        views = [format_position_as_string(cpos) for cpos in views]
     mapper = replicate(spec=['view'], broadcast_out_of_spec=True)
     return mapper(**metadata, view=views)
+
+
+def plot_final_view_f(
+    plotter: pv.Plotter,
+    window_size: Tuple[int, int] = (1920, 1080),
+    n_scenes: int = 1,
+    plot_scalar_bar: bool = False,
+) -> Tuple[np.ndarray]:
+    if not plot_scalar_bar:
+        # TODO: This breaks if there's more than one scalar bar. We'll
+        #       overhaul the bar plotter system when we add overlays.
+        try:
+            plotter.remove_scalar_bar()
+        except (IndexError, ValueError):
+            pass
+    snapshots = [
+        plotter.show(
+            window_size=window_size,
+            auto_close=False,
+            return_img=True,
+        )
+        for _ in range(n_scenes)
+    ]
+    plotter.close()
+    return tuple(snapshots)
 
 
 def plot_to_html_buffer_f(
@@ -971,6 +1010,28 @@ def save_html_f(
         )
 
 
+def plot_to_display_f(
+    plotter: Sequence[Tuple[pv.Plotter, Mapping[str, str]]],
+    window_size: Tuple[int, int] = (1920, 1080),
+) -> Optional[Sequence[np.ndarray]]:
+    def writer(plotter, fname=None):
+        # TODO: window_size apparently does not work. Perhaps it's inheriting
+        #       from the theme when the plotter is created?
+        plotter.show(window_size=window_size)
+
+    for cplotter, cmeta in plotter:
+        write_f(
+            writer=writer,
+            argument=cplotter,
+            entities=cmeta,
+            output_dir=None,
+            fname_spec=None,
+            suffix=None,
+            extension=None,
+        )
+        cplotter.close()
+
+
 def write_f(
     writer: Callable,
     argument: Any,
@@ -987,7 +1048,7 @@ def write_f(
         fname_spec = f'{fname_spec}_{suffix}'
     fname_spec = f'{output_dir}/{fname_spec}.{extension}'
     fname = fname_spec.format(**entities)
-    writer(argument, fname)
+    return writer(argument, fname)
 
 
 def automap_unified_plotter_f(
@@ -1047,7 +1108,7 @@ def automap_unified_plotter_f(
     mapper = replicate(spec=map_spec, weave_type='maximal')
 
     postprocessors = params.pop('postprocessors', None)
-    postprocessors = postprocessors or {'plotter': None}
+    postprocessors = postprocessors or {'plotter': (None, None)}
     postprocessor_names, postprocessors = zip(*postprocessors.items())
     postprocessors, auxwriters = zip(*postprocessors)
 
@@ -1289,6 +1350,14 @@ save_snapshots_p = Primitive(
 save_html_p = Primitive(
     save_html_f,
     'save_html',
+    output=(),
+    forward_unused=True,
+)
+
+
+plot_to_display_p = Primitive(
+    plot_to_display_f,
+    'plot_to_display',
     output=(),
     forward_unused=True,
 )

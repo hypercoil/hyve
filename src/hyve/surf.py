@@ -856,7 +856,7 @@ class CortexTriSurface:
                 offset=offset,
                 coerce_to_scalar=coerce_to_scalar,
             )
-        return scalars_names_L + scalars_names_R
+        return tuple(set(scalars_names_L + scalars_names_R))
 
     def parcellate_vertex_dataset(
         self,

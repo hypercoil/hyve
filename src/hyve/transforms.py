@@ -40,8 +40,6 @@ from .prim import (
     add_edge_variable_p,
     add_postprocessor_p,
     transform_postprocessor_p,
-    plot_to_image_f,
-    plot_to_image_aux_p,
     scalar_focus_camera_p,
     scalar_focus_camera_aux_p,
     closest_ortho_camera_p,
@@ -50,9 +48,13 @@ from .prim import (
     planar_sweep_camera_aux_p,
     auto_camera_p,
     auto_camera_aux_p,
+    plot_to_image_f,
+    plot_to_image_aux_p,
+    plot_final_view_f,
     plot_to_html_buffer_f,
     save_snapshots_p,
     save_html_p,
+    plot_to_display_p,
 )
 from .surf import CortexTriSurface
 from .util import (
@@ -1038,6 +1040,56 @@ def plot_to_image() -> callable:
     return transform
 
 
+def plot_final_image(
+    n_scenes: int = 1,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = add_postprocessor_p
+        _postprocessor = F(plot_final_view_f)
+        _auxwriter = plot_to_image_aux_p
+        if n_scenes > 1:
+            raise NotImplementedError(
+                'The `plot_final_image` postprocessor does not currently '
+                'support multiple scenes.'
+            )
+
+        def f_transformed(
+            *,
+            window_size: Tuple[int, int] = (1920, 1080),
+            plot_scalar_bar: bool = False,
+            **params,
+        ):
+            postprocessor = Partial(
+                _postprocessor,
+                n_scenes=n_scenes,
+                window_size=window_size,
+                plot_scalar_bar=plot_scalar_bar,
+            )
+            auxwriter = Partial(
+                _auxwriter,
+                views='__final__',
+                n_scenes=n_scenes,
+                __allowed__=('hemisphere',),
+            )
+            postprocessors = params.get('postprocessors', None)
+            _ = params.pop('off_screen', False)
+            return compositor(f, transformer_f)(
+                off_screen=False,
+                **params,
+            )(
+                name='snapshots',
+                postprocessor=postprocessor,
+                postprocessors=postprocessors,
+                auxwriter=auxwriter,
+            )
+
+        return f_transformed
+    return transform
+
+
 def plot_to_html(
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = 'scene',
@@ -1076,6 +1128,29 @@ def plot_to_html(
                 name='html_buffer',
                 postprocessor=postprocessor,
                 postprocessors=postprocessors,
+            )
+
+        return f_transformed
+    return transform
+
+
+def plot_to_display(
+    window_size: Tuple[int, int] = (1300, 1000),
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            plot_to_display_p,
+            window_size=window_size,
+        )
+
+        def f_transformed(**params):
+            _ = params.pop('off_screen', False)
+            return compositor(transformer_f, f)()(
+                off_screen=False,
+                **params,
             )
 
         return f_transformed
