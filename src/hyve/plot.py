@@ -19,10 +19,10 @@ from .surf import (
     CortexTriSurface,
 )
 from .util import (
-    robust_clim,
     premultiply_alpha,
-    unmultiply_alpha,
+    robust_clim,
     source_over,
+    unmultiply_alpha,
 )
 
 DEFAULT_CMAP = 'viridis'
@@ -208,6 +208,10 @@ def _map_to_opacity(
     opa_min = max(0, values[alpha].min())
     opa_max = min(1, values[alpha].max())
     return _map_to_attr(values, alpha, (opa_min, opa_max))
+
+
+def _null_op(**params):
+    return params
 
 
 def _null_postprocessor(plotter):
@@ -877,7 +881,7 @@ def plotted_entities(
         if layers is not None:
             if len(layers) == 2 and isinstance(layers[0], (list, tuple)):
                 layers = layers[0] if hemisphere_str != 'right' else layers[1]
-            layers = '+'.join(l.name for l in layers)
+            layers = '+'.join(layer.name for layer in layers)
             metadata['scalars'] = (
                 [f'{metadata["scalars"][0]}+{layers}']
                 if metadata['scalars'][0] is not None

@@ -21,28 +21,10 @@ import pyvista as pv
 
 from conveyant import (
     direct_compositor,
-    ichain,
-    inject_params,
     SanitisedPartialApplication as Partial,
     SanitisedFunctionWrapper as F,
 )
 from .const import Tensor
-from .plot import (
-    Layer,
-    LAYER_ALPHA_DEFAULT_VALUE,
-    LAYER_BELOW_COLOR_DEFAULT_VALUE,
-    LAYER_BLEND_MODE_DEFAULT_VALUE,
-    LAYER_CLIM_DEFAULT_VALUE,
-    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-    LAYER_COLOR_DEFAULT_VALUE,
-    SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-    SURF_SCALARS_DEFAULT_VALUE,
-    SURF_SCALARS_CMAP_DEFAULT_VALUE,
-    SURF_SCALARS_CLIM_DEFAULT_VALUE,
-    SURF_SCALARS_LAYERS_DEFAULT_VALUE,
-    _get_hemisphere_parameters,
-)
 from .prim import (
     surf_from_archive_p,
     scalars_from_cifti_p,
@@ -54,6 +36,7 @@ from .prim import (
     parcellate_scalars_p,
     scatter_into_parcels_p,
     vertex_to_face_p,
+    add_surface_overlay_p,
     add_node_variable_p,
     add_edge_variable_p,
     add_postprocessor_p,
@@ -736,10 +719,6 @@ def vertex_to_face(
     return transform
 
 
-def null_op(**params):
-    return params
-
-
 def add_surface_overlay(
     *chains: Sequence[callable],
 ) -> callable:
@@ -747,113 +726,13 @@ def add_surface_overlay(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
-        def transformer_f(chains: Sequence[callable], **params: Mapping):
-            surf_scalars_layers = params.pop('surf_scalars_layers', ([], []))
-            surf_scalars = params.pop(
-                'surf_scalars', SURF_SCALARS_DEFAULT_VALUE
-            )
-            surf_scalars_cmap = params.pop(
-                'surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE
-            )
-            surf_scalars_clim = params.pop(
-                'surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE
-            )
-            surf_scalars_below_color = params.pop(
-                'surf_scalars_below_color',
-                SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-            )
-
-            inner_f = ichain(*chains)(null_op)
-            params = inner_f(**params)
-            layer_name = params.pop('surf_scalars')
-            if not isinstance(layer_name, str): # It's a list or tuple
-                layer_name = layer_name[0]
-            layer_cmap = params.pop(
-                'surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE
-            )
-            layer_clim = params.pop(
-                'surf_scalars_clim', LAYER_CLIM_DEFAULT_VALUE
-            )
-            layer_below_color = params.pop(
-                'surf_scalars_below_color',
-                LAYER_BELOW_COLOR_DEFAULT_VALUE,
-            )
-            layer_cmap = params.pop(f'{layer_name}_cmap', layer_cmap)
-            layer_clim = params.pop(f'{layer_name}_clim', layer_clim)
-            layer_cmap_negative = params.pop(
-                f'{layer_name}_cmap_negative',
-                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-            )
-            layer_clim_negative = params.pop(
-                f'{layer_name}_clim_negative',
-                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-            )
-            layer_alpha = params.pop(
-                f'{layer_name}_alpha', LAYER_ALPHA_DEFAULT_VALUE
-            )
-            layer_color = params.pop(
-                f'{layer_name}_color', LAYER_COLOR_DEFAULT_VALUE
-            )
-            layer_below_color = params.pop(
-                f'{layer_name}_below_color', layer_below_color
-            )
-            layer_blend_mode = params.pop(
-                f'{layer_name}_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE
-            )
-
-            hemi_params_p = _get_hemisphere_parameters(
-                surf_scalars_cmap=layer_cmap,
-                surf_scalars_clim=layer_clim,
-                surf_scalars_layers=None,
-            )
-            hemi_params_n = _get_hemisphere_parameters(
-                surf_scalars_cmap=layer_cmap_negative,
-                surf_scalars_clim=layer_clim_negative,
-                surf_scalars_layers=None,
-            )
-            layer_left = Layer(
-                name=layer_name,
-                cmap=hemi_params_p.get('left', 'surf_scalars_cmap'),
-                clim=hemi_params_p.get('left', 'surf_scalars_clim'),
-                cmap_negative=hemi_params_n.get('left', 'surf_scalars_cmap'),
-                clim_negative=hemi_params_n.get('left', 'surf_scalars_clim'),
-                alpha=layer_alpha,
-                color=layer_color,
-                below_color=layer_below_color,
-                blend_mode=layer_blend_mode,
-            )
-            layer_right = Layer(
-                name=layer_name,
-                cmap=hemi_params_p.get('right', 'surf_scalars_cmap'),
-                clim=hemi_params_p.get('right', 'surf_scalars_clim'),
-                cmap_negative=hemi_params_n.get('right', 'surf_scalars_cmap'),
-                clim_negative=hemi_params_n.get('right', 'surf_scalars_clim'),
-                alpha=layer_alpha,
-                color=layer_color,
-                below_color=layer_below_color,
-                blend_mode=layer_blend_mode,
-            )
-
-            surf_scalars_layers = (
-                list(surf_scalars_layers[0]) + [layer_left],
-                list(surf_scalars_layers[1]) + [layer_right],
-            )
-            # if layer_name == 'pain':
-            #     assert 0
-
-            return {
-                **params,
-                **{
-                    'surf_scalars_layers': surf_scalars_layers,
-                    'surf_scalars': surf_scalars,
-                    'surf_scalars_cmap': surf_scalars_cmap,
-                    'surf_scalars_clim': surf_scalars_clim,
-                    'surf_scalars_below_color': surf_scalars_below_color,
-                },
-            }
+        transformer_f = add_surface_overlay_p
 
         def f_transformed(**params: Mapping):
-            return compositor(f, transformer_f)()(chains=chains, **params)
+            return compositor(f, transformer_f)()(
+                chains=chains,
+                params=params,
+            )
 
         return f_transformed
     return transform

@@ -25,6 +25,7 @@ import pyvista as pv
 from conveyant import (
     Composition,
     Primitive,
+    ichain,
 )
 from conveyant import (
     SanitisedFunctionWrapper as F,
@@ -39,8 +40,21 @@ from matplotlib.colors import ListedColormap
 
 from .const import Tensor
 from .plot import (
+    LAYER_ALPHA_DEFAULT_VALUE,
+    LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    LAYER_BLEND_MODE_DEFAULT_VALUE,
+    LAYER_CLIM_DEFAULT_VALUE,
+    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_COLOR_DEFAULT_VALUE,
+    SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    SURF_SCALARS_DEFAULT_VALUE,
+    Layer,
+    _get_hemisphere_parameters,
     _null_auxwriter,
-    _null_postprocessor,
+    _null_op,
     plotted_entities,
     unified_plotter,
 )
@@ -412,6 +426,113 @@ def vertex_to_face_f(
         interpolation=interpolation,
     )
     return surf
+
+
+def add_surface_overlay_f(
+    chains: Sequence[callable],
+    params: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    surf_scalars_layers = params.pop('surf_scalars_layers', ([], []))
+    surf_scalars = params.pop(
+        'surf_scalars', SURF_SCALARS_DEFAULT_VALUE
+    )
+    surf_scalars_cmap = params.pop(
+        'surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE
+    )
+    surf_scalars_clim = params.pop(
+        'surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE
+    )
+    surf_scalars_below_color = params.pop(
+        'surf_scalars_below_color',
+        SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    )
+
+    inner_f = ichain(*chains)(_null_op)
+    params = inner_f(**params)
+    layer_name = params.pop('surf_scalars')
+    if not isinstance(layer_name, str): # It's a list or tuple
+        layer_name = layer_name[0]
+    layer_cmap = params.pop(
+        'surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE
+    )
+    layer_clim = params.pop(
+        'surf_scalars_clim', LAYER_CLIM_DEFAULT_VALUE
+    )
+    layer_below_color = params.pop(
+        'surf_scalars_below_color',
+        LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    )
+    layer_cmap = params.pop(f'{layer_name}_cmap', layer_cmap)
+    layer_clim = params.pop(f'{layer_name}_clim', layer_clim)
+    layer_cmap_negative = params.pop(
+        f'{layer_name}_cmap_negative',
+        LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    )
+    layer_clim_negative = params.pop(
+        f'{layer_name}_clim_negative',
+        LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    )
+    layer_alpha = params.pop(
+        f'{layer_name}_alpha', LAYER_ALPHA_DEFAULT_VALUE
+    )
+    layer_color = params.pop(
+        f'{layer_name}_color', LAYER_COLOR_DEFAULT_VALUE
+    )
+    layer_below_color = params.pop(
+        f'{layer_name}_below_color', layer_below_color
+    )
+    layer_blend_mode = params.pop(
+        f'{layer_name}_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE
+    )
+
+    hemi_params_p = _get_hemisphere_parameters(
+        surf_scalars_cmap=layer_cmap,
+        surf_scalars_clim=layer_clim,
+        surf_scalars_layers=None,
+    )
+    hemi_params_n = _get_hemisphere_parameters(
+        surf_scalars_cmap=layer_cmap_negative,
+        surf_scalars_clim=layer_clim_negative,
+        surf_scalars_layers=None,
+    )
+    layer_left = Layer(
+        name=layer_name,
+        cmap=hemi_params_p.get('left', 'surf_scalars_cmap'),
+        clim=hemi_params_p.get('left', 'surf_scalars_clim'),
+        cmap_negative=hemi_params_n.get('left', 'surf_scalars_cmap'),
+        clim_negative=hemi_params_n.get('left', 'surf_scalars_clim'),
+        alpha=layer_alpha,
+        color=layer_color,
+        below_color=layer_below_color,
+        blend_mode=layer_blend_mode,
+    )
+    layer_right = Layer(
+        name=layer_name,
+        cmap=hemi_params_p.get('right', 'surf_scalars_cmap'),
+        clim=hemi_params_p.get('right', 'surf_scalars_clim'),
+        cmap_negative=hemi_params_n.get('right', 'surf_scalars_cmap'),
+        clim_negative=hemi_params_n.get('right', 'surf_scalars_clim'),
+        alpha=layer_alpha,
+        color=layer_color,
+        below_color=layer_below_color,
+        blend_mode=layer_blend_mode,
+    )
+
+    surf_scalars_layers = (
+        list(surf_scalars_layers[0]) + [layer_left],
+        list(surf_scalars_layers[1]) + [layer_right],
+    )
+
+    return {
+        **params,
+        **{
+            'surf_scalars_layers': surf_scalars_layers,
+            'surf_scalars': surf_scalars,
+            'surf_scalars_cmap': surf_scalars_cmap,
+            'surf_scalars_clim': surf_scalars_clim,
+            'surf_scalars_below_color': surf_scalars_below_color,
+        },
+    }
 
 
 def add_node_variable_f(
@@ -1232,6 +1353,14 @@ vertex_to_face_p = Primitive(
     vertex_to_face_f,
     'vertex_to_face',
     output=('surf',),
+    forward_unused=True,
+)
+
+
+add_surface_overlay_p = Primitive(
+    add_surface_overlay_f,
+    'add_surface_overlay',
+    output=None,
     forward_unused=True,
 )
 
