@@ -207,12 +207,10 @@ def cortex_cameras(
 
 
 def robust_clim(
-    surf: pv.PolyData,
-    scalar: str,
+    data: Tensor,
     percent: float = 5.0,
     bgval: Optional[float] = 0.0,
 ) -> Tuple[float, float]:
-    data = surf.point_data[scalar]
     if bgval is not None:
         data = data[~np.isclose(data, bgval)]
     return (

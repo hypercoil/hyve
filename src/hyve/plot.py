@@ -31,19 +31,35 @@ BLEND_MODES = {
     'source_over': source_over,
 }
 
+LAYER_CLIM_DEFAULT_VALUE = None
+LAYER_CMAP_NEGATIVE_DEFAULT_VALUE = None
+LAYER_CLIM_NEGATIVE_DEFAULT_VALUE = None
+LAYER_COLOR_DEFAULT_VALUE = None
+LAYER_ALPHA_DEFAULT_VALUE = 1.0
+LAYER_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
+LAYER_BLEND_MODE_DEFAULT_VALUE = 'source_over'
+
+SURF_SCALARS_DEFAULT_VALUE = None
+SURF_SCALARS_CMAP_DEFAULT_VALUE = (None, None)
+SURF_SCALARS_CLIM_DEFAULT_VALUE = 'robust'
+SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE = None
+SURF_SCALARS_LAYERS_DEFAULT_VALUE = None
+
 
 @dataclasses.dataclass(frozen=True)
 class Layer:
     """Container for metadata to construct a single layer of a plot."""
     name: str
     cmap: Any = DEFAULT_CMAP
-    clim: Optional[Tuple[float, float]] = None
-    cmap_negative: Optional[Any] = None
-    clim_negative: Optional[Tuple[float, float]] = None
-    color: Optional[Any] = None
-    alpha: float = 1.0
-    below_color: Optional[Any] = (0.0, 0.0, 0.0, 0.0)
-    blend_mode: Literal['source_over'] = 'source_over'
+    clim: Optional[Tuple[float, float]] = LAYER_CLIM_DEFAULT_VALUE
+    cmap_negative: Optional[Any] = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
+    clim_negative: Optional[Tuple[float, float]] = (
+        LAYER_CLIM_NEGATIVE_DEFAULT_VALUE
+    )
+    color: Optional[Any] = LAYER_COLOR_DEFAULT_VALUE
+    alpha: float = LAYER_ALPHA_DEFAULT_VALUE
+    below_color: Optional[Any] = LAYER_BELOW_COLOR_DEFAULT_VALUE
+    blend_mode: Literal['source_over'] = LAYER_BLEND_MODE_DEFAULT_VALUE
 
 
 @dataclasses.dataclass
@@ -72,7 +88,7 @@ def _get_hemisphere_parameters(
         left[name] = right[name] = arg
 
     def conditional_assign(condition, arg, name):
-        if condition(arg):
+        if arg is not None and condition(arg):
             assign_tuple(arg, name)
         else:
             assign_scalar(arg, name)
@@ -88,11 +104,7 @@ def _get_hemisphere_parameters(
         'surf_scalars_clim',
     )
     conditional_assign(
-        lambda x: (
-            x is not None
-            and len(x) == 2
-            and isinstance(x[0], (tuple, list))
-        ),
+        lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
         surf_scalars_layers,
         'surf_scalars_layers',
     )
@@ -206,6 +218,28 @@ def _null_auxwriter(metadata):
     return metadata
 
 
+def _rgba_impl(
+    scalars: Tensor,
+    clim: Optional[Tuple[float, float]] = None,
+    cmap: Any = 'viridis',
+    below_color: Optional[str] = None,
+):
+    if clim == 'robust':
+        clim = robust_clim(scalars)
+    if clim is not None:
+        vmin, vmax = clim
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    else:
+        vmin, vmax, norm = None, None, None
+    rgba = cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba(scalars)
+    if below_color is not None and vmin is not None:
+        rgba[scalars < vmin] = colors.to_rgba(below_color)
+    elif vmin is not None:
+        # Set alpha to 0 for sub-threshold values
+        rgba[scalars < vmin, 3] = 0
+    return rgba
+
+
 def scalars_to_rgba(
     scalars: Optional[Tensor] = None,
     clim: Optional[Tuple[float, float]] = None,
@@ -255,27 +289,14 @@ def scalars_to_rgba(
         neg_idx = scalars_negative > 0
         scalars_negative[scalars_negative < 0] = 0
         scalars[neg_idx] = 0
-        vmin, vmax = clim_negative
-        norm = colors.Normalize(vmin=vmin, vmax=vmax)
-        rgba_neg = cm.ScalarMappable(norm=norm, cmap=cmap_negative).to_rgba(
-            scalars_negative
+        rgba_neg = _rgba_impl(
+            scalars_negative,
+            clim_negative,
+            cmap_negative,
+            below_color,
         )
-        if below_color is not None:
-            rgba_neg[scalars_negative < vmin] = colors.to_rgba(
-                below_color
-            )
-        else:
-            # Set alpha to 0 for sub-threshold values
-            rgba_neg[scalars_negative < vmin, 3] = 0
 
-    vmin, vmax = clim
-    norm = colors.Normalize(vmin=vmin, vmax=vmax)
-    rgba = cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba(scalars)
-    if below_color is not None:
-        rgba[scalars < vmin] = colors.to_rgba(below_color)
-    else:
-        # Set alpha to 0 for sub-threshold values
-        rgba[scalars < vmin, 3] = 0
+    rgba = _rgba_impl(scalars, clim, cmap, below_color)
     if cmap_negative is not None:
         rgba[neg_idx] = rgba_neg[neg_idx]
     if alpha is not None:
@@ -358,7 +379,7 @@ def compose_layers(
         src = layer_rgba(surf, layer, data_domain)
         src = premultiply_alpha(src)
         blend_layers = BLEND_MODES[layer.blend_mode]
-        dst = blend_layers(dst, src)
+        dst = blend_layers(src, dst)
     dst = unmultiply_alpha(dst)
     return dst, data_domain
 
@@ -391,16 +412,16 @@ def unified_plotter(
     surf: Optional['CortexTriSurface'] = None,
     surf_projection: str = 'pial',
     surf_alpha: float = 1.0,
-    surf_scalars: Optional[str] = None,
+    surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
     surf_scalars_boundary_color: str = 'black',
     surf_scalars_boundary_width: int = 0,
-    surf_scalars_cmap: Any = (None, None),
-    surf_scalars_clim: Any = 'robust',
-    surf_scalars_below_color: str = 'black',
+    surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     surf_scalars_layers: Union[
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
-    ] = None,
+    ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     vol_coor: Optional[np.ndarray] = None,
     vol_scalars: Optional[np.ndarray] = None,
     vol_scalars_point_size: Optional[float] = None,
@@ -714,8 +735,6 @@ def unified_plotter(
             hemi_layers = hemi_params.get(hemisphere, 'surf_scalars_layers')
             if hemi_layers is None:
                 hemi_layers = []
-            if hemi_clim == 'robust' and surf_scalars is not None:
-                hemi_clim = robust_clim(hemi_surf, surf_scalars)
 
             base_layer = Layer(
                 name=surf_scalars,
@@ -845,9 +864,25 @@ def plotted_entities(
     surface = params.get('surf', None)
     node = params.get('node_values', None)
     edge = params.get('edge_values', None)
+    _, hemisphere_str = _cfg_hemispheres(
+        hemisphere=params.get('hemisphere', None),
+        surf_scalars=params.get('surf_scalars', None),
+        surf=params.get('surf', None),
+    )
+    metadata['hemisphere'] = [hemisphere_str]
     if surface is not None:
         metadata['scalars'] = [params.get('surf_scalars', None)]
         metadata['projection'] = [params.get('surf_projection', None)]
+        layers = params.get('surf_scalars_layers', None)
+        if layers is not None:
+            if len(layers) == 2 and isinstance(layers[0], (list, tuple)):
+                layers = layers[0] if hemisphere_str != 'right' else layers[1]
+            layers = '+'.join(l.name for l in layers)
+            metadata['scalars'] = (
+                [f'{metadata["scalars"][0]}+{layers}']
+                if metadata['scalars'][0] is not None
+                else [layers]
+            )
     if node is not None:
         metadata['parcellation'] = [params.get('node_parcel_scalars', None)]
         metadata['nodecolor'] = [params.get('node_color', None)]
@@ -857,12 +892,6 @@ def plotted_entities(
         metadata['edgecolor'] = [params.get('edge_color', None)]
         metadata['edgeradius'] = [params.get('edge_radius', None)]
         metadata['edgealpha'] = [params.get('edge_alpha', None)]
-    _, hemisphere_str = _cfg_hemispheres(
-        hemisphere=params.get('hemisphere', None),
-        surf_scalars=params.get('surf_scalars', None),
-        surf=params.get('surf', None),
-    )
-    metadata['hemisphere'] = [hemisphere_str]
     if metadata['hemisphere'][0] is None:
         metadata['hemisphere'] = ['both']
     metadata['plot_index'] = [plot_index]

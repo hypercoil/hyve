@@ -1062,6 +1062,7 @@ def automap_unified_plotter_f(
     surf_scalars_cmap: Any = (None, None),
     surf_scalars_clim: Any = 'robust',
     surf_scalars_below_color: str = 'black',
+    surf_scalars_layers = None,
     vol_coor: Optional[Tensor] = None,
     vol_scalars: Optional[Tensor] = None,
     vol_scalars_point_size: Optional[float] = None,
