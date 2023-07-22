@@ -12,7 +12,7 @@ import nibabel as nb
 import numpy as np
 import pandas as pd
 
-from hyve.plot import unified_plotter
+from hyve.plot import unified_plotter, Layer
 from hyve.surf import CortexTriSurface
 from hyve.util import filter_adjacency_data, filter_node_data
 
@@ -35,13 +35,29 @@ def test_unified_plotter():
     )[0].show()
     surf.add_vertex_dataset(
         'data',
-        data=np.random.rand(40962 * 2),
+        data=np.random.randn(40962 * 2),
         apply_mask=False,
     )
     unified_plotter(
         surf=surf,
         surf_scalars='data',
         surf_scalars_cmap='magma',
+        surf_alpha=0.2,
+        hemisphere_slack=1.2,
+        off_screen=False,
+    )[0].show()
+    layer = Layer(
+        name='data',
+        cmap='hot',
+        cmap_negative='cool',
+        clim=(1.5, 3.0),
+        alpha=0.8,
+    )
+    unified_plotter(
+        surf=surf,
+        surf_scalars='data',
+        surf_scalars_cmap='gray',
+        surf_scalars_layers=(layer,),
         surf_alpha=0.2,
         hemisphere_slack=1.2,
         off_screen=False,
