@@ -161,9 +161,9 @@ def scalars_from_array_f(
     surf: CortexTriSurface,
     scalars: str,
     surf_scalars: Sequence[str] = (),
-    array: Optional[np.ndarray] = None,
-    left_array: Optional[np.ndarray] = None,
-    right_array: Optional[np.ndarray] = None,
+    array: Optional[Tensor] = None,
+    left_array: Optional[Tensor] = None,
+    right_array: Optional[Tensor] = None,
     left_slice: Optional[slice] = None,
     right_slice: Optional[slice] = None,
     default_slices: bool = True,
@@ -416,13 +416,13 @@ def vertex_to_face_f(
 
 def add_node_variable_f(
     name: str = "node",
-    val: Union[np.ndarray, str] = None,
+    val: Union[Tensor, str] = None,
     threshold: Union[float, int] = 0.0,
     percent_threshold: bool = False,
     topk_threshold: bool = False,
     absolute: bool = True,
-    node_selection: Optional[np.ndarray] = None,
-    incident_edge_selection: Optional[np.ndarray] = None,
+    node_selection: Optional[Tensor] = None,
+    incident_edge_selection: Optional[Tensor] = None,
     removed_val: Optional[float] = None,
     surviving_val: Optional[float] = 1.0,
 ) -> pd.DataFrame:
@@ -447,14 +447,14 @@ def add_node_variable_f(
 
 def add_edge_variable_f(
     name: str,
-    adj: Union[np.ndarray, str] = None,
+    adj: Union[Tensor, str] = None,
     threshold: float = 0.0,
     percent_threshold: bool = False,
     topk_threshold_nodewise: bool = False,
     absolute: bool = True,
-    incident_node_selection: Optional[np.ndarray] = None,
-    connected_node_selection: Optional[np.ndarray] = None,
-    edge_selection: Optional[np.ndarray] = None,
+    incident_node_selection: Optional[Tensor] = None,
+    connected_node_selection: Optional[Tensor] = None,
+    edge_selection: Optional[Tensor] = None,
     removed_val: Optional[float] = None,
     surviving_val: Optional[float] = 1.0,
     emit_degree: Union[bool, Literal["abs", "+", "-"]] = False,
@@ -872,7 +872,7 @@ def plot_to_image_f(
     window_size: Tuple[int, int] = (1920, 1080),
     hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
     plot_scalar_bar: bool = False,
-) -> Tuple[np.ndarray]:
+) -> Tuple[Tensor]:
     if len(hemispheres) == 1:
         hemisphere = hemispheres[0]
     elif tuple(hemispheres) == ('left', 'right'):
@@ -935,7 +935,7 @@ def plot_final_view_f(
     window_size: Tuple[int, int] = (1920, 1080),
     n_scenes: int = 1,
     plot_scalar_bar: bool = False,
-) -> Tuple[np.ndarray]:
+) -> Tuple[Tensor]:
     if not plot_scalar_bar:
         # TODO: This breaks if there's more than one scalar bar. We'll
         #       overhaul the bar plotter system when we add overlays.
@@ -964,7 +964,7 @@ def plot_to_html_buffer_f(
 
 
 def save_snapshots_f(
-    snapshots: Sequence[Tuple[np.ndarray, Mapping[str, str]]],
+    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
     output_dir: str,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -1013,7 +1013,7 @@ def save_html_f(
 def plot_to_display_f(
     plotter: Sequence[Tuple[pv.Plotter, Mapping[str, str]]],
     window_size: Tuple[int, int] = (1920, 1080),
-) -> Optional[Sequence[np.ndarray]]:
+) -> None:
     def writer(plotter, fname=None):
         # TODO: window_size apparently does not work. Perhaps it's inheriting
         #       from the theme when the plotter is created?
@@ -1062,15 +1062,15 @@ def automap_unified_plotter_f(
     surf_scalars_cmap: Any = (None, None),
     surf_scalars_clim: Any = 'robust',
     surf_scalars_below_color: str = 'black',
-    vol_coor: Optional[np.ndarray] = None,
-    vol_scalars: Optional[np.ndarray] = None,
+    vol_coor: Optional[Tensor] = None,
+    vol_scalars: Optional[Tensor] = None,
     vol_scalars_point_size: Optional[float] = None,
     vol_voxdim: Optional[Sequence[float]] = None,
     vol_scalars_cmap: Optional[str] = None,
     vol_scalars_clim: Optional[tuple] = None,
     vol_scalars_alpha: float = 0.99,
     node_values: Optional[pd.DataFrame] = None,
-    node_coor: Optional[np.ndarray] = None,
+    node_coor: Optional[Tensor] = None,
     node_parcel_scalars: Optional[str] = None,
     node_color: Optional[str] = 'black',
     node_radius: Union[float, str] = 3.0,
@@ -1078,7 +1078,7 @@ def automap_unified_plotter_f(
     node_cmap: Any = 'viridis',
     node_clim: Tuple[float, float] = (0, 1),
     node_alpha: Union[float, str] = 1.0,
-    node_lh: Optional[np.ndarray] = None,
+    node_lh: Optional[Tensor] = None,
     edge_values: Optional[pd.DataFrame] = None,
     edge_color: Optional[str] = 'edge_sgn',
     edge_radius: Union[float, str] = 'edge_val',

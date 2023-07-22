@@ -888,6 +888,10 @@ class CortexTriSurface:
         )
         l_num, r_num = extend_to_max(l_num, r_num, axis=0)
         l_denom, r_denom = extend_to_max(l_denom, r_denom, axis=0)
+        if r_num.ndim == 1:
+            r_num = r_num[:, None]
+        if l_num.ndim == 1:
+            l_num = l_num[:, None]
         return (l_num + r_num) / (l_denom + r_denom)
 
     def scatter_into_parcels(

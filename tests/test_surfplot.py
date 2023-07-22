@@ -223,8 +223,8 @@ def test_parcellation_html():
 def test_parcellated_scalars():
     chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gmdensity', template='fsLR'),
-        scalars_from_cifti('parcellation'),
+        resample_to_surface('gmdensity', template='fsLR', plot=False),
+        scalars_from_cifti('parcellation', plot=False),
         parcellate_scalars('gmdensity', 'parcellation'),
         vertex_to_face('gmdensityParcellated', interpolation='mode'),
         plot_to_image(),
@@ -257,7 +257,7 @@ def test_parcellated_scalars():
     parcellated = np.random.rand(400)
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation'),
+        scalars_from_cifti('parcellation', plot=False),
         scatter_into_parcels('noise', 'parcellation'),
         vertex_to_face('noise', interpolation='mode'),
         plot_to_image(),
