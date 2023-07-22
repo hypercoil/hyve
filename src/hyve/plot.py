@@ -18,14 +18,37 @@ from .const import Tensor
 from .surf import (
     CortexTriSurface,
 )
-from .util import robust_clim
+from .util import (
+    robust_clim,
+    premultiply_alpha,
+    unmultiply_alpha,
+    source_over,
+)
 
 DEFAULT_CMAP = 'viridis'
 DEFAULT_COLOR = 'white'
+BLEND_MODES = {
+    'source_over': source_over,
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class Layer:
+    """Container for metadata to construct a single layer of a plot."""
+    name: str
+    cmap: Any = DEFAULT_CMAP
+    clim: Optional[Tuple[float, float]] = None
+    cmap_negative: Optional[Any] = None
+    clim_negative: Optional[Tuple[float, float]] = None
+    color: Optional[Any] = None
+    alpha: float = 1.0
+    below_color: Optional[Any] = (0.0, 0.0, 0.0, 0.0)
+    blend_mode: Literal['source_over'] = 'source_over'
 
 
 @dataclasses.dataclass
 class HemisphereParameters:
+    """Addressable container for hemisphere-specific parameters."""
     left: Mapping[str, Any]
     right: Mapping[str, Any]
 
@@ -37,6 +60,7 @@ def _get_hemisphere_parameters(
     *,
     surf_scalars_cmap: Any,
     surf_scalars_clim: Any,
+    surf_scalars_layers: Any,
 ) -> Tuple[Mapping[str, Any], Mapping[str, Any]]:
     left = {}
     right = {}
@@ -62,6 +86,15 @@ def _get_hemisphere_parameters(
         lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
         surf_scalars_clim,
         'surf_scalars_clim',
+    )
+    conditional_assign(
+        lambda x: (
+            x is not None
+            and len(x) == 2
+            and isinstance(x[0], (tuple, list))
+        ),
+        surf_scalars_layers,
+        'surf_scalars_layers',
     )
     return HemisphereParameters(left, right)
 
@@ -176,9 +209,9 @@ def _null_auxwriter(metadata):
 def scalars_to_rgba(
     scalars: Optional[Tensor] = None,
     clim: Optional[Tuple[float, float]] = None,
-    clim_neg: Optional[Tuple[float, float]] = None,
+    clim_negative: Optional[Tuple[float, float]] = None,
     cmap: Optional[str] = None,
-    cmap_neg: Optional[str] = None,
+    cmap_negative: Optional[str] = None,
     color: Optional[str] = None,
     alpha: Optional[float] = None,
     below_color: Optional[str] = None,
@@ -214,28 +247,27 @@ def scalars_to_rgba(
         if alpha is not None:
             rgba[:, 3] = alpha
         return rgba
-    if cmap_neg is not None:
-        if threshold_neg is None:
-            threshold_neg = 0
-        threshold = max(threshold, 0)
-        if clim_neg is None:
-            clim_neg = clim
-        scalars_neg = -scalars.copy()
-        neg_idx = scalars_neg < 0
-        scalars_neg[scalars_neg < 0] = 0
+
+    if cmap_negative is not None:
+        if clim_negative is None:
+            clim_negative = clim
+        scalars_negative = -scalars.copy()
+        neg_idx = scalars_negative > 0
+        scalars_negative[scalars_negative < 0] = 0
         scalars[neg_idx] = 0
-        vmin, vmax = clim_neg
+        vmin, vmax = clim_negative
         norm = colors.Normalize(vmin=vmin, vmax=vmax)
-        rgba_neg = cm.ScalarMappable(norm=norm, cmap=cmap_neg).to_rgba(
-            scalars_neg
+        rgba_neg = cm.ScalarMappable(norm=norm, cmap=cmap_negative).to_rgba(
+            scalars_negative
         )
         if below_color is not None:
-            rgba_neg[scalars_neg < vmin] = colors.to_rgba(
+            rgba_neg[scalars_negative < vmin] = colors.to_rgba(
                 below_color
             )
         else:
             # Set alpha to 0 for sub-threshold values
-            rgba_neg[scalars_neg < vmin, 3] = 0
+            rgba_neg[scalars_negative < vmin, 3] = 0
+
     vmin, vmax = clim
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
     rgba = cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba(scalars)
@@ -244,11 +276,114 @@ def scalars_to_rgba(
     else:
         # Set alpha to 0 for sub-threshold values
         rgba[scalars < vmin, 3] = 0
-    if cmap_neg is not None:
+    if cmap_negative is not None:
         rgba[neg_idx] = rgba_neg[neg_idx]
     if alpha is not None:
         rgba[:, 3] *= alpha
     return rgba
+
+
+def layer_rgba(
+    surf: pv.PolyData,
+    layer: Layer,
+    data_domain: Literal['point_data', 'cell_data'],
+) -> Tensor:
+    """
+    Convert a layer to RGBA colors.
+    """
+    try:
+        scalar_array = surf.__getattribute__(
+            data_domain
+        )[layer.name]
+    except KeyError:
+        raise ValueError(
+            'All layers must be defined over the same data '
+            'domain. The base layer is defined over '
+            f'{data_domain}, but the layer {layer.name} was not '
+            f'found in {data_domain}. In particular, ensure that '
+            'that, if you have mapped any layer to faces, all '
+            'other layers are also mapped to faces.'
+        )
+    cmap = layer.cmap or DEFAULT_CMAP
+    return scalars_to_rgba(
+        scalars=scalar_array,
+        cmap=cmap,
+        clim=layer.clim,
+        cmap_negative=layer.cmap_negative,
+        clim_negative=layer.clim_negative,
+        alpha=layer.alpha,
+        below_color=layer.below_color,
+    )
+
+
+def compose_layers(
+    surf: pv.PolyData,
+    layers: Sequence[Layer],
+) -> Tuple[Tensor, str]:
+    """
+    Compose layers into a single RGB(A) array.
+    """
+    dst = layers[0]
+    data_domain = 'cell_data'
+    if dst.name is not None:
+        cmap = dst.cmap or DEFAULT_CMAP
+        color = None
+        try:
+            scalar_array = surf.cell_data[dst.name]
+        except KeyError:
+            scalar_array = surf.point_data[dst.name]
+            data_domain = 'point_data'
+    else:
+        try:
+            surf.cell_data[layers[1].name]
+            scalar_array = np.empty(surf.n_cells)
+        except (KeyError, IndexError):
+            data_domain = 'point_data'
+            scalar_array = np.empty(surf.n_points)
+        cmap = dst.cmap
+        color = None if cmap else DEFAULT_COLOR
+    dst = scalars_to_rgba(
+        scalars=scalar_array,
+        cmap=cmap,
+        clim=dst.clim,
+        cmap_negative=dst.cmap_negative,
+        clim_negative=dst.clim_negative,
+        color=color,
+        alpha=dst.alpha,
+        below_color=dst.below_color,
+    )
+    dst = premultiply_alpha(dst)
+
+    for layer in layers[1:]:
+        src = layer_rgba(surf, layer, data_domain)
+        src = premultiply_alpha(src)
+        blend_layers = BLEND_MODES[layer.blend_mode]
+        dst = blend_layers(dst, src)
+    dst = unmultiply_alpha(dst)
+    return dst, data_domain
+
+def add_composed_rgba(
+    surf: pv.PolyData,
+    layers: Sequence[Layer],
+    surf_alpha: float,
+) -> Tuple[pv.PolyData, str]:
+    rgba, data_domain = compose_layers(surf, layers)
+    # We shouldn't have to do this, but for some reason exporting to
+    # HTML adds transparency even if we set alpha to 1 when we use
+    # explicit RGBA to colour the mesh. Dropping the alpha channel
+    # fixes this.
+    # TODO: This will produce unexpected results for custom colormaps
+    # that specify alpha.
+    if surf_alpha == 1:
+        rgba = rgba[:, :3]
+
+    name = '-'.join([str(layer.name) for layer in layers])
+    name = f'{name}_{data_domain}_rgba'
+    if data_domain == 'cell_data':
+        surf.cell_data[name] = rgba
+    elif data_domain == 'point_data':
+        surf.point_data[name] = rgba
+    return surf, name
 
 
 def unified_plotter(
@@ -262,6 +397,10 @@ def unified_plotter(
     surf_scalars_cmap: Any = (None, None),
     surf_scalars_clim: Any = 'robust',
     surf_scalars_below_color: str = 'black',
+    surf_scalars_layers: Union[
+        Optional[Sequence[Layer]],
+        Tuple[Optional[Sequence[Layer]]]
+    ] = None,
     vol_coor: Optional[np.ndarray] = None,
     vol_scalars: Optional[np.ndarray] = None,
     vol_scalars_point_size: Optional[float] = None,
@@ -311,128 +450,134 @@ def unified_plotter(
 
     Parameters
     ----------
-    surf : cortex.CortexTriSurface (default: None)
+    surf : cortex.CortexTriSurface (default: ``None``)
         A surface to plot. If not specified, no surface will be plotted.
-    surf_projection : str (default: 'pial')
+    surf_projection : str (default: ``'pial'``)
         The projection of the surface to plot. The projection must be
         available in the surface's ``projections`` attribute. For typical
         surfaces, available projections might include ``'pial'``,
         ``'inflated'``, ``veryinflated``, ``'white'``, and ``'sphere'``.
-    surf_alpha : float (default: 1.0)
+    surf_alpha : float (default: ``1.0``)
         The opacity of the surface.
-    surf_scalars : str (default: None)
+    surf_scalars : str (default: ``None``)
         The name of the scalars to plot on the surface. The scalars must be
         available in the surface's ``point_data`` attribute. If not specified,
         no scalars will be plotted.
-    surf_scalars_boundary_color : str (default: 'black')
+    surf_scalars_boundary_color : str (default: ``'black'``)
         The color of the boundary between the surface and the background. Note
         that this boundary is only visible if ``surf_scalars_boundary_width``
         is greater than 0.
-    surf_scalars_boundary_width : int (default: 0)
+    surf_scalars_boundary_width : int (default: ``0``)
         The width of the boundary between the surface and the background. If
         set to 0, no boundary will be plotted.
-    surf_scalars_cmap : str or tuple (default: (None, None))
+    surf_scalars_cmap : str or tuple (default: ``(None, None)``)
         The colormap to use for the surface scalars. If a tuple is specified,
         the first element is the colormap to use for the left hemisphere, and
         the second element is the colormap to use for the right hemisphere.
         If a single colormap is specified, it will be used for both
         hemispheres.
-    surf_scalars_clim : str or tuple (default: 'robust')
+    surf_scalars_clim : str or tuple (default: ``'robust'``)
         The colormap limits to use for the surface scalars. If a tuple is
         specified, the first element is the colormap limits to use for the
         left hemisphere, and the second element is the colormap limits to use
         for the right hemisphere. If a single value is specified, it will be
         used for both hemispheres. If set to ``'robust'``, the colormap limits
         will be set to the 5th and 95th percentiles of the data.
-    surf_scalars_below_color : str (default: 'black')
+        .. warning::
+            If the colormap limits are set to ``'robust'``, the colormap
+            limits will be calculated based on the data in the surface
+            scalars, separately for each hemisphere. This means that the
+            colormap limits may be different for each hemisphere, and the
+            colors in the colormap may not be aligned between hemispheres.
+    surf_scalars_below_color : str (default: ``'black'``)
         The color to use for values below the colormap limits.
-    vol_coor : np.ndarray (default: None)
+    vol_coor : np.ndarray (default: ``None``)
         The coordinates of the volumetric data to plot. If not specified, no
         volumetric data will be plotted.
-    vol_scalars : np.ndarray (default: None)
+    vol_scalars : np.ndarray (default: ``None``)
         The volumetric data to plot. If not specified, no volumetric data will
         be plotted.
-    vol_scalars_point_size : float (default: None)
+    vol_scalars_point_size : float (default: ``None``)
         The size of the points to plot for the volumetric data. If not
         specified, the size of the points will be automatically determined
         based on the size of the volumetric data.
-    vol_voxdim : tuple (default: None)
+    vol_voxdim : tuple (default: ``None``)
         The dimensions of the voxels in the volumetric data.
-    vol_scalars_cmap : str (default: 'viridis')
+    vol_scalars_cmap : str (default: ``'viridis'``)
         The colormap to use for the volumetric data.
-    vol_scalars_clim : tuple (default: None)
+    vol_scalars_clim : tuple (default: ``None``)
         The colormap limits to use for the volumetric data.
-    vol_scalars_alpha : float (default: 1.0)
+    vol_scalars_alpha : float (default: ``1.0``)
         The opacity of the volumetric data.
-    node_values : pd.DataFrame (default: None)
+    node_values : pd.DataFrame (default: ``None``)
         A table containing node-valued variables. Columns in the table can be
         used to specify attributes of plotted nodes, such as their color,
         radius, and opacity.
-    node_coor : np.ndarray (default: None)
+    node_coor : np.ndarray (default: ``None``)
         The coordinates of the nodes to plot. If not specified, no nodes will
         be plotted. Node coordinates can also be computed from a parcellation
         by specifying ``node_parcel_scalars``.
-    node_parcel_scalars : str (default: None)
+    node_parcel_scalars : str (default: ``None``)
         If provided, node coordinates will be computed as the centroids of
         parcels in the specified parcellation. The parcellation must be
         available in the ``point_data`` attribute of the surface. If not
         specified, node coordinates must be provided in ``node_coor`` or
         nodes will not be plotted.
-    node_color : str or colour specification (default: 'black')
+    node_color : str or colour specification (default: ``'black'``)
         The color of the nodes. If ``node_values`` is specified, this argument
         can be used to specify a column in the table to use for the node
         colors.
-    node_radius : float or str (default: 3.0)
+    node_radius : float or str (default: ``3.0``)
         The radius of the nodes. If ``node_values`` is specified, this
         argument can be used to specify a column in the table to use for the
         node radii.
-    node_radius_range : tuple (default: (2, 10))
+    node_radius_range : tuple (default: ``(2, 10)``)
         The range of node radii to use. The values in ``node_radius`` will be
         linearly scaled to this range.
-    node_cmap : str or matplotlib colormap (default: 'viridis')
+    node_cmap : str or matplotlib colormap (default: ``'viridis'``)
         The colormap to use for the nodes.
-    node_clim : tuple (default: (0, 1))
+    node_clim : tuple (default: ``(0, 1)``)
         The range of values to map into the dynamic range of the colormap.
-    node_alpha : float or str (default: 1.0)
+    node_alpha : float or str (default: ``1.0``)
         The opacity of the nodes. If ``node_values`` is specified, this
         argument can be used to specify a column in the table to use for the
         node opacities.
-    node_lh : np.ndarray (default: None)
+    node_lh : np.ndarray (default: ``None``)
         Boolean-valued array indicating which nodes belong to the left
         hemisphere.
-    edge_values : pd.DataFrame (default: None)
+    edge_values : pd.DataFrame (default: ``None``)
         A table containing edge-valued variables. The table must have a
         MultiIndex with two levels, where the first level contains the
         starting node of each edge, and the second level contains the ending
         node of each edge. Additional columns can be used to specify
         attributes of plotted edges, such as their color, radius, and
         opacity.
-    edge_color : str or colour specification (default: 'edge_sgn')
+    edge_color : str or colour specification (default: ``'edge_sgn'``)
         The color of the edges. If ``edge_values`` is specified, this argument
         can be used to specify a column in the table to use for the edge
         colors. By default, edges are colored according to the value of the
-        ``edge_sgn`` column in ``edge_values``, which is 1 for positive edges
-        and -1 for negative edges when the edges are digested by the
+        ``'edge_sgn'`` column in ``edge_values``, which is 1 for positive
+        edges and -1 for negative edges when the edges are digested by the
         ``filter_adjacency_data`` function using the default settings.
-    edge_radius : float or str (default: 'edge_val')
+    edge_radius : float or str (default: ``'edge_val'``)
         The radius of the edges. If ``edge_values`` is specified, this
         argument can be used to specify a column in the table to use for the
         edge radii. By default, edges are sized according to the value of the
-        ``edge_val`` column in ``edge_values``, which is the absolute value of
-        the edge weight when the edges are digested by the
+        ``'edge_val'`` column in ``edge_values``, which is the absolute value
+        of the edge weight when the edges are digested by the
         ``filter_adjacency_data`` function using the default settings.
-    edge_radius_range : tuple (default: (0.1, 1.8))
+    edge_radius_range : tuple (default: ``(0.1, 1.8)``)
         The range of edge radii to use. The values in ``edge_radius`` will be
         linearly scaled to this range.
-    edge_cmap : str or matplotlib colormap (default: 'RdYlBu')
+    edge_cmap : str or matplotlib colormap (default: ``'RdYlBu'``)
         The colormap to use for the edges.
-    edge_clim : tuple (default: None)
+    edge_clim : tuple (default: ``None``)
         The range of values to map into the dynamic range of the colormap.
-    edge_alpha : float or str (default: 1.0)
+    edge_alpha : float or str (default: ``1.0``)
         The opacity of the edges. If ``edge_values`` is specified, this
         argument can be used to specify a column in the table to use for the
         edge opacities.
-    hemisphere : str (default: None)
+    hemisphere : str (default: ``None``)
         The hemisphere to plot. If not specified, both hemispheres will be
         plotted.
     hemisphere_slack : float, None, or ``'default'`` (default: ``'default'``)
@@ -447,13 +592,13 @@ def unified_plotter(
         slack will be set to 1.1 for projections that have overlapping
         hemispheres and None for projections that do not have overlapping
         hemispheres.
-    off_screen : bool (default: True)
+    off_screen : bool (default: ``True``)
         Whether to render the plot off-screen. If ``False``, a window will
         appear containing an interactive plot.
-    copy_actors : bool (default: True)
+    copy_actors : bool (default: ``True``)
         Whether to copy the actors before returning them. If ``False``, the
         actors will be modified in-place.
-    theme : PyVista plotter theme (default: None)
+    theme : PyVista plotter theme (default: ``None``)
         The PyVista plotter theme to use. If not specified, the default
         DocumentTheme will be used.
     """
@@ -487,6 +632,7 @@ def unified_plotter(
     hemi_params = _get_hemisphere_parameters(
         surf_scalars_cmap=surf_scalars_cmap,
         surf_scalars_clim=surf_scalars_clim,
+        surf_scalars_layers=surf_scalars_layers,
     )
     if node_parcel_scalars is not None:
         node_coor = surf.parcel_centres_of_mass(
@@ -565,47 +711,32 @@ def unified_plotter(
             # hemi_surf.project(surf_projection)
             hemi_clim = hemi_params.get(hemisphere, 'surf_scalars_clim')
             hemi_cmap = hemi_params.get(hemisphere, 'surf_scalars_cmap')
+            hemi_layers = hemi_params.get(hemisphere, 'surf_scalars_layers')
+            if hemi_layers is None:
+                hemi_layers = []
             if hemi_clim == 'robust' and surf_scalars is not None:
                 hemi_clim = robust_clim(hemi_surf, surf_scalars)
 
-            data_type = 'cell'
-            if surf_scalars is not None:
-                hemi_cmap = hemi_cmap or DEFAULT_CMAP
-                hemi_color = None
-                try:
-                    scalar_array = hemi_surf.cell_data[surf_scalars]
-                except KeyError:
-                    scalar_array = hemi_surf.point_data[surf_scalars]
-                    data_type = 'point'
-            else:
-                hemi_color = None if hemi_cmap else DEFAULT_COLOR
-                scalar_array = np.empty(hemi_surf.n_cells)
-            surf_rgba = scalars_to_rgba(
-                scalars=scalar_array,
-                clim=hemi_clim,
+            base_layer = Layer(
+                name=surf_scalars,
                 cmap=hemi_cmap,
+                clim=hemi_clim,
+                cmap_negative=None,
+                color=None,
                 alpha=surf_alpha,
-                color=hemi_color,
                 below_color=surf_scalars_below_color,
             )
-            # We shouldn't have to do this, but for some reason exporting to
-            # HTML adds transparency even if we set alpha to 1. Dropping the
-            # alpha channel fixes this.
-            if surf_alpha == 1:
-                surf_rgba = surf_rgba[:, :3]
-            if data_type == 'cell':
-                hemi_surf.cell_data[
-                    f'{surf_scalars}_{data_type}_rgba'
-                ] = surf_rgba
-            elif data_type == 'point':
-                hemi_surf.point_data[
-                    f'{surf_scalars}_{data_type}_rgba'
-                ] = surf_rgba
+            hemi_layers = [base_layer] + list(hemi_layers)
+            hemi_surf, hemi_scalars = add_composed_rgba(
+                surf=hemi_surf,
+                layers=hemi_layers,
+                surf_alpha=surf_alpha,
+            )
             # TODO: copying the mesh seems like it could create memory issues.
             #       A better solution would be delayed execution.
             p.add_mesh(
                 hemi_surf,
-                scalars=f'{surf_scalars}_{data_type}_rgba',
+                scalars=hemi_scalars,
                 rgb=True,
                 show_edges=False,
                 copy_mesh=copy_actors,

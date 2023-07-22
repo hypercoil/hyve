@@ -13,11 +13,15 @@ import pandas as pd
 import pyvista as pv
 from pyvista.plotting.helpers import view_vectors
 
+from .const import Tensor
+
 
 def cortex_theme() -> Any:
     """
-    Return a theme for the pyvista plotter for use with the cortex surface
-    plotter.
+    Return a theme for the pyvista plotter for use with the cortical surface
+    plotter. In practice, we currently don't use this because PyVista doesn't
+    always handle transparency the way that we would like, but we keep it
+    here in case we want to use it in the future.
     """
     cortex_theme = pv.themes.DocumentTheme()
     cortex_theme.transparent_background = True
@@ -392,3 +396,35 @@ def filter_adjacency_data(
         df = degree.join(incidents, how='outer')
         return edge_values, df
     return edge_values
+
+
+def premultiply_alpha(
+    input: Tensor,
+) -> Tensor:
+    """Premultiply alpha channel of RGBA image."""
+    return np.concatenate(
+        (input[..., :3] * input[..., 3:], input[..., 3:]),
+        axis=-1,
+    )
+
+
+def unmultiply_alpha(
+    input: Tensor,
+) -> Tensor:
+    """Unmultiply alpha channel of RGBA image."""
+    out = np.concatenate(
+        (input[..., :3] / input[..., 3:], input[..., 3:]),
+        axis=-1,
+    )
+    return np.where(np.isnan(out), 0.0, out)
+
+
+def source_over(
+    src: Tensor,
+    dst: Tensor,
+) -> Tensor:
+    """
+    Alpha composite two RGBA images using the source-over blend mode.
+    Assumes premultiplied alpha.
+    """
+    return src + dst * (1.0 - src[..., 3:])
