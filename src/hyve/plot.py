@@ -12,13 +12,16 @@ from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 import pyvista as pv
-from matplotlib.cm import get_cmap
-from matplotlib.colors import Normalize
+from matplotlib import cm, colors
 
+from .const import Tensor
 from .surf import (
     CortexTriSurface,
 )
 from .util import robust_clim
+
+DEFAULT_CMAP = 'viridis'
+DEFAULT_COLOR = 'white'
 
 
 @dataclasses.dataclass
@@ -28,35 +31,6 @@ class HemisphereParameters:
 
     def get(self, hemi, param):
         return self.__getattribute__(hemi)[param]
-
-
-def _cfg_hemispheres(
-    hemisphere: Optional[Literal['left', 'right']] = None,
-    surf_scalars: Optional[Union[str, Sequence[str]]] = None,
-    surf: Optional[CortexTriSurface] = None,
-):
-    hemispheres = (
-        (hemisphere,) if hemisphere is not None else ('left', 'right')
-    )
-    # TODO: Later on, we're going to add plot layering, which will allow us to
-    #       plot multiple scalars at once by blending colours. One of these
-    #       scalars can be the "key", which will be used to automatically
-    #       remove any hemispheres that the scalar isn't present in. For now,
-    #       we just use the only scalar that's present.
-    key_scalars = surf_scalars
-    if surf is not None and surf_scalars is not None:
-        hemispheres = tuple(
-            hemi for hemi in hemispheres
-            if key_scalars is None or (
-                key_scalars in surf.__getattribute__(hemi).point_data
-                or key_scalars in surf.__getattribute__(hemi).cell_data
-            )
-        )
-    if len(hemispheres) == 1:
-        hemispheres_str = hemispheres[0]
-    else:
-        hemispheres_str = 'both'
-    return hemispheres, hemispheres_str
 
 
 def _get_hemisphere_parameters(
@@ -92,6 +66,35 @@ def _get_hemisphere_parameters(
     return HemisphereParameters(left, right)
 
 
+def _cfg_hemispheres(
+    hemisphere: Optional[Literal['left', 'right']] = None,
+    surf_scalars: Optional[Union[str, Sequence[str]]] = None,
+    surf: Optional[CortexTriSurface] = None,
+):
+    hemispheres = (
+        (hemisphere,) if hemisphere is not None else ('left', 'right')
+    )
+    # TODO: Later on, we're going to add plot layering, which will allow us to
+    #       plot multiple scalars at once by blending colours. One of these
+    #       scalars can be the "key", which will be used to automatically
+    #       remove any hemispheres that the scalar isn't present in. For now,
+    #       we just use the only scalar that's present.
+    key_scalars = surf_scalars
+    if surf is not None and surf_scalars is not None:
+        hemispheres = tuple(
+            hemi for hemi in hemispheres
+            if key_scalars is None or (
+                key_scalars in surf.__getattribute__(hemi).point_data
+                or key_scalars in surf.__getattribute__(hemi).cell_data
+            )
+        )
+    if len(hemispheres) == 1:
+        hemispheres_str = hemispheres[0]
+    else:
+        hemispheres_str = 'both'
+    return hemispheres, hemispheres_str
+
+
 def _get_color(color, cmap, clim):
     if (
         isinstance(color, str)
@@ -101,11 +104,11 @@ def _get_color(color, cmap, clim):
         return color
     else:
         try:
-            cmap = get_cmap(cmap)
+            cmap = cm.get_cmap(cmap)
         except ValueError:
             cmap = cmap
         vmin, vmax = clim
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
         return cmap(norm(color))
 
 
@@ -170,6 +173,84 @@ def _null_auxwriter(metadata):
     return metadata
 
 
+def scalars_to_rgba(
+    scalars: Optional[Tensor] = None,
+    clim: Optional[Tuple[float, float]] = None,
+    clim_neg: Optional[Tuple[float, float]] = None,
+    cmap: Optional[str] = None,
+    cmap_neg: Optional[str] = None,
+    color: Optional[str] = None,
+    alpha: Optional[float] = None,
+    below_color: Optional[str] = None,
+) -> Tensor:
+    """
+    Convert scalar values to RGBA colors.
+
+    Converting all scalars to RGBA colors enables us to plot multiple
+    scalar values on the same surface by leveraging blend operations from
+    PIL.
+
+    Parameters
+    ----------
+    scalars : Tensor
+        Scalar values to convert to RGBA colors.
+    clim : tuple of float, optional
+        Color limits. If ``clim_neg`` is also specified, this is the color
+        limits for positive values.
+    clim_neg : tuple of float, optional
+        Color limits for negative values.
+    cmap : str, optional
+        Name of colormap to use for positive values.
+    cmap_neg : str, optional
+        Name of colormap to use for negative values.
+    alpha : float, optional
+        Opacity value to use for all scalar values, or opacity multiplier
+        for the colormap(s).
+    color : str, optional
+        Color to use for all scalar values.
+    """
+    if color is not None:
+        rgba = np.tile(colors.to_rgba(color), (len(scalars), 1))
+        if alpha is not None:
+            rgba[:, 3] = alpha
+        return rgba
+    if cmap_neg is not None:
+        if threshold_neg is None:
+            threshold_neg = 0
+        threshold = max(threshold, 0)
+        if clim_neg is None:
+            clim_neg = clim
+        scalars_neg = -scalars.copy()
+        neg_idx = scalars_neg < 0
+        scalars_neg[scalars_neg < 0] = 0
+        scalars[neg_idx] = 0
+        vmin, vmax = clim_neg
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
+        rgba_neg = cm.ScalarMappable(norm=norm, cmap=cmap_neg).to_rgba(
+            scalars_neg
+        )
+        if below_color is not None:
+            rgba_neg[scalars_neg < vmin] = colors.to_rgba(
+                below_color
+            )
+        else:
+            # Set alpha to 0 for sub-threshold values
+            rgba_neg[scalars_neg < vmin, 3] = 0
+    vmin, vmax = clim
+    norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    rgba = cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba(scalars)
+    if below_color is not None:
+        rgba[scalars < vmin] = colors.to_rgba(below_color)
+    else:
+        # Set alpha to 0 for sub-threshold values
+        rgba[scalars < vmin, 3] = 0
+    if cmap_neg is not None:
+        rgba[neg_idx] = rgba_neg[neg_idx]
+    if alpha is not None:
+        rgba[:, 3] *= alpha
+    return rgba
+
+
 def unified_plotter(
     *,
     surf: Optional['CortexTriSurface'] = None,
@@ -194,7 +275,7 @@ def unified_plotter(
     node_color: Optional[str] = 'black',
     node_radius: Union[float, str] = 3.0,
     node_radius_range: Tuple[float, float] = (2, 10),
-    node_cmap: Any = 'viridis',
+    node_cmap: Any = DEFAULT_CMAP,
     node_clim: Tuple[float, float] = (0, 1),
     node_alpha: Union[float, str] = 1.0,
     node_lh: Optional[np.ndarray] = None,
@@ -484,22 +565,62 @@ def unified_plotter(
             # hemi_surf.project(surf_projection)
             hemi_clim = hemi_params.get(hemisphere, 'surf_scalars_clim')
             hemi_cmap = hemi_params.get(hemisphere, 'surf_scalars_cmap')
-            hemi_color = None if hemi_cmap else 'white'
             if hemi_clim == 'robust' and surf_scalars is not None:
                 hemi_clim = robust_clim(hemi_surf, surf_scalars)
+
+            data_type = 'cell'
+            if surf_scalars is not None:
+                hemi_cmap = hemi_cmap or DEFAULT_CMAP
+                hemi_color = None
+                try:
+                    scalar_array = hemi_surf.cell_data[surf_scalars]
+                except KeyError:
+                    scalar_array = hemi_surf.point_data[surf_scalars]
+                    data_type = 'point'
+            else:
+                hemi_color = None if hemi_cmap else DEFAULT_COLOR
+                scalar_array = np.empty(hemi_surf.n_cells)
+            surf_rgba = scalars_to_rgba(
+                scalars=scalar_array,
+                clim=hemi_clim,
+                cmap=hemi_cmap,
+                alpha=surf_alpha,
+                color=hemi_color,
+                below_color=surf_scalars_below_color,
+            )
+            # We shouldn't have to do this, but for some reason exporting to
+            # HTML adds transparency even if we set alpha to 1. Dropping the
+            # alpha channel fixes this.
+            if surf_alpha == 1:
+                surf_rgba = surf_rgba[:, :3]
+            if data_type == 'cell':
+                hemi_surf.cell_data[
+                    f'{surf_scalars}_{data_type}_rgba'
+                ] = surf_rgba
+            elif data_type == 'point':
+                hemi_surf.point_data[
+                    f'{surf_scalars}_{data_type}_rgba'
+                ] = surf_rgba
             # TODO: copying the mesh seems like it could create memory issues.
             #       A better solution would be delayed execution.
             p.add_mesh(
                 hemi_surf,
-                opacity=surf_alpha,
+                scalars=f'{surf_scalars}_{data_type}_rgba',
+                rgb=True,
                 show_edges=False,
-                scalars=surf_scalars,
-                cmap=hemi_cmap,
-                clim=hemi_clim,
-                color=hemi_color,
-                below_color=surf_scalars_below_color,
                 copy_mesh=copy_actors,
             )
+            # p.add_mesh(
+            #     hemi_surf,
+            #     scalars=surf_scalars,
+            #     show_edges=False,
+            #     cmap=hemi_cmap,
+            #     clim=hemi_clim,
+            #     opacity=surf_alpha,
+            #     color=hemi_color,
+            #     below_color=surf_scalars_below_color,
+            #     copy_mesh=copy_actors,
+            # )
             if (
                 surf_scalars_boundary_width > 0
                 and surf_scalars is not None
@@ -509,7 +630,8 @@ def unified_plotter(
                     hemi_surf.contour(
                         isosurfaces=range(
                             int(max(hemi_surf.point_data[surf_scalars]))
-                        )
+                        ),
+                        scalars=surf_scalars,
                     ),
                     color=surf_scalars_boundary_color,
                     line_width=surf_scalars_boundary_width,
