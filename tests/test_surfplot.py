@@ -125,6 +125,7 @@ def test_parcellation():
         output_dir='/tmp',
     )
 
+
 @pytest.mark.ci_unsupported
 def test_parcellation_modal_cmap():
     chain = ichain(
