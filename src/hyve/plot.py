@@ -19,6 +19,8 @@ from .surf import (
     CortexTriSurface,
 )
 from .util import (
+    PointData,
+    PointDataCollection,
     premultiply_alpha,
     robust_clim,
     source_over,
@@ -44,6 +46,12 @@ SURF_SCALARS_CMAP_DEFAULT_VALUE = (None, None)
 SURF_SCALARS_CLIM_DEFAULT_VALUE = 'robust'
 SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE = None
 SURF_SCALARS_LAYERS_DEFAULT_VALUE = None
+
+POINTS_SCALARS_DEFAULT_VALUE = None
+POINTS_SCALARS_CMAP_DEFAULT_VALUE = None
+POINTS_SCALARS_CLIM_DEFAULT_VALUE = None
+POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
+POINTS_SCALARS_LAYERS_DEFAULT_VALUE = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -387,6 +395,7 @@ def compose_layers(
     dst = unmultiply_alpha(dst)
     return dst, data_domain
 
+
 def add_composed_rgba(
     surf: pv.PolyData,
     layers: Sequence[Layer],
@@ -411,6 +420,46 @@ def add_composed_rgba(
     return surf, name
 
 
+def add_points_scalars(
+    plotter: pv.Plotter,
+    points: PointDataCollection,
+    layers: Sequence[Layer],
+) -> pv.Plotter:
+    # We could implement blend modes for points, but it's not clear
+    # that it would be worth the tradeoff of potentially having to
+    # compute the union of all coors in the dataset at every blend
+    # step. Easy to implement with scipy.sparse, but not sure how it
+    # would scale computationally. So instead, we're literally just
+    # layering the points on top of each other. VTK might be smart
+    # enough to automatically apply a reasonable blend mode even in
+    # this regime.
+    for layer in layers:
+        dataset = points.get_dataset(layer.name)
+        scalar_array = dataset.points.point_data[layer.name]
+        rgba = scalars_to_rgba(
+            scalars=scalar_array,
+            cmap=layer.cmap,
+            clim=layer.clim,
+            cmap_negative=layer.cmap_negative,
+            clim_negative=layer.clim_negative,
+            color=layer.color,
+            alpha=layer.alpha,
+            below_color=layer.below_color,
+        )
+        plotter.add_points(
+            points=dataset.points.points,
+            render_points_as_spheres=False,
+            style='points_gaussian',
+            emissive=False,
+            scalars=rgba,
+            opacity=layer.alpha,
+            point_size=dataset.point_size,
+            ambient=1.0,
+            rgb=True,
+        )
+    return plotter
+
+
 def unified_plotter(
     *,
     surf: Optional['CortexTriSurface'] = None,
@@ -426,6 +475,16 @@ def unified_plotter(
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
     ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    points: Optional[PointDataCollection] = None,
+    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
+    points_alpha: float = 1.0,
+    points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
+    points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_below_color: str = POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    points_scalars_layers: Union[
+        Optional[Sequence[Layer]],
+        Tuple[Optional[Sequence[Layer]]]
+    ] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
     vol_coor: Optional[np.ndarray] = None,
     vol_scalars: Optional[np.ndarray] = None,
     vol_scalars_point_size: Optional[float] = None,
@@ -791,6 +850,23 @@ def unified_plotter(
                     line_width=surf_scalars_boundary_width,
                 )
 
+    if points is not None:
+        if points_scalars is not None:
+            base_layer = Layer(
+                name=points_scalars,
+                cmap=points_scalars_cmap,
+                clim=points_scalars_clim,
+                cmap_negative=None,
+                color=None,
+                alpha=points_alpha,
+                below_color=points_scalars_below_color,
+            )
+            points_scalars_layers = [base_layer] + list(points_scalars_layers)
+        p = add_points_scalars(
+            plotter=p,
+            points=points,
+            layers=points_scalars_layers,
+        )
     if vol_scalars is not None:
         assert (
             vol_coor is not None

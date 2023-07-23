@@ -6,7 +6,10 @@ Plot and report utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 Utilities for plotting and reporting.
 """
-from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
+import dataclasses
+from typing import (
+    Any, Dict, Literal, Mapping, Optional, Sequence, Tuple, Union
+)
 
 import numpy as np
 import pandas as pd
@@ -14,6 +17,110 @@ import pyvista as pv
 from pyvista.plotting.helpers import view_vectors
 
 from .const import Tensor
+
+
+@dataclasses.dataclass
+class PointData:
+    points: pv.PointSet
+    point_size: float = 1.0
+
+    def __init__(
+        self,
+        points: pv.PointSet,
+        point_size: float = 1.0,
+        data: Optional[Mapping[str, Tensor]] = None,
+    ):
+        self.points = points
+        self.point_size = point_size
+        data = data or {}
+        for key, value in data.items():
+            self.points.point_data[key] = value
+
+    def select(self, condition: callable) -> 'PointData':
+        mask = condition(self.points.points, self.points.point_data)
+        return self.mask(mask)
+
+    def mask(
+        self,
+        mask: Tensor,
+        return_complement: bool = False
+    ) -> 'PointData':
+        if return_complement:
+            mask = ~mask
+        points = pv.PointData(self.points.points[mask])
+        for name, data in self.points.point_data.items():
+            points.point_data[name] = data[mask]
+        return PointData(points, self.point_size)
+
+
+class PointDataCollection:
+    def __init__(
+        self,
+        point_datasets: Optional[Sequence[PointData]] = None,
+    ):
+        self.point_datasets = list(point_datasets) or []
+
+    def add_point_dataset(self, point_dataset: PointData):
+        self.point_datasets.append(point_dataset)
+
+    def get_dataset(
+        self,
+        key: str,
+        return_all: bool = False,
+        strict: bool = True
+    ) -> PointData:
+        matches = [
+            (ds.points.point_data.get(key, None), i)
+            for i, ds in enumerate(self.point_datasets)
+        ]
+        if all(scalars is None for scalars, _ in matches):
+            raise KeyError(f'No point data with key {key}')
+        indices = [index for scalars, index in matches if scalars is not None]
+        if not return_all:
+            if len(indices) > 1 and strict:
+                raise KeyError(f'Multiple point data with key {key}')
+            dataset = self[indices[0]]
+            points = pv.PointSet(dataset.points.points)
+            points.point_data[key] = dataset.points.point_data[key]
+            point_size = dataset.point_size
+        else:
+            datasets = [self[i] for i in indices]
+            points = pv.PointSet(np.concatenate([
+                ds.points.points for ds in datasets
+            ]))
+            points.point_data[key] = np.concatenate([
+                ds.points.point_data[key] for ds in datasets
+            ])
+            point_size = np.min([ds.point_size for ds in datasets])
+        return PointData(
+            points=points,
+            point_size=point_size,
+        )
+
+    def __getitem__(self, key: int):
+        return self.point_datasets[key]
+
+    def __len__(self):
+        return len(self.point_datasets)
+
+    def __iter__(self):
+        return iter(self.point_datasets)
+
+    def __str__(self):
+        return f'PointDataCollection({self.point_datasets})'
+
+    def __repr__(self):
+        return str(self)
+
+    def __add__(self, other):
+        return PointDataCollection(self.point_datasets + other.point_datasets)
+
+    def __radd__(self, other):
+        return PointDataCollection(other.point_datasets + self.point_datasets)
+
+    def __iadd__(self, other):
+        self.point_datasets += other.point_datasets
+        return self
 
 
 def cortex_theme() -> Any:
