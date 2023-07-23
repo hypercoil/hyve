@@ -53,6 +53,13 @@ POINTS_SCALARS_CLIM_DEFAULT_VALUE = None
 POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
 POINTS_SCALARS_LAYERS_DEFAULT_VALUE = None
 
+NODE_COLOR_DEFAULT_VALUE = 'black'
+NODE_RADIUS_DEFAULT_VALUE = 3.0
+NODE_RLIM_DEFAULT_VALUE = (2, 10)
+NODE_CMAP_DEFAULT_VALUE = DEFAULT_CMAP
+NODE_CLIM_DEFAULT_VALUE = (0, 1)
+NODE_ALPHA_DEFAULT_VALUE = 1.0
+
 
 @dataclasses.dataclass(frozen=True)
 class Layer:
@@ -68,6 +75,22 @@ class Layer:
     alpha: float = LAYER_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = LAYER_BELOW_COLOR_DEFAULT_VALUE
     blend_mode: Literal['source_over'] = LAYER_BLEND_MODE_DEFAULT_VALUE
+
+
+@dataclasses.dataclass(frozen=True)
+class NodeLayer:
+    """Container for metadata to construct a single node layer of a plot."""
+    name: str
+    cmap: Any = DEFAULT_CMAP
+    cmap_negative = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
+    clim: Optional[Tuple[float, float]] = NODE_CLIM_DEFAULT_VALUE
+    clim_negative = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE
+    color: str = NODE_COLOR_DEFAULT_VALUE
+    radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE
+    radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE
+    alpha: float = NODE_ALPHA_DEFAULT_VALUE
+    # change to EdgeLayer
+    edges: Sequence[Any] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -165,21 +188,25 @@ def _get_color(color, cmap, clim):
         return cmap(norm(color))
 
 
+def _normalise_to_range(values, valid_range):
+    if valid_range is None:
+        return values
+    vmin = values.min()
+    vmax = values.max()
+    return (
+        valid_range[0]
+        + (valid_range[1] - valid_range[0])
+        * (values - vmin)
+        / (vmax - vmin)
+    )
+
+
 def _map_to_attr(values, attr, attr_range):
     if attr == 'index':
         attr = np.array(values.index)
     else:
         attr = values[attr]
-    if attr_range is None:
-        return attr
-    max_val = attr.max()
-    min_val = attr.min()
-    return (
-        attr_range[0]
-        + (attr_range[1] - attr_range[0])
-        * (attr - min_val)
-        / (max_val - min_val)
-    )
+    return _normalise_to_range(attr, attr_range)
 
 
 def _map_to_radius(
@@ -424,6 +451,7 @@ def add_points_scalars(
     plotter: pv.Plotter,
     points: PointDataCollection,
     layers: Sequence[Layer],
+    copy_actors: bool = False,
 ) -> pv.Plotter:
     # We could implement blend modes for points, but it's not clear
     # that it would be worth the tradeoff of potentially having to
@@ -456,7 +484,69 @@ def add_points_scalars(
             point_size=dataset.point_size,
             ambient=1.0,
             rgb=True,
+            copy_mesh=copy_actors,
         )
+    return plotter
+
+
+def add_nodes(
+    plotter: pv.Plotter,
+    node_coor: np.ndarray,
+    node_values: Optional[pd.DataFrame],
+    layers: Sequence[NodeLayer],
+    copy_actors: bool = False,
+) -> pv.Plotter:
+    for layer in layers:
+        nodes = pv.PolyData(node_coor)
+        if not isinstance(layer.radius, str):
+            radius_str = 'node_radius'
+            node_radius = np.full(len(node_coor), layer.radius)
+        else:
+            radius_str = layer.radius
+            node_radius = node_values[radius_str].values
+            if layer.radius_range is not None:
+                node_radius = _normalise_to_range(
+                    node_radius,
+                    layer.radius_range,
+                )
+
+        if layer.color not in node_values.columns:
+            scalars = None
+            color = layer.color
+        else:
+            scalars = node_values[layer.color].values
+            color = None
+        if not isinstance(layer.alpha, str):
+            alpha = layer.alpha
+        else:
+            alpha = None
+        rgba = scalars_to_rgba(
+            scalars=scalars,
+            clim=layer.clim,
+            clim_negative=layer.clim_negative,
+            cmap=layer.cmap,
+            cmap_negative=layer.cmap_negative,
+            color=color,
+            alpha=alpha,
+        )
+        if isinstance(layer.alpha, str):
+            rgba[:, 3] = node_values[layer.alpha].values
+
+        nodes.point_data[radius_str] = node_radius
+        nodes.point_data[f'{layer.name}_rgba'] = rgba
+        glyph = nodes.glyph(
+            scale=radius_str,
+            orient=False,
+            geom=pv.Icosphere(),
+        )
+        plotter.add_mesh(
+            glyph,
+            scalars=f'{layer.name}_rgba',
+            rgb=True,
+            # shouldn't do anything here, but just in case
+            copy_mesh=copy_actors,
+        )
+
     return plotter
 
 
@@ -480,20 +570,19 @@ def unified_plotter(
     points_alpha: float = 1.0,
     points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
     points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
-    points_scalars_below_color: str = POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-    points_scalars_layers: Union[
-        Optional[Sequence[Layer]],
-        Tuple[Optional[Sequence[Layer]]]
-    ] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
+    points_scalars_below_color: str = (
+        POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE
+    ),
+    points_scalars_layers: Optional[Sequence[Layer]] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
     node_values: Optional[pd.DataFrame] = None,
     node_coor: Optional[np.ndarray] = None,
     node_parcel_scalars: Optional[str] = None,
-    node_color: Optional[str] = 'black',
-    node_radius: Union[float, str] = 3.0,
-    node_radius_range: Tuple[float, float] = (2, 10),
-    node_cmap: Any = DEFAULT_CMAP,
-    node_clim: Tuple[float, float] = (0, 1),
-    node_alpha: Union[float, str] = 1.0,
+    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
+    node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
+    node_radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
+    node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
+    node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
+    node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
     node_lh: Optional[np.ndarray] = None,
     edge_values: Optional[pd.DataFrame] = None,
     edge_color: Optional[str] = 'edge_sgn',
@@ -502,6 +591,7 @@ def unified_plotter(
     edge_cmap: Any = 'RdYlBu',
     edge_clim: Tuple[float, float] = (0, 1),
     edge_alpha: Union[float, str] = 1.0,
+    network_layers: Optional[Sequence[NodeLayer]] = None,
     hemisphere: Optional[Literal['left', 'right']] = None,
     hemisphere_slack: Optional[Union[float, Literal['default']]] = 'default',
     off_screen: bool = True,
@@ -568,6 +658,31 @@ def unified_plotter(
             colors in the colormap may not be aligned between hemispheres.
     surf_scalars_below_color : str (default: ``'black'``)
         The color to use for values below the colormap limits.
+    surf_scalars_layers : list of Layer (default: ``None``)
+        A list of layers to plot on the surface. Each layer is defined by a
+        ``Layer`` object, which specifies the name of the layer, the colormap
+        to use, the colormap limits, the color, the opacity, and the blend
+        mode. If not specified, no layers will be plotted.
+    points : PointDataCollection (default: ``None``)
+        A collection of points to plot. If not specified, no points will be
+        plotted.
+    points_scalars : str (default: ``None``)
+        The name of the scalars to plot on the points. The scalars must be
+        available in the points' ``point_data`` attribute. If not specified,
+        no scalars will be plotted.
+    points_alpha : float (default: ``1.0``)
+        The opacity of the points.
+    points_scalars_cmap : str (default: ``None``)
+        The colormap to use for the points scalars.
+    points_scalars_clim : tuple (default: ``None``)
+        The colormap limits to use for the points scalars.
+    points_scalars_below_color : str (default: ``'black'``)
+        The color to use for values below the colormap limits.
+    points_scalars_layers : list of Layer (default: ``None``)
+        A list of layers to plot on the points. Each layer is defined by a
+        ``Layer`` object, which specifies the name of the layer, the colormap
+        to use, the colormap limits, the color, the opacity, and the blend
+        mode. If not specified, no layers will be plotted.
     vol_coor : np.ndarray (default: ``None``)
         The coordinates of the volumetric data to plot. If not specified, no
         volumetric data will be plotted.
@@ -754,15 +869,19 @@ def unified_plotter(
                 ref_coor = slack_refdata.points.points
                 left_mask = ref_coor[:, 0] < 0
                 hw_left = (
-                    ref_coor[left_mask, 0].max() - ref_coor[left_mask, 0].min()
+                    ref_coor[left_mask, 0].max()
+                    - ref_coor[left_mask, 0].min()
                 ) / 2
                 hw_right = (
-                    ref_coor[~left_mask, 0].max() - ref_coor[~left_mask, 0].min()
+                    ref_coor[~left_mask, 0].max()
+                    - ref_coor[~left_mask, 0].min()
                 ) / 2
                 hemi_gap = (
-                    ref_coor[~left_mask, 0].max() + ref_coor[~left_mask, 0].min()
+                    ref_coor[~left_mask, 0].max()
+                    + ref_coor[~left_mask, 0].min()
                 ) / 2 - (
-                    ref_coor[left_mask, 0].max() + ref_coor[left_mask, 0].min()
+                    ref_coor[left_mask, 0].max()
+                    + ref_coor[left_mask, 0].min()
                 ) / 2
         else:
             hw_left = hw_right = hemi_gap = 0
@@ -875,42 +994,64 @@ def unified_plotter(
             plotter=p,
             points=points,
             layers=points_scalars_layers,
+            copy_actors=copy_actors,
         )
 
-    if node_coor is not None:
-        for c, col, rad, opa in zip(
-            node_coor,
-            _map_to_color(node_values, node_color, None),
-            _map_to_radius(node_values, node_radius, node_radius_range),
-            _map_to_opacity(node_values, node_alpha),
-        ):
-            node = pv.Icosphere(
-                radius=rad,
-                center=c,
+    if node_values is not None:
+        if network_layers is None:
+            network_layers = []
+        if node_coor is not None:
+            base_layer = NodeLayer(
+                name='network',
+                cmap=node_cmap,
+                clim=node_clim,
+                color=node_color,
+                radius=node_radius,
+                radius_range=node_radius_range,
+                alpha=node_alpha,
             )
-            p.add_mesh(
-                node,
-                color=_get_color(color=col, cmap=node_cmap, clim=node_clim),
-                opacity=opa,
-            )
-    if edge_values is not None:
-        for c, d, ht, col, rad, opa in zip(
-            *process_edge_values(),
-            _map_to_color(edge_values, edge_color, None),
-            _map_to_radius(edge_values, edge_radius, edge_radius_range),
-            _map_to_opacity(edge_values, edge_alpha),
-        ):
-            edge = pv.Cylinder(
-                center=c,
-                direction=d,
-                height=ht,
-                radius=rad,
-            )
-            p.add_mesh(
-                edge,
-                color=_get_color(color=col, cmap=edge_cmap, clim=edge_clim),
-                opacity=opa,
-            )
+            network_layers = [base_layer] + list(network_layers)
+        p = add_nodes(
+            plotter=p,
+            node_coor=node_coor,
+            node_values=node_values,
+            layers=network_layers,
+            copy_actors=copy_actors,
+        )
+
+    #     for c, col, rad, opa in zip(
+    #         node_coor,
+    #         _map_to_color(node_values, node_color, None),
+    #         _map_to_radius(node_values, node_radius, node_radius_range),
+    #         _map_to_opacity(node_values, node_alpha),
+    #     ):
+    #         node = pv.Icosphere(
+    #             radius=rad,
+    #             center=c,
+    #         )
+    #         p.add_mesh(
+    #             node,
+    #             color=_get_color(color=col, cmap=node_cmap, clim=node_clim),
+    #             opacity=opa,
+    #         )
+    # if edge_values is not None:
+    #     for c, d, ht, col, rad, opa in zip(
+    #         *process_edge_values(),
+    #         _map_to_color(edge_values, edge_color, None),
+    #         _map_to_radius(edge_values, edge_radius, edge_radius_range),
+    #         _map_to_opacity(edge_values, edge_alpha),
+    #     ):
+    #         edge = pv.Cylinder(
+    #             center=c,
+    #             direction=d,
+    #             height=ht,
+    #             radius=rad,
+    #         )
+    #         p.add_mesh(
+    #             edge,
+    #             color=_get_color(color=col, cmap=edge_cmap, clim=edge_clim),
+    #             opacity=opa,
+    #         )
 
     if postprocessors is None or len(postprocessors) == 0:
         postprocessors = [_null_postprocessor]
