@@ -161,6 +161,8 @@ def test_unified_plotter():
     vis_nodes_edge_selection[0:2] = True
     vis_nodes_edge_selection[200:202] = True
     node_data = filter_node_data(cov.sum(axis=0))
+    node_data['radius'] = np.random.rand(400)
+    node_data['opacity'] = np.random.rand(400)
     edge_data = filter_adjacency_data(
         cov, connected_node_selection=vis_nodes_edge_selection)
     node_clim = (node_data['node_val'].min(), node_data['node_val'].max())
@@ -172,6 +174,9 @@ def test_unified_plotter():
         node_coor=node_coor,
         node_clim=node_clim,
         node_color='node_val',
+        node_radius='radius',
+        node_radius_range=(1, 10),
+        node_alpha='opacity',
         node_lh=node_lh,
         edge_values=edge_data,
         edge_clim=edge_clim,

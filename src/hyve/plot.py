@@ -54,11 +54,18 @@ POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
 POINTS_SCALARS_LAYERS_DEFAULT_VALUE = None
 
 NODE_COLOR_DEFAULT_VALUE = 'black'
-NODE_RADIUS_DEFAULT_VALUE = 3.0
-NODE_RLIM_DEFAULT_VALUE = (2, 10)
+NODE_RADIUS_DEFAULT_VALUE = 5.0
+NODE_RLIM_DEFAULT_VALUE = (3, 10)
 NODE_CMAP_DEFAULT_VALUE = DEFAULT_CMAP
 NODE_CLIM_DEFAULT_VALUE = (0, 1)
 NODE_ALPHA_DEFAULT_VALUE = 1.0
+
+EDGE_COLOR_DEFAULT_VALUE = 'edge_sgn'
+EDGE_RADIUS_DEFAULT_VALUE = 'edge_val'
+EDGE_RLIM_DEFAULT_VALUE = (0.1, 2.8)
+EDGE_CMAP_DEFAULT_VALUE = 'RdYlBu'
+EDGE_CLIM_DEFAULT_VALUE = (0, 1)
+EDGE_ALPHA_DEFAULT_VALUE = 1.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -78,6 +85,20 @@ class Layer:
 
 
 @dataclasses.dataclass(frozen=True)
+class EdgeLayer:
+    """Container for metadata to construct a single edge layer of a plot."""
+    name: str
+    cmap: Any = DEFAULT_CMAP
+    cmap_negative = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
+    clim: Optional[Tuple[float, float]] = EDGE_CLIM_DEFAULT_VALUE
+    clim_negative = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE
+    color: str = EDGE_COLOR_DEFAULT_VALUE
+    radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE
+    radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE
+    alpha: float = EDGE_ALPHA_DEFAULT_VALUE
+
+
+@dataclasses.dataclass(frozen=True)
 class NodeLayer:
     """Container for metadata to construct a single node layer of a plot."""
     name: str
@@ -89,8 +110,7 @@ class NodeLayer:
     radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE
     radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE
     alpha: float = NODE_ALPHA_DEFAULT_VALUE
-    # change to EdgeLayer
-    edges: Sequence[Any] = dataclasses.field(default_factory=list)
+    edge_layers: Sequence[EdgeLayer] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -489,56 +509,172 @@ def add_points_scalars(
     return plotter
 
 
-def add_nodes(
+def build_edges_mesh(
+    edge_values: pd.DataFrame,
+    node_coor: np.ndarray,
+    layer: EdgeLayer,
+    radius: float,
+) -> pv.PolyData:
+    edge_values = edge_values.reset_index()
+    target = edge_values.dst.values
+    source = edge_values.src.values
+    midpoints = (node_coor[target] + node_coor[source]) / 2
+    orientations = node_coor[target] - node_coor[source]
+    norm = np.linalg.norm(orientations, axis=-1)
+
+    edges = pv.PolyData(midpoints)
+    if layer.color not in edge_values.columns:
+        scalars = None
+        color = layer.color
+    else:
+        scalars = edge_values[layer.color].values
+        color = None
+    if not isinstance(layer.alpha, str):
+        alpha = layer.alpha
+    else:
+        alpha = None
+    rgba = scalars_to_rgba(
+        scalars=scalars,
+        clim=layer.clim,
+        clim_negative=layer.clim_negative,
+        cmap=layer.cmap,
+        cmap_negative=layer.cmap_negative,
+        color=color,
+        alpha=alpha,
+    )
+
+    # TODO: This is a hack to get the glyphs to scale correctly.
+    # This magic scalar is used to scale the glyphs to the correct size.
+    # Where does it come from? I have no idea. It's just what works. And
+    # that, only roughly. No guarantees that it will work on new data.
+    geom = pv.Cylinder(resolution=10, radius=0.01 * radius)
+
+    edges.point_data[f'{layer.name}_norm'] = norm
+    edges.point_data[f'{layer.name}_vecs'] = orientations
+    edges.point_data[f'{layer.name}_rgba'] = rgba
+    glyph = edges.glyph(
+        scale=f'{layer.name}_norm',
+        orient=f'{layer.name}_vecs',
+        geom=geom,
+        factor=1,
+    )
+    return glyph
+
+
+def build_edges_meshes(
+    edge_values: pd.DataFrame,
+    node_coor: np.ndarray,
+    layer: EdgeLayer,
+    num_radius_bins: int = 10,
+) -> Sequence[pv.PolyData]:
+    if not isinstance(layer.radius, str):
+        radius_str = 'edge_radius'
+        edge_radius = np.full(len(edge_values), layer.radius)
+    else:
+        radius_str = layer.radius
+        edge_radius = edge_values[radius_str].values
+        if layer.radius_range is not None:
+            edge_radius = _normalise_to_range(
+                edge_radius,
+                layer.radius_range,
+            )
+
+    num_radius_bins = min(num_radius_bins, len(edge_radius))
+    # bins = np.quantile(
+    #     edge_radius,
+    #     np.linspace(0, 1, num_radius_bins + 1),
+    # )[1:]
+    bins = np.linspace(
+        edge_radius.min(),
+        edge_radius.max(),
+        num_radius_bins + 1,
+    )[1:]
+    asgt = np.digitize(edge_radius, bins, right=True)
+    assert num_radius_bins == len(np.unique(bins)), (
+        'Binning failed to produce the correct number of bins. '
+        'This is likely a bug. Please report it at '
+        'https://github.com/hypercoil/hyve/issues.'
+    )
+
+    edges = pv.PolyData()
+    for i in range(num_radius_bins):
+        idx = asgt == i
+        selected = edge_values[idx]
+        if len(selected) == 0:
+            continue
+        mesh = build_edges_mesh(
+            selected,
+            node_coor,
+            layer,
+            bins[i],
+        )
+        edges = edges.merge(mesh)
+    return edges
+
+
+def build_nodes_mesh(
+    node_values: pd.DataFrame,
+    node_coor: np.ndarray,
+    layer: NodeLayer,
+) -> pv.PolyData:
+    nodes = pv.PolyData(node_coor)
+    if not isinstance(layer.radius, str):
+        radius_str = 'node_radius'
+        node_radius = np.full(len(node_coor), layer.radius)
+    else:
+        radius_str = layer.radius
+        node_radius = node_values[radius_str].values
+        if layer.radius_range is not None:
+            node_radius = _normalise_to_range(
+                node_radius,
+                layer.radius_range,
+            )
+
+    if layer.color not in node_values.columns:
+        scalars = None
+        color = layer.color
+    else:
+        scalars = node_values[layer.color].values
+        color = None
+    if not isinstance(layer.alpha, str):
+        alpha = layer.alpha
+    else:
+        alpha = None
+    rgba = scalars_to_rgba(
+        scalars=scalars,
+        clim=layer.clim,
+        clim_negative=layer.clim_negative,
+        cmap=layer.cmap,
+        cmap_negative=layer.cmap_negative,
+        color=color,
+        alpha=alpha,
+    )
+    if isinstance(layer.alpha, str):
+        rgba[:, 3] = node_values[layer.alpha].values
+
+    nodes.point_data[radius_str] = node_radius
+    nodes.point_data[f'{layer.name}_rgba'] = rgba
+    glyph = nodes.glyph(
+        scale=radius_str,
+        orient=False,
+        geom=pv.Icosphere(nsub=2),
+    )
+    return glyph
+
+
+def add_network(
     plotter: pv.Plotter,
     node_coor: np.ndarray,
-    node_values: Optional[pd.DataFrame],
+    node_values: pd.DataFrame,
+    edge_values: pd.DataFrame,
     layers: Sequence[NodeLayer],
+    num_edge_radius_bins: int = 10,
     copy_actors: bool = False,
 ) -> pv.Plotter:
+    # TODO: See if we're better off merging the nodes and edges into a
+    #       single mesh, or if there's any reason to keep them separate.
     for layer in layers:
-        nodes = pv.PolyData(node_coor)
-        if not isinstance(layer.radius, str):
-            radius_str = 'node_radius'
-            node_radius = np.full(len(node_coor), layer.radius)
-        else:
-            radius_str = layer.radius
-            node_radius = node_values[radius_str].values
-            if layer.radius_range is not None:
-                node_radius = _normalise_to_range(
-                    node_radius,
-                    layer.radius_range,
-                )
-
-        if layer.color not in node_values.columns:
-            scalars = None
-            color = layer.color
-        else:
-            scalars = node_values[layer.color].values
-            color = None
-        if not isinstance(layer.alpha, str):
-            alpha = layer.alpha
-        else:
-            alpha = None
-        rgba = scalars_to_rgba(
-            scalars=scalars,
-            clim=layer.clim,
-            clim_negative=layer.clim_negative,
-            cmap=layer.cmap,
-            cmap_negative=layer.cmap_negative,
-            color=color,
-            alpha=alpha,
-        )
-        if isinstance(layer.alpha, str):
-            rgba[:, 3] = node_values[layer.alpha].values
-
-        nodes.point_data[radius_str] = node_radius
-        nodes.point_data[f'{layer.name}_rgba'] = rgba
-        glyph = nodes.glyph(
-            scale=radius_str,
-            orient=False,
-            geom=pv.Icosphere(),
-        )
+        glyph = build_nodes_mesh(node_values, node_coor, layer)
         plotter.add_mesh(
             glyph,
             scalars=f'{layer.name}_rgba',
@@ -546,6 +682,20 @@ def add_nodes(
             # shouldn't do anything here, but just in case
             copy_mesh=copy_actors,
         )
+
+        for edge_layer in layer.edge_layers:
+            glyphs = build_edges_meshes(
+                edge_values,
+                node_coor,
+                edge_layer,
+                num_edge_radius_bins,
+            )
+            plotter.add_mesh(
+                glyphs,
+                scalars=f'{edge_layer.name}_rgba',
+                rgb=True,
+                copy_mesh=copy_actors,
+            )
 
     return plotter
 
@@ -573,7 +723,9 @@ def unified_plotter(
     points_scalars_below_color: str = (
         POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE
     ),
-    points_scalars_layers: Optional[Sequence[Layer]] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
+    points_scalars_layers: Optional[Sequence[Layer]] = (
+        POINTS_SCALARS_LAYERS_DEFAULT_VALUE
+    ),
     node_values: Optional[pd.DataFrame] = None,
     node_coor: Optional[np.ndarray] = None,
     node_parcel_scalars: Optional[str] = None,
@@ -585,12 +737,13 @@ def unified_plotter(
     node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
     node_lh: Optional[np.ndarray] = None,
     edge_values: Optional[pd.DataFrame] = None,
-    edge_color: Optional[str] = 'edge_sgn',
-    edge_radius: Union[float, str] = 'edge_val',
-    edge_radius_range: Tuple[float, float] = (0.1, 1.8),
-    edge_cmap: Any = 'RdYlBu',
-    edge_clim: Tuple[float, float] = (0, 1),
+    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
+    edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
+    edge_radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
+    edge_cmap: Any = EDGE_CMAP_DEFAULT_VALUE,
+    edge_clim: Tuple[float, float] = EDGE_CLIM_DEFAULT_VALUE,
     edge_alpha: Union[float, str] = 1.0,
+    num_edge_radius_bins: int = 10,
     network_layers: Optional[Sequence[NodeLayer]] = None,
     hemisphere: Optional[Literal['left', 'right']] = None,
     hemisphere_slack: Optional[Union[float, Literal['default']]] = 'default',
@@ -998,6 +1151,18 @@ def unified_plotter(
         )
 
     if node_values is not None:
+        if edge_values is not None:
+            base_edge_layers = [EdgeLayer(
+                name='network',
+                cmap=edge_cmap,
+                clim=edge_clim,
+                color=edge_color,
+                radius=edge_radius,
+                radius_range=edge_radius_range,
+                alpha=edge_alpha,
+            )]
+        else:
+            base_edge_layers = []
         if network_layers is None:
             network_layers = []
         if node_coor is not None:
@@ -1009,13 +1174,16 @@ def unified_plotter(
                 radius=node_radius,
                 radius_range=node_radius_range,
                 alpha=node_alpha,
+                edge_layers=base_edge_layers,
             )
             network_layers = [base_layer] + list(network_layers)
-        p = add_nodes(
+        p = add_network(
             plotter=p,
             node_coor=node_coor,
             node_values=node_values,
+            edge_values=edge_values,
             layers=network_layers,
+            num_edge_radius_bins=num_edge_radius_bins,
             copy_actors=copy_actors,
         )
 
