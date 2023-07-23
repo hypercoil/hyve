@@ -47,10 +47,16 @@ from .plot import (
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
+    POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    POINTS_SCALARS_CMAP_DEFAULT_VALUE,
+    POINTS_SCALARS_DEFAULT_VALUE,
+    POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
+    SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Layer,
     _get_hemisphere_parameters,
     _null_auxwriter,
@@ -60,6 +66,8 @@ from .plot import (
 )
 from .surf import CortexTriSurface
 from .util import (
+    PointData,
+    PointDataCollection,
     auto_focus,
     cortex_cameras,
     filter_adjacency_data,
@@ -154,21 +162,33 @@ def scalars_from_gifti_f(
 
 
 def scalars_from_nifti_f(
+    scalars: str,
     nifti: nb.Nifti1Image,
-    threshold: float = 0.0
+    null_value: Optional[float] = 0.0,
+    point_size: Optional[float] = None,
 ) -> Mapping:
     if not isinstance(nifti, nb.Nifti1Image):
         nifti = nb.load(nifti)
     vol = nifti.get_fdata()
-    loc = np.where(vol > threshold)
+    if null_value is None:
+        null_value = np.nan
+    loc = np.where(vol != null_value)
 
     vol_scalars = vol[loc]
     vol_coor = np.stack(loc)
     vol_coor = (nifti.affine @ np.concatenate(
         (vol_coor, np.ones((1, vol_coor.shape[-1])))
     ))[:3].T
-    vol_voxdim = nifti.header.get_zooms()
-    return vol_scalars, vol_coor, vol_voxdim
+    if point_size is None:
+        vol_voxdim = nifti.header.get_zooms()
+        point_size = np.min(vol_voxdim[:3])
+    points_scalars = PointData(
+        pv.PointSet(vol_coor),
+        data={scalars: vol_scalars},
+        point_size=point_size,
+    )
+    points = PointDataCollection([points_scalars])
+    return points, scalars
 
 
 def scalars_from_array_f(
@@ -1177,20 +1197,23 @@ def automap_unified_plotter_f(
     surf: Optional['CortexTriSurface'] = None,
     surf_projection: str = 'pial',
     surf_alpha: float = 1.0,
-    surf_scalars: Optional[str] = None,
+    surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
     surf_scalars_boundary_color: str = 'black',
     surf_scalars_boundary_width: int = 0,
-    surf_scalars_cmap: Any = (None, None),
-    surf_scalars_clim: Any = 'robust',
-    surf_scalars_below_color: str = 'black',
-    surf_scalars_layers = None,
-    vol_coor: Optional[Tensor] = None,
-    vol_scalars: Optional[Tensor] = None,
-    vol_scalars_point_size: Optional[float] = None,
-    vol_voxdim: Optional[Sequence[float]] = None,
-    vol_scalars_cmap: Optional[str] = None,
-    vol_scalars_clim: Optional[tuple] = None,
-    vol_scalars_alpha: float = 0.99,
+    surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    surf_scalars_layers = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    points: Optional[PointDataCollection] = None,
+    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
+    points_alpha: float = 1.0,
+    points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
+    points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_below_color: str = POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    points_scalars_layers: Union[
+        Optional[Sequence[Layer]],
+        Tuple[Optional[Sequence[Layer]]]
+    ] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
     node_values: Optional[pd.DataFrame] = None,
     node_coor: Optional[Tensor] = None,
     node_parcel_scalars: Optional[str] = None,
@@ -1222,7 +1245,7 @@ def automap_unified_plotter_f(
     map_spec = map_spec or [
         'surf_projection',
         'surf_scalars',
-        'vol_scalars',
+        'points_scalars',
         ('node_values', 'node_coor', 'node_parcel_scalars', 'edge_values'),
         'hemisphere',
     ]
@@ -1312,7 +1335,7 @@ scalars_from_array_p = Primitive(
 scalars_from_nifti_p = Primitive(
     scalars_from_nifti_f,
     'scalars_from_nifti',
-    output=('vol_scalars', 'vol_coor', 'vol_voxdim'),
+    output=('points', 'points_scalars'),
     forward_unused=True,
 )
 

@@ -851,6 +851,8 @@ def unified_plotter(
                 )
 
     if points is not None:
+        if points_scalars_layers is None:
+            points_scalars_layers = []
         if points_scalars is not None:
             base_layer = Layer(
                 name=points_scalars,

@@ -357,11 +357,12 @@ def scalars_from_array(
     return transform
 
 
-#TODO: replace threshold arg with the option to provide one of our hypermaths
+#TODO: replace null_value arg with the option to provide one of our hypermaths
 #      expressions.
 def scalars_from_nifti(
     scalars: str,
-    threshold: float = 0.0,
+    null_value: Optional[float] = 0.0,
+    point_size: Optional[float] = None,
 ) -> callable:
     def transform(
         f: callable,
@@ -369,7 +370,9 @@ def scalars_from_nifti(
     ) -> callable:
         transformer_f = Partial(
             scalars_from_nifti_p,
-            threshold=threshold,
+            scalars=scalars,
+            null_value=null_value,
+            point_size=point_size,
         )
 
         def f_transformed(**params: Mapping):
