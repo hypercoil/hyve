@@ -31,12 +31,14 @@ from .prim import (
     scalars_from_gifti_p,
     scalars_from_nifti_p,
     scalars_from_array_p,
+    points_from_array_p,
     resample_to_surface_p,
     parcellate_colormap_p,
     parcellate_scalars_p,
     scatter_into_parcels_p,
     vertex_to_face_p,
     add_surface_overlay_p,
+    add_points_overlay_p,
     add_node_variable_p,
     add_edge_variable_p,
     add_postprocessor_p,
@@ -363,6 +365,7 @@ def scalars_from_nifti(
     scalars: str,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
+    plot: bool = True,
 ) -> callable:
     def transform(
         f: callable,
@@ -373,9 +376,12 @@ def scalars_from_nifti(
             scalars=scalars,
             null_value=null_value,
             point_size=point_size,
+            plot=plot,
         )
 
         def f_transformed(**params: Mapping):
+            points_scalars = params.pop('points_scalars', ())
+            points = params.pop('points', None)
             try:
                 nifti = params.pop(f'{scalars}_nifti')
             except KeyError:
@@ -383,7 +389,55 @@ def scalars_from_nifti(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {scalars}_nifti'
                 )
-            return compositor(f, transformer_f)(**params)(nifti=nifti)
+            return compositor(f, transformer_f)(**params)(
+                nifti=nifti,
+                points=points,
+                points_scalars=points_scalars,
+            )
+
+        return f_transformed
+    return transform
+
+
+def points_from_array(
+    scalars: str,
+    point_size: float = 1.0,
+    plot: bool = True,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            points_from_array_p,
+            scalars=scalars,
+            point_size=point_size,
+            plot=plot,
+        )
+
+        def f_transformed(**params: Mapping):
+            points_scalars = params.pop('points_scalars', ())
+            points = params.pop('points', None)
+            try:
+                coor = params.pop(f'{scalars}_coor')
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {scalars}_coor'
+                )
+            try:
+                values = params.pop(f'{scalars}_values')
+            except KeyError:
+                raise TypeError(
+                    'Transformed plot function missing one required '
+                    f'keyword-only argument: {scalars}_values'
+                )
+            return compositor(f, transformer_f)(**params)(
+                coor=coor,
+                values=values,
+                points=points,
+                points_scalars=points_scalars,
+            )
 
         return f_transformed
     return transform
@@ -730,6 +784,25 @@ def add_surface_overlay(
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
         transformer_f = add_surface_overlay_p
+
+        def f_transformed(**params: Mapping):
+            return compositor(f, transformer_f)()(
+                chains=chains,
+                params=params,
+            )
+
+        return f_transformed
+    return transform
+
+
+def add_points_overlay(
+    *chains: Sequence[callable],
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> direct_compositor:
+        transformer_f = add_points_overlay_p
 
         def f_transformed(**params: Mapping):
             return compositor(f, transformer_f)()(

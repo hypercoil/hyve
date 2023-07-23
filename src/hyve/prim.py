@@ -111,7 +111,7 @@ def scalars_from_cifti_f(
     exclude: Optional[Sequence[int]] = None,
     allow_multihemisphere: bool = True,
     coerce_to_scalar: bool = True,
-    plot: bool = False,
+    plot: bool = True,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     scalar_names = surf.add_cifti_dataset(
         name=scalars,
@@ -142,7 +142,7 @@ def scalars_from_gifti_f(
     exclude: Optional[Sequence[int]] = None,
     allow_multihemisphere: bool = True,
     coerce_to_scalar: bool = True,
-    plot: bool = False,
+    plot: bool = True,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     scalar_names = surf.add_gifti_dataset(
         name=scalars,
@@ -166,7 +166,10 @@ def scalars_from_nifti_f(
     nifti: nb.Nifti1Image,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
-) -> Mapping:
+    points: Optional[PointDataCollection] = None,
+    points_scalars: Sequence[str] = (),
+    plot: bool = True,
+) -> Tuple[PointDataCollection, str]:
     if not isinstance(nifti, nb.Nifti1Image):
         nifti = nb.load(nifti)
     vol = nifti.get_fdata()
@@ -182,13 +185,41 @@ def scalars_from_nifti_f(
     if point_size is None:
         vol_voxdim = nifti.header.get_zooms()
         point_size = np.min(vol_voxdim[:3])
-    points_scalars = PointData(
+    points_data = PointData(
         pv.PointSet(vol_coor),
         data={scalars: vol_scalars},
         point_size=point_size,
     )
-    points = PointDataCollection([points_scalars])
-    return points, scalars
+    if points:
+        points = points + PointDataCollection([points_data])
+    else:
+        points = PointDataCollection([points_data])
+    if plot:
+        points_scalars = tuple(list(points_scalars) + [scalars])
+    return points, points_scalars
+
+
+def points_from_array_f(
+    scalars: str,
+    coor: Tensor,
+    values: Tensor,
+    point_size: float = 1.0,
+    points: Optional[PointDataCollection] = None,
+    points_scalars: Sequence[str] = (),
+    plot: bool = True,
+) -> Tuple[PointDataCollection, str]:
+    points_data = PointData(
+        pv.PointSet(coor),
+        data={scalars: values},
+        point_size=point_size,
+    )
+    if points:
+        points = points + PointDataCollection([points_data])
+    else:
+        points = PointDataCollection([points_data])
+    if plot:
+        points_scalars = tuple(list(points_scalars) + [scalars])
+    return points, points_scalars
 
 
 def scalars_from_array_f(
@@ -551,6 +582,89 @@ def add_surface_overlay_f(
             'surf_scalars_cmap': surf_scalars_cmap,
             'surf_scalars_clim': surf_scalars_clim,
             'surf_scalars_below_color': surf_scalars_below_color,
+        },
+    }
+
+
+def add_points_overlay_f(
+    chains: Sequence[callable],
+    params: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    points_scalars_layers = params.pop('points_scalars_layers', [])
+    points_scalars = params.pop(
+        'points_scalars', POINTS_SCALARS_DEFAULT_VALUE
+    )
+    points_scalars_cmap = params.pop(
+        'points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE
+    )
+    points_scalars_clim = params.pop(
+        'points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE
+    )
+    points_scalars_below_color = params.pop(
+        'points_scalars_below_color',
+        POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    )
+
+    inner_f = ichain(*chains)(_null_op)
+    params = inner_f(**params)
+    layer_name = params.pop('points_scalars')
+    if not isinstance(layer_name, str): # It's a list or tuple
+        layer_name = layer_name[0]
+    layer_cmap = params.pop(
+        'points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE
+    )
+    layer_clim = params.pop(
+        'points_scalars_clim', LAYER_CLIM_DEFAULT_VALUE
+    )
+    layer_below_color = params.pop(
+        'points_scalars_below_color',
+        LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    )
+    layer_cmap = params.pop(f'{layer_name}_cmap', layer_cmap)
+    layer_clim = params.pop(f'{layer_name}_clim', layer_clim)
+    layer_cmap_negative = params.pop(
+        f'{layer_name}_cmap_negative',
+        LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    )
+    layer_clim_negative = params.pop(
+        f'{layer_name}_clim_negative',
+        LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    )
+    layer_alpha = params.pop(
+        f'{layer_name}_alpha', LAYER_ALPHA_DEFAULT_VALUE
+    )
+    layer_color = params.pop(
+        f'{layer_name}_color', LAYER_COLOR_DEFAULT_VALUE
+    )
+    layer_below_color = params.pop(
+        f'{layer_name}_below_color', layer_below_color
+    )
+    layer_blend_mode = params.pop(
+        f'{layer_name}_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE
+    )
+
+    layer = Layer(
+        name=layer_name,
+        cmap=layer_cmap,
+        clim=layer_clim,
+        cmap_negative=layer_cmap_negative,
+        clim_negative=layer_clim_negative,
+        alpha=layer_alpha,
+        color=layer_color,
+        below_color=layer_below_color,
+        blend_mode=layer_blend_mode,
+    )
+
+    points_scalars_layers = list(points_scalars_layers) + [layer]
+
+    return {
+        **params,
+        **{
+            'points_scalars_layers': points_scalars_layers,
+            'points_scalars': points_scalars,
+            'points_scalars_cmap': points_scalars_cmap,
+            'points_scalars_clim': points_scalars_clim,
+            'points_scalars_below_color': points_scalars_below_color,
         },
     }
 
@@ -1340,6 +1454,14 @@ scalars_from_nifti_p = Primitive(
 )
 
 
+points_from_array_p = Primitive(
+    points_from_array_f,
+    'points_from_array',
+    output=('points', 'points_scalars'),
+    forward_unused=True,
+)
+
+
 resample_to_surface_p = Primitive(
     resample_to_surface_f,
     'resample_to_surface',
@@ -1383,6 +1505,14 @@ vertex_to_face_p = Primitive(
 add_surface_overlay_p = Primitive(
     add_surface_overlay_f,
     'add_surface_overlay',
+    output=None,
+    forward_unused=True,
+)
+
+
+add_points_overlay_p = Primitive(
+    add_points_overlay_f,
+    'add_points_overlay',
     output=None,
     forward_unused=True,
 )
