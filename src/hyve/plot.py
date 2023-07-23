@@ -191,23 +191,6 @@ def _cfg_hemispheres(
     return hemispheres, hemispheres_str
 
 
-def _get_color(color, cmap, clim):
-    if (
-        isinstance(color, str)
-        or isinstance(color, tuple)
-        or isinstance(color, list)
-    ):
-        return color
-    else:
-        try:
-            cmap = cm.get_cmap(cmap)
-        except ValueError:
-            cmap = cmap
-        vmin, vmax = clim
-        norm = colors.Normalize(vmin=vmin, vmax=vmax)
-        return cmap(norm(color))
-
-
 def _normalise_to_range(values, valid_range):
     if valid_range is None:
         return values
@@ -219,50 +202,6 @@ def _normalise_to_range(values, valid_range):
         * (values - vmin)
         / (vmax - vmin)
     )
-
-
-def _map_to_attr(values, attr, attr_range):
-    if attr == 'index':
-        attr = np.array(values.index)
-    else:
-        attr = values[attr]
-    return _normalise_to_range(attr, attr_range)
-
-
-def _map_to_radius(
-    values: Sequence,
-    radius: Union[float, str],
-    radius_range: Tuple[float, float],
-) -> Sequence:
-    if isinstance(radius, float):
-        return (radius,) * len(values)
-    else:
-        return _map_to_attr(values, radius, radius_range)
-
-
-def _map_to_color(
-    values: Sequence,
-    color: Union[str, Sequence],
-    clim: Optional[Tuple[float, float]] = None,
-) -> Sequence:
-    if color in values.columns or color == 'index':
-        return _map_to_attr(values, color, clim)
-    else:
-        return (color,) * len(values)
-
-
-def _map_to_opacity(
-    values: Sequence,
-    alpha: Union[float, str],
-) -> Sequence:
-    if isinstance(alpha, float):
-        return (alpha,) * len(values)
-    # TODO: this will fail if you want to use the index as the opacity.
-    #       There's no legitimate reason you would want to do this
-    #       so it's a very low priority fix.
-    opa_min = max(0, values[alpha].min())
-    opa_max = min(1, values[alpha].max())
-    return _map_to_attr(values, alpha, (opa_min, opa_max))
 
 
 def _null_op(**params):
@@ -1186,40 +1125,6 @@ def unified_plotter(
             num_edge_radius_bins=num_edge_radius_bins,
             copy_actors=copy_actors,
         )
-
-    #     for c, col, rad, opa in zip(
-    #         node_coor,
-    #         _map_to_color(node_values, node_color, None),
-    #         _map_to_radius(node_values, node_radius, node_radius_range),
-    #         _map_to_opacity(node_values, node_alpha),
-    #     ):
-    #         node = pv.Icosphere(
-    #             radius=rad,
-    #             center=c,
-    #         )
-    #         p.add_mesh(
-    #             node,
-    #             color=_get_color(color=col, cmap=node_cmap, clim=node_clim),
-    #             opacity=opa,
-    #         )
-    # if edge_values is not None:
-    #     for c, d, ht, col, rad, opa in zip(
-    #         *process_edge_values(),
-    #         _map_to_color(edge_values, edge_color, None),
-    #         _map_to_radius(edge_values, edge_radius, edge_radius_range),
-    #         _map_to_opacity(edge_values, edge_alpha),
-    #     ):
-    #         edge = pv.Cylinder(
-    #             center=c,
-    #             direction=d,
-    #             height=ht,
-    #             radius=rad,
-    #         )
-    #         p.add_mesh(
-    #             edge,
-    #             color=_get_color(color=col, cmap=edge_cmap, clim=edge_clim),
-    #             opacity=opa,
-    #         )
 
     if postprocessors is None or len(postprocessors) == 0:
         postprocessors = [_null_postprocessor]
