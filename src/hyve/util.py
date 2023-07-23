@@ -36,6 +36,21 @@ class PointData:
         for key, value in data.items():
             self.points.point_data[key] = value
 
+    # TODO: Let's use nitransforms for this
+    def translate(
+        self,
+        translation: Sequence[float],
+        condition: Optional[callable] = None,
+    ) -> 'PointData':
+        if not condition:
+            points = pv.PointSet(self.points.points + np.array(translation))
+            return PointData(
+                points,
+                self.point_size,
+                data=self.points.point_data,
+            )
+        return self.select(condition).translate(translation)
+
     def select(self, condition: callable) -> 'PointData':
         mask = condition(self.points.points, self.points.point_data)
         return self.mask(mask)
@@ -47,9 +62,26 @@ class PointData:
     ) -> 'PointData':
         if return_complement:
             mask = ~mask
-        points = pv.PointData(self.points.points[mask])
+        points = pv.PointSet(self.points.points[mask])
         for name, data in self.points.point_data.items():
             points.point_data[name] = data[mask]
+        return PointData(points, self.point_size)
+
+    def __add__(self, other: 'PointData') -> 'PointData':
+        # Note that there is no coalescing of point data. We should probably
+        # underpin this with ``scipy.sparse`` or something equivalent.
+        # TODO: This is currently unsafe for point data with different keys.
+        #       It's fine for our purposes since this is only accessed when we
+        #       recombine point data that was split by a condition. However,
+        #       we should probably raise a more appropriate error if nothing
+        #       else.
+        points = pv.PointSet(np.concatenate([
+            self.points.points, other.points.points
+        ]))
+        for name, data in self.points.point_data.items():
+            points.point_data[name] = np.concatenate([
+                data, other.points.point_data[name]
+            ])
         return PointData(points, self.point_size)
 
 
@@ -96,6 +128,16 @@ class PointDataCollection:
             points=points,
             point_size=point_size,
         )
+
+    def translate(
+        self,
+        translation: Sequence[float],
+        condition: Optional[callable] = None,
+    ):
+        return PointDataCollection([
+            ds.translate(translation, condition=condition)
+            for ds in self.point_datasets
+        ])
 
     def __getitem__(self, key: int):
         return self.point_datasets[key]

@@ -485,13 +485,6 @@ def unified_plotter(
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
     ] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
-    vol_coor: Optional[np.ndarray] = None,
-    vol_scalars: Optional[np.ndarray] = None,
-    vol_scalars_point_size: Optional[float] = None,
-    vol_voxdim: Optional[Sequence[float]] = None,
-    vol_scalars_cmap: Optional[str] = None,
-    vol_scalars_clim: Optional[tuple] = None,
-    vol_scalars_alpha: float = 0.99,
     node_values: Optional[pd.DataFrame] = None,
     node_coor: Optional[np.ndarray] = None,
     node_parcel_scalars: Optional[str] = None,
@@ -751,19 +744,26 @@ def unified_plotter(
             ) / 2 - (
                 node_coor[node_lh, 0].max() + node_coor[node_lh, 0].min()
             ) / 2
-        elif vol_coor is not None:
-            left_mask = vol_coor[:, 0] < 0
-            hw_left = (
-                vol_coor[left_mask, 0].max() - vol_coor[left_mask, 0].min()
-            ) / 2
-            hw_right = (
-                vol_coor[~left_mask, 0].max() - vol_coor[~left_mask, 0].min()
-            ) / 2
-            hemi_gap = (
-                vol_coor[~left_mask, 0].max() + vol_coor[~left_mask, 0].min()
-            ) / 2 - (
-                vol_coor[left_mask, 0].max() + vol_coor[left_mask, 0].min()
-            ) / 2
+        elif points is not None:
+            slack_refdata = None
+            if points_scalars is not None:
+                slack_refdata = points.get_dataset(points_scalars)
+            elif points_scalars_layers:
+                slack_refdata = points.get_dataset(points_scalars_layers[0])
+            if slack_refdata is not None:
+                ref_coor = slack_refdata.points.points
+                left_mask = ref_coor[:, 0] < 0
+                hw_left = (
+                    ref_coor[left_mask, 0].max() - ref_coor[left_mask, 0].min()
+                ) / 2
+                hw_right = (
+                    ref_coor[~left_mask, 0].max() - ref_coor[~left_mask, 0].min()
+                ) / 2
+                hemi_gap = (
+                    ref_coor[~left_mask, 0].max() + ref_coor[~left_mask, 0].min()
+                ) / 2 - (
+                    ref_coor[left_mask, 0].max() + ref_coor[left_mask, 0].min()
+                ) / 2
         else:
             hw_left = hw_right = hemi_gap = 0
         min_gap = hw_left + hw_right
@@ -780,11 +780,18 @@ def unified_plotter(
             node_coor = node_coor.copy()
             node_coor[node_lh, 0] -= displacement
             node_coor[~node_lh, 0] += displacement
-        if vol_coor is not None:
-            left_mask = vol_coor[:, 0] < 0
-            vol_coor = vol_coor.copy()
-            vol_coor[left_mask, 0] -= displacement
-            vol_coor[~left_mask, 0] += displacement
+        if points is not None:
+            left_points = points.translate(
+                (-displacement, 0, 0),
+                condition=lambda coor, data: coor[:, 0] < 0
+            )
+            right_points = points.translate(
+                (displacement, 0, 0),
+                condition=lambda coor, data: coor[:, 0] > 0
+            )
+            points = PointDataCollection(
+                l + r for l, r in zip(left_points, right_points)
+            )
     elif surf is not None:
         for hemisphere in hemispheres:
             surf.__getattribute__(hemisphere).project(surf_projection)
@@ -868,23 +875,6 @@ def unified_plotter(
             plotter=p,
             points=points,
             layers=points_scalars_layers,
-        )
-    if vol_scalars is not None:
-        assert (
-            vol_coor is not None
-        ), 'Volumetric scalars provided with unspecified coordinates'
-        vol_scalars_point_size = vol_scalars_point_size or min(vol_voxdim[:3])
-        p.add_points(
-            vol_coor,
-            render_points_as_spheres=False,
-            style='points_gaussian',
-            emissive=False,
-            scalars=vol_scalars,
-            opacity=vol_scalars_alpha,
-            point_size=vol_scalars_point_size,
-            ambient=1.0,
-            cmap=vol_scalars_cmap,
-            clim=vol_scalars_clim,
         )
 
     if node_coor is not None:

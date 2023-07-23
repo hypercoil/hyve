@@ -95,8 +95,8 @@ def test_unified_plotter():
     )
     unified_plotter(
         points=points,
-        points_scalars_layers=(points_layer_pain,),
-        # hemisphere_slack=1.2,
+        points_scalars='pain',
+        hemisphere_slack=1.2,
         off_screen=False,
     )[0].show()
 
@@ -136,7 +136,7 @@ def test_unified_plotter():
         surf_alpha=0.2,
         points=points,
         points_scalars_layers=(points_layer_pain, points_layer_sphere),
-        #hemisphere_slack=1.2,
+        hemisphere_slack=1.2,
         off_screen=False,
     )[0].show()
 

@@ -12,7 +12,6 @@ import nibabel as nb
 
 from conveyant import (
     ichain,
-    iochain,
 )
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
@@ -25,7 +24,7 @@ from hyve.transforms import (
 
 def test_vol_scalars():
     nii = nb.load('/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz')
-    chain = ichain(
+    plot_f = ichain(
         surf_from_archive(),
         scalars_from_nifti('pain'),
         plot_to_image(),
@@ -34,14 +33,13 @@ def test_vol_scalars():
                 'scalars-pain_view-{view}'
             ),
         ),
-    )
-    plot_f = iochain(automap_unified_plotter_p, chain)
+    )(automap_unified_plotter_p)
     plot_f(
         template='fsaverage',
         surf_projection=('pial',),
         surf_alpha=0.3,
         pain_nifti=nii,
-        cmap='magma',
+        points_scalars_cmap='magma',
         basename='/tmp/vol',
         views=('dorsal', 'left', 'anterior'),
         output_dir='/tmp',
