@@ -57,7 +57,20 @@ from .plot import (
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    NODE_ALPHA_DEFAULT_VALUE,
+    NODE_CLIM_DEFAULT_VALUE,
+    NODE_CMAP_DEFAULT_VALUE,
+    NODE_COLOR_DEFAULT_VALUE,
+    NODE_RADIUS_DEFAULT_VALUE,
+    NODE_RLIM_DEFAULT_VALUE,
+    EDGE_ALPHA_DEFAULT_VALUE,
+    EDGE_CLIM_DEFAULT_VALUE,
+    EDGE_CMAP_DEFAULT_VALUE,
+    EDGE_COLOR_DEFAULT_VALUE,
+    EDGE_RADIUS_DEFAULT_VALUE,
+    EDGE_RLIM_DEFAULT_VALUE,
     Layer,
+    NodeLayer,
     _get_hemisphere_parameters,
     _null_auxwriter,
     _null_op,
@@ -68,6 +81,8 @@ from .surf import CortexTriSurface
 from .util import (
     PointData,
     PointDataCollection,
+    NetworkData,
+    NetworkDataCollection,
     auto_focus,
     cortex_cameras,
     filter_adjacency_data,
@@ -667,6 +682,46 @@ def add_points_overlay_f(
             'points_scalars_below_color': points_scalars_below_color,
         },
     }
+
+
+def build_network_f(
+    name: str,
+    node_coor: Tensor,
+    node_values: Optional[pd.DataFrame] = None,
+    edge_values: Optional[pd.DataFrame] = None,
+    lh_mask: Optional[Tensor] = None,
+    networks: Optional[NetworkDataCollection] = None,
+) -> NetworkDataCollection:
+    network = NetworkData(
+        name=name,
+        coor=node_coor,
+        nodes=node_values,
+        edges=edge_values,
+        lh_mask=lh_mask,
+    )
+    if networks is None:
+        networks = NetworkDataCollection([network])
+    else:
+        networks = networks + NetworkDataCollection([network])
+    return networks
+
+
+def node_coor_from_parcels_f(
+    surf: CortexTriSurface,
+    surf_projection: str,
+    parcellation: str,
+    null_value: float = 0,
+) -> Tensor:
+    coor = surf.parcel_centres_of_mass(
+        parcellation=parcellation,
+        projection=surf_projection,
+    )
+    lh_data = surf.point_data['left'][parcellation]
+    rh_data = surf.point_data['right'][parcellation]
+    parcel_ids = np.unique(np.concatenate((lh_data, rh_data)))
+    parcel_ids = parcel_ids[parcel_ids != null_value]
+    lh_mask = np.isin(parcel_ids, lh_data)
+    return coor, lh_mask
 
 
 def add_node_variable_f(
@@ -1328,23 +1383,23 @@ def automap_unified_plotter_f(
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
     ] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
-    node_values: Optional[pd.DataFrame] = None,
-    node_coor: Optional[Tensor] = None,
-    node_parcel_scalars: Optional[str] = None,
-    node_color: Optional[str] = 'black',
-    node_radius: Union[float, str] = 3.0,
-    node_radius_range: Tuple[float, float] = (2, 10),
-    node_cmap: Any = 'viridis',
-    node_clim: Tuple[float, float] = (0, 1),
-    node_alpha: Union[float, str] = 1.0,
-    node_lh: Optional[Tensor] = None,
-    edge_values: Optional[pd.DataFrame] = None,
-    edge_color: Optional[str] = 'edge_sgn',
-    edge_radius: Union[float, str] = 'edge_val',
-    edge_radius_range: Tuple[float, float] = (0.1, 1.8),
-    edge_cmap: Any = 'RdYlBu',
-    edge_clim: Tuple[float, float] = (0, 1),
-    edge_alpha: Union[float, str] = 1.0,
+    networks: Optional[NetworkDataCollection] = None,
+    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
+    node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
+    node_radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
+    node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
+    node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
+    node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
+    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
+    edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
+    edge_radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
+    edge_cmap: Any = EDGE_CMAP_DEFAULT_VALUE,
+    edge_clim: Tuple[float, float] = EDGE_CLIM_DEFAULT_VALUE,
+    edge_alpha: Union[float, str] = EDGE_ALPHA_DEFAULT_VALUE,
+    network_layers: Union[
+        Optional[Sequence[NodeLayer]],
+        Tuple[Optional[Sequence[NodeLayer]]]
+    ] = None,
     hemisphere: Optional[Literal['left', 'right']] = None,
     hemisphere_slack: Optional[Union[float, Literal['default']]] = 'default',
     off_screen: bool = True,
@@ -1360,7 +1415,7 @@ def automap_unified_plotter_f(
         'surf_projection',
         'surf_scalars',
         'points_scalars',
-        ('node_values', 'node_coor', 'node_parcel_scalars', 'edge_values'),
+        'networks',
         'hemisphere',
     ]
     params.pop('map_spec')
@@ -1514,6 +1569,22 @@ add_points_overlay_p = Primitive(
     add_points_overlay_f,
     'add_points_overlay',
     output=None,
+    forward_unused=True,
+)
+
+
+build_network_p = Primitive(
+    build_network_f,
+    'build_network',
+    output=('networks',),
+    forward_unused=True,
+)
+
+
+node_coor_from_parcels_p = Primitive(
+    node_coor_from_parcels_f,
+    'node_coor_from_parcels',
+    output=('node_coor', 'lh_mask'),
     forward_unused=True,
 )
 

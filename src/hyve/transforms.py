@@ -39,6 +39,8 @@ from .prim import (
     vertex_to_face_p,
     add_surface_overlay_p,
     add_points_overlay_p,
+    build_network_p,
+    node_coor_from_parcels_p,
     add_node_variable_p,
     add_edge_variable_p,
     add_postprocessor_p,
@@ -64,6 +66,10 @@ from .util import (
     auto_focus,
     filter_adjacency_data,
     filter_node_data,
+    PointDataCollection,
+    PointData,
+    NetworkDataCollection,
+    NetworkData,
 )
 
 
@@ -379,9 +385,12 @@ def scalars_from_nifti(
             plot=plot,
         )
 
-        def f_transformed(**params: Mapping):
-            points_scalars = params.pop('points_scalars', ())
-            points = params.pop('points', None)
+        def f_transformed(
+            *,
+            points_scalars: Sequence[str] = (),
+            points: Optional[PointDataCollection] = None,
+            **params: Mapping,
+        ):
             try:
                 nifti = params.pop(f'{scalars}_nifti')
             except KeyError:
@@ -814,8 +823,61 @@ def add_points_overlay(
     return transform
 
 
+def build_network(name: str = 'network') -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> direct_compositor:
+        transformer_f = Partial(
+            build_network_p,
+            name=name,
+        )
+
+        def f_transformed(
+            *,
+            node_coor: Tensor,
+            node_values: Optional[Tensor] = None,
+            edge_values: Optional[Tensor] = None,
+            networks: Optional[NetworkDataCollection] = None,
+            lh_mask: Optional[Tensor] = None,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                node_coor=node_coor,
+                node_values=node_values,
+                edge_values=edge_values,
+                networks=networks,
+                lh_mask=lh_mask,
+            )
+
+        return f_transformed
+    return transform
+
+
+def node_coor_from_parcels(parcellation: str) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> direct_compositor:
+        transformer_f = Partial(
+            node_coor_from_parcels_p,
+            parcellation=parcellation,
+        )
+
+        def f_transformed(**params: Mapping):
+            surf = params.get('surf')
+            surf_projection = params.get('surf_projection')
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                surf_projection=surf_projection,
+            )
+
+        return f_transformed
+    return transform
+
+
 def add_node_variable(
-    name: str = "node",
+    name: str = 'node',
     threshold: Union[float, int] = 0.0,
     percent_threshold: bool = False,
     topk_threshold: bool = False,
