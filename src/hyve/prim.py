@@ -38,8 +38,7 @@ from conveyant.compositors import (
 from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 
-from .const import Tensor
-from .plot import (
+from .const import (
     LAYER_ALPHA_DEFAULT_VALUE,
     LAYER_BELOW_COLOR_DEFAULT_VALUE,
     LAYER_BLEND_MODE_DEFAULT_VALUE,
@@ -69,6 +68,9 @@ from .plot import (
     EDGE_COLOR_DEFAULT_VALUE,
     EDGE_RADIUS_DEFAULT_VALUE,
     EDGE_RLIM_DEFAULT_VALUE,
+    Tensor,
+)
+from .plot import (
     EdgeLayer,
     Layer,
     NodeLayer,
