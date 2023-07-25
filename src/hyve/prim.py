@@ -69,6 +69,7 @@ from .plot import (
     EDGE_COLOR_DEFAULT_VALUE,
     EDGE_RADIUS_DEFAULT_VALUE,
     EDGE_RLIM_DEFAULT_VALUE,
+    EdgeLayer,
     Layer,
     NodeLayer,
     _get_hemisphere_parameters,
@@ -494,23 +495,42 @@ def vertex_to_face_f(
     return surf
 
 
+def _copy_dict_from_params(
+    params: Mapping[str, Any],
+    key_default: Sequence[Tuple[str, Any]] = (),
+) -> Mapping[str, Any]:
+    ret = {}
+    for key, default in key_default:
+        ret[key] = params.pop(key, default)
+    return ret, params
+
+
+def _move_params_to_dict(
+    params: Mapping[str, Any],
+    src_dst_default: Sequence[Tuple[str, str, Any]] = (),
+) -> Mapping[str, Any]:
+    ret = {}
+    for src, dst, default in src_dst_default:
+        ret[dst] = params.pop(src, default)
+    return ret, params
+
+
 def add_surface_overlay_f(
     chains: Sequence[callable],
     params: Mapping[str, Any],
 ) -> Mapping[str, Any]:
     surf_scalars_layers = params.pop('surf_scalars_layers', ([], []))
-    surf_scalars = params.pop(
-        'surf_scalars', SURF_SCALARS_DEFAULT_VALUE
-    )
-    surf_scalars_cmap = params.pop(
-        'surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE
-    )
-    surf_scalars_clim = params.pop(
-        'surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE
-    )
-    surf_scalars_below_color = params.pop(
-        'surf_scalars_below_color',
-        SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    store, params = _copy_dict_from_params(
+        params,
+        (
+            ('surf_scalars', SURF_SCALARS_DEFAULT_VALUE),
+            ('surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+            ('surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE),
+            (
+                'surf_scalars_below_color',
+                SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+            ),
+        ),
     )
 
     inner_f = ichain(*chains)(_null_op)
@@ -518,47 +538,55 @@ def add_surface_overlay_f(
     layer_name = params.pop('surf_scalars')
     if not isinstance(layer_name, str): # It's a list or tuple
         layer_name = layer_name[0]
-    layer_cmap = params.pop(
-        'surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE
-    )
-    layer_clim = params.pop(
-        'surf_scalars_clim', LAYER_CLIM_DEFAULT_VALUE
-    )
-    layer_below_color = params.pop(
-        'surf_scalars_below_color',
-        LAYER_BELOW_COLOR_DEFAULT_VALUE,
-    )
-    layer_cmap = params.pop(f'{layer_name}_cmap', layer_cmap)
-    layer_clim = params.pop(f'{layer_name}_clim', layer_clim)
-    layer_cmap_negative = params.pop(
-        f'{layer_name}_cmap_negative',
-        LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-    )
-    layer_clim_negative = params.pop(
-        f'{layer_name}_clim_negative',
-        LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-    )
-    layer_alpha = params.pop(
-        f'{layer_name}_alpha', LAYER_ALPHA_DEFAULT_VALUE
-    )
-    layer_color = params.pop(
-        f'{layer_name}_color', LAYER_COLOR_DEFAULT_VALUE
-    )
-    layer_below_color = params.pop(
-        f'{layer_name}_below_color', layer_below_color
-    )
-    layer_blend_mode = params.pop(
-        f'{layer_name}_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE
+
+    layer_params, params = _move_params_to_dict(params, (
+        ('surf_scalars_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+        ('surf_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
+        (
+            'surf_scalars_below_color',
+            'below_color',
+            LAYER_BELOW_COLOR_DEFAULT_VALUE,
+        ),
+    ))
+
+    layer_params, params = _move_params_to_dict(
+        params,
+        (
+            (f'{layer_name}_cmap', 'cmap', layer_params['cmap']),
+            (f'{layer_name}_clim', 'clim', layer_params['clim']),
+            (
+                f'{layer_name}_cmap_negative',
+                'cmap_negative',
+                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (
+                f'{layer_name}_clim_negative',
+                'clim_negative',
+                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (f'{layer_name}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
+            (f'{layer_name}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+            (
+                f'{layer_name}_below_color',
+                'below_color',
+                layer_params['below_color'],
+            ),
+            (
+                f'{layer_name}_blend_mode',
+                'blend_mode',
+                LAYER_BLEND_MODE_DEFAULT_VALUE,
+            ),
+        ),
     )
 
     hemi_params_p = _get_hemisphere_parameters(
-        surf_scalars_cmap=layer_cmap,
-        surf_scalars_clim=layer_clim,
+        surf_scalars_cmap=layer_params['cmap'],
+        surf_scalars_clim=layer_params['clim'],
         surf_scalars_layers=None,
     )
     hemi_params_n = _get_hemisphere_parameters(
-        surf_scalars_cmap=layer_cmap_negative,
-        surf_scalars_clim=layer_clim_negative,
+        surf_scalars_cmap=layer_params['cmap_negative'],
+        surf_scalars_clim=layer_params['clim_negative'],
         surf_scalars_layers=None,
     )
     layer_left = Layer(
@@ -567,10 +595,10 @@ def add_surface_overlay_f(
         clim=hemi_params_p.get('left', 'surf_scalars_clim'),
         cmap_negative=hemi_params_n.get('left', 'surf_scalars_cmap'),
         clim_negative=hemi_params_n.get('left', 'surf_scalars_clim'),
-        alpha=layer_alpha,
-        color=layer_color,
-        below_color=layer_below_color,
-        blend_mode=layer_blend_mode,
+        alpha=layer_params['alpha'],
+        color=layer_params['color'],
+        below_color=layer_params['below_color'],
+        blend_mode=layer_params['blend_mode'],
     )
     layer_right = Layer(
         name=layer_name,
@@ -578,10 +606,10 @@ def add_surface_overlay_f(
         clim=hemi_params_p.get('right', 'surf_scalars_clim'),
         cmap_negative=hemi_params_n.get('right', 'surf_scalars_cmap'),
         clim_negative=hemi_params_n.get('right', 'surf_scalars_clim'),
-        alpha=layer_alpha,
-        color=layer_color,
-        below_color=layer_below_color,
-        blend_mode=layer_blend_mode,
+        alpha=layer_params['alpha'],
+        color=layer_params['color'],
+        below_color=layer_params['below_color'],
+        blend_mode=layer_params['blend_mode'],
     )
 
     surf_scalars_layers = (
@@ -593,10 +621,7 @@ def add_surface_overlay_f(
         **params,
         **{
             'surf_scalars_layers': surf_scalars_layers,
-            'surf_scalars': surf_scalars,
-            'surf_scalars_cmap': surf_scalars_cmap,
-            'surf_scalars_clim': surf_scalars_clim,
-            'surf_scalars_below_color': surf_scalars_below_color,
+            **store,
         },
     }
 
@@ -606,18 +631,17 @@ def add_points_overlay_f(
     params: Mapping[str, Any],
 ) -> Mapping[str, Any]:
     points_scalars_layers = params.pop('points_scalars_layers', [])
-    points_scalars = params.pop(
-        'points_scalars', POINTS_SCALARS_DEFAULT_VALUE
-    )
-    points_scalars_cmap = params.pop(
-        'points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE
-    )
-    points_scalars_clim = params.pop(
-        'points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE
-    )
-    points_scalars_below_color = params.pop(
-        'points_scalars_below_color',
-        POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    store, params = _copy_dict_from_params(
+        params,
+        (
+            ('points_scalars', POINTS_SCALARS_DEFAULT_VALUE),
+            ('points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+            ('points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE),
+            (
+                'points_scalars_below_color',
+                POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+            ),
+        ),
     )
 
     inner_f = ichain(*chains)(_null_op)
@@ -625,49 +649,58 @@ def add_points_overlay_f(
     layer_name = params.pop('points_scalars')
     if not isinstance(layer_name, str): # It's a list or tuple
         layer_name = layer_name[0]
-    layer_cmap = params.pop(
-        'points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE
+
+    layer_params, params = _move_params_to_dict(params, (
+        ('points_scalars_cmap', 'cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+        ('points_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
+        (
+            'points_scalars_below_color',
+            'below_color',
+            LAYER_BELOW_COLOR_DEFAULT_VALUE,
+        ),
+    ))
+
+    layer_params, params = _move_params_to_dict(
+        params,
+        (
+            (f'{layer_name}_cmap', 'cmap', layer_params['cmap']),
+            (f'{layer_name}_clim', 'clim', layer_params['clim']),
+            (
+                f'{layer_name}_cmap_negative',
+                'cmap_negative',
+                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (
+                f'{layer_name}_clim_negative',
+                'clim_negative',
+                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (f'{layer_name}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
+            (f'{layer_name}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+            (
+                f'{layer_name}_below_color',
+                'below_color',
+                layer_params['below_color'],
+            ),
+            (
+                f'{layer_name}_blend_mode',
+                'blend_mode',
+                LAYER_BLEND_MODE_DEFAULT_VALUE,
+            ),
+        ),
     )
-    layer_clim = params.pop(
-        'points_scalars_clim', LAYER_CLIM_DEFAULT_VALUE
-    )
-    layer_below_color = params.pop(
-        'points_scalars_below_color',
-        LAYER_BELOW_COLOR_DEFAULT_VALUE,
-    )
-    layer_cmap = params.pop(f'{layer_name}_cmap', layer_cmap)
-    layer_clim = params.pop(f'{layer_name}_clim', layer_clim)
-    layer_cmap_negative = params.pop(
-        f'{layer_name}_cmap_negative',
-        LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-    )
-    layer_clim_negative = params.pop(
-        f'{layer_name}_clim_negative',
-        LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-    )
-    layer_alpha = params.pop(
-        f'{layer_name}_alpha', LAYER_ALPHA_DEFAULT_VALUE
-    )
-    layer_color = params.pop(
-        f'{layer_name}_color', LAYER_COLOR_DEFAULT_VALUE
-    )
-    layer_below_color = params.pop(
-        f'{layer_name}_below_color', layer_below_color
-    )
-    layer_blend_mode = params.pop(
-        f'{layer_name}_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE
-    )
+
 
     layer = Layer(
         name=layer_name,
-        cmap=layer_cmap,
-        clim=layer_clim,
-        cmap_negative=layer_cmap_negative,
-        clim_negative=layer_clim_negative,
-        alpha=layer_alpha,
-        color=layer_color,
-        below_color=layer_below_color,
-        blend_mode=layer_blend_mode,
+        cmap=layer_params['cmap'],
+        clim=layer_params['clim'],
+        cmap_negative=layer_params['cmap_negative'],
+        clim_negative=layer_params['clim_negative'],
+        alpha=layer_params['alpha'],
+        color=layer_params['color'],
+        below_color=layer_params['below_color'],
+        blend_mode=layer_params['blend_mode'],
     )
 
     points_scalars_layers = list(points_scalars_layers) + [layer]
@@ -676,10 +709,158 @@ def add_points_overlay_f(
         **params,
         **{
             'points_scalars_layers': points_scalars_layers,
-            'points_scalars': points_scalars,
-            'points_scalars_cmap': points_scalars_cmap,
-            'points_scalars_clim': points_scalars_clim,
-            'points_scalars_below_color': points_scalars_below_color,
+            **store,
+        },
+    }
+
+
+def add_network_overlay_f(
+    layer_name: str,
+    chains: Sequence[callable],
+    params: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    network_layers = params.pop('network_layers', [])
+    store, params = _copy_dict_from_params(
+        params,
+        (
+            ('node_cmap', NODE_CMAP_DEFAULT_VALUE),
+            ('node_clim', NODE_CLIM_DEFAULT_VALUE),
+            ('node_color', NODE_COLOR_DEFAULT_VALUE),
+            ('node_radius', NODE_RADIUS_DEFAULT_VALUE),
+            ('node_radius_range', NODE_RLIM_DEFAULT_VALUE),
+            ('node_alpha', NODE_ALPHA_DEFAULT_VALUE),
+            ('edge_cmap', EDGE_CMAP_DEFAULT_VALUE),
+            ('edge_clim', EDGE_CLIM_DEFAULT_VALUE),
+            ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
+            ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
+            ('edge_radius', EDGE_RADIUS_DEFAULT_VALUE),
+            ('edge_radius_range', EDGE_RLIM_DEFAULT_VALUE),
+        )
+    )
+
+    inner_f = ichain(*chains)(_null_op)
+    params = inner_f(**params)
+
+    node_params, params = _move_params_to_dict(params, (
+        ('node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
+        ('node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
+        ('node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
+        ('node_radius', 'radius', NODE_RADIUS_DEFAULT_VALUE),
+        ('node_radius_range', 'radius_range', NODE_RLIM_DEFAULT_VALUE),
+        ('node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
+    ))
+    edge_params, params = _move_params_to_dict(params, (
+        ('edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
+        ('edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
+        ('edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
+        ('edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
+        ('edge_radius', 'radius', EDGE_RADIUS_DEFAULT_VALUE),
+        ('edge_radius_range', 'radius_range', EDGE_RLIM_DEFAULT_VALUE),
+    ))
+
+    node_params, params = _move_params_to_dict(
+        params,
+        (
+            (f'{layer_name}_node_cmap', 'cmap', node_params['cmap']),
+            (f'{layer_name}_node_clim', 'clim', node_params['clim']),
+            (f'{layer_name}_node_color', 'color', node_params['color']),
+            (f'{layer_name}_node_alpha', 'alpha', node_params['alpha']),
+            (f'{layer_name}_node_radius', 'radius', node_params['radius']),
+            (
+                f'{layer_name}_node_radius_range',
+                'radius_range',
+                node_params['radius_range'],
+            ),
+            (
+                f'{layer_name}_node_cmap_negative',
+                'cmap_negative',
+                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (
+                f'{layer_name}_node_clim_negative',
+                'clim_negative',
+                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (
+                f'{layer_name}_node_below_color',
+                'below_color',
+                LAYER_BELOW_COLOR_DEFAULT_VALUE,
+            ),
+        ),
+    )
+    edge_params, params = _move_params_to_dict(
+        params,
+        (
+            (f'{layer_name}_edge_cmap', 'cmap', edge_params['cmap']),
+            (f'{layer_name}_edge_clim', 'clim', edge_params['clim']),
+            (f'{layer_name}_edge_color', 'color', edge_params['color']),
+            (f'{layer_name}_edge_alpha', 'alpha', edge_params['alpha']),
+            (f'{layer_name}_edge_radius', 'radius', edge_params['radius']),
+            (
+                f'{layer_name}_edge_radius_range',
+                'radius_range',
+                edge_params['radius_range'],
+            ),
+            (
+                f'{layer_name}_edge_cmap_negative',
+                'cmap_negative',
+                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (
+                f'{layer_name}_edge_clim_negative',
+                'clim_negative',
+                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+            ),
+            (
+                f'{layer_name}_edge_below_color',
+                'below_color',
+                LAYER_BELOW_COLOR_DEFAULT_VALUE,
+            ),
+        ),
+    )
+
+    edge_layer = EdgeLayer(
+        name=layer_name,
+        cmap=edge_params['cmap'],
+        clim=edge_params['clim'],
+        cmap_negative=edge_params['cmap_negative'],
+        clim_negative=edge_params['clim_negative'],
+        color=edge_params['color'],
+        alpha=edge_params['alpha'],
+        below_color=edge_params['below_color'],
+        radius=edge_params['radius'],
+        radius_range=edge_params['radius_range'],
+    )
+    node_layer = NodeLayer(
+        name=layer_name,
+        cmap=node_params['cmap'],
+        clim=node_params['clim'],
+        cmap_negative=node_params['cmap_negative'],
+        clim_negative=node_params['clim_negative'],
+        color=node_params['color'],
+        alpha=node_params['alpha'],
+        below_color=node_params['below_color'],
+        radius=node_params['radius'],
+        radius_range=node_params['radius_range'],
+        edge_layers=[edge_layer],
+    )
+
+    network_layers = list(network_layers) + [node_layer]
+    networks = build_network_f(
+        name=layer_name,
+        node_coor=params['node_coor'],
+        node_values=params.get('node_values', None),
+        edge_values=params.get('edge_values', None),
+        lh_mask=params.get('lh_mask', None),
+        networks=params.get('networks', None),
+    )
+
+    return {
+        **params,
+        **{
+            'network_layers': network_layers,
+            'networks': networks,
+            **store,
         },
     }
 
@@ -1568,6 +1749,14 @@ add_surface_overlay_p = Primitive(
 add_points_overlay_p = Primitive(
     add_points_overlay_f,
     'add_points_overlay',
+    output=None,
+    forward_unused=True,
+)
+
+
+add_network_overlay_p = Primitive(
+    add_network_overlay_f,
+    'add_network_overlay',
     output=None,
     forward_unused=True,
 )

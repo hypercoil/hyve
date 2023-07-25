@@ -39,6 +39,7 @@ from .prim import (
     vertex_to_face_p,
     add_surface_overlay_p,
     add_points_overlay_p,
+    add_network_overlay_p,
     build_network_p,
     node_coor_from_parcels_p,
     add_node_variable_p,
@@ -815,6 +816,27 @@ def add_points_overlay(
 
         def f_transformed(**params: Mapping):
             return compositor(f, transformer_f)()(
+                chains=chains,
+                params=params,
+            )
+
+        return f_transformed
+    return transform
+
+
+def add_network_overlay(
+    layer_name: str,
+    *chains: Sequence[callable],
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> direct_compositor:
+        transformer_f = add_network_overlay_p
+
+        def f_transformed(**params: Mapping):
+            return compositor(f, transformer_f)()(
+                layer_name=layer_name,
                 chains=chains,
                 params=params,
             )
