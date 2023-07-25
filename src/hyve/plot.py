@@ -54,15 +54,15 @@ POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
 POINTS_SCALARS_LAYERS_DEFAULT_VALUE = None
 
 NODE_COLOR_DEFAULT_VALUE = 'black'
-NODE_RADIUS_DEFAULT_VALUE = 5.0
-NODE_RLIM_DEFAULT_VALUE = (3, 10)
+NODE_RADIUS_DEFAULT_VALUE = 3.0
+NODE_RLIM_DEFAULT_VALUE = (2, 10)
 NODE_CMAP_DEFAULT_VALUE = DEFAULT_CMAP
 NODE_CLIM_DEFAULT_VALUE = (0, 1)
 NODE_ALPHA_DEFAULT_VALUE = 1.0
 
 EDGE_COLOR_DEFAULT_VALUE = 'edge_sgn'
 EDGE_RADIUS_DEFAULT_VALUE = 'edge_val'
-EDGE_RLIM_DEFAULT_VALUE = (0.1, 2.8)
+EDGE_RLIM_DEFAULT_VALUE = (0.1, 1.8)
 EDGE_CMAP_DEFAULT_VALUE = 'RdYlBu'
 EDGE_CLIM_DEFAULT_VALUE = (0, 1)
 EDGE_ALPHA_DEFAULT_VALUE = 1.0
@@ -221,6 +221,7 @@ def _rgba_impl(
     clim: Optional[Tuple[float, float]] = None,
     cmap: Any = 'viridis',
     below_color: Optional[str] = None,
+    hide_subthreshold: bool = False,
 ):
     if clim == 'robust':
         clim = robust_clim(scalars)
@@ -232,7 +233,7 @@ def _rgba_impl(
     rgba = cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba(scalars)
     if below_color is not None and vmin is not None:
         rgba[scalars < vmin] = colors.to_rgba(below_color)
-    elif vmin is not None:
+    elif vmin is not None and hide_subthreshold:
         # Set alpha to 0 for sub-threshold values
         rgba[scalars < vmin, 3] = 0
     return rgba
@@ -247,6 +248,7 @@ def scalars_to_rgba(
     color: Optional[str] = None,
     alpha: Optional[float] = None,
     below_color: Optional[str] = None,
+    hide_subthreshold: bool = False,
 ) -> Tensor:
     """
     Convert scalar values to RGBA colors.
@@ -287,13 +289,20 @@ def scalars_to_rgba(
         scalars_negative[scalars_negative < 0] = 0
         scalars[neg_idx] = 0
         rgba_neg = _rgba_impl(
-            scalars_negative,
-            clim_negative,
-            cmap_negative,
-            below_color,
+            scalars=scalars_negative,
+            clim=clim_negative,
+            cmap=cmap_negative,
+            below_color=below_color,
+            hide_subthreshold=hide_subthreshold,
         )
 
-    rgba = _rgba_impl(scalars, clim, cmap, below_color)
+    rgba = _rgba_impl(
+        scalars=scalars,
+        clim=clim,
+        cmap=cmap,
+        below_color=below_color,
+        hide_subthreshold=hide_subthreshold,
+    )
     if cmap_negative is not None:
         rgba[neg_idx] = rgba_neg[neg_idx]
     if alpha is not None:
@@ -331,6 +340,7 @@ def layer_rgba(
         clim_negative=layer.clim_negative,
         alpha=layer.alpha,
         below_color=layer.below_color,
+        hide_subthreshold=True,
     )
 
 
@@ -369,6 +379,7 @@ def compose_layers(
         color=color,
         alpha=dst.alpha,
         below_color=dst.below_color,
+        hide_subthreshold=True,
     )
     dst = premultiply_alpha(dst)
 
@@ -433,6 +444,7 @@ def add_points_scalars(
             color=layer.color,
             alpha=layer.alpha,
             below_color=layer.below_color,
+            hide_subthreshold=True,
         )
         plotter.add_points(
             points=dataset.points.points,
@@ -481,13 +493,22 @@ def build_edges_mesh(
         cmap_negative=layer.cmap_negative,
         color=color,
         alpha=alpha,
+        hide_subthreshold=False,
     )
+    if isinstance(layer.alpha, str):
+        rgba[:, 3] = edge_values[layer.alpha].values
+    elif alpha == 1:
+        # We shouldn't have to do this, but for some reason either VTK or
+        # PyVista is adding transparency even if we set alpha to 1 when we use
+        # explicit RGBA to colour the mesh. Dropping the alpha channel
+        # fixes this.
+        rgba = rgba[:, :3]
 
     # TODO: This is a hack to get the glyphs to scale correctly.
     # The magic scalar is used to scale the glyphs to the correct radius.
     # Where does it come from? I have no idea. It's just what works. And
     # that, only roughly. No guarantees that it will work on new data.
-    geom = pv.Cylinder(resolution=10, radius=0.01 * radius)
+    geom = pv.Cylinder(resolution=20, radius=0.01 * radius)
 
     edges.point_data[f'{layer.name}_norm'] = norm
     edges.point_data[f'{layer.name}_vecs'] = orientations
@@ -520,15 +541,15 @@ def build_edges_meshes(
             )
 
     num_radius_bins = min(num_radius_bins, len(edge_radius))
-    # bins = np.quantile(
-    #     edge_radius,
-    #     np.linspace(0, 1, num_radius_bins + 1),
-    # )[1:]
-    bins = np.linspace(
-        edge_radius.min(),
-        edge_radius.max(),
-        num_radius_bins + 1,
+    bins = np.quantile(
+        edge_radius,
+        np.linspace(0, 1, num_radius_bins + 1),
     )[1:]
+    # bins = np.linspace(
+    #     edge_radius.min(),
+    #     edge_radius.max(),
+    #     num_radius_bins + 1,
+    # )[1:]
     asgt = np.digitize(edge_radius, bins, right=True)
     assert num_radius_bins == len(np.unique(bins)), (
         'Binning failed to produce the correct number of bins. '
@@ -557,6 +578,7 @@ def build_nodes_mesh(
     node_coor: np.ndarray,
     layer: NodeLayer,
 ) -> pv.PolyData:
+    node_values = node_values.reset_index()
     nodes = pv.PolyData(node_coor)
     if not isinstance(layer.radius, str):
         radius_str = 'node_radius'
@@ -588,16 +610,23 @@ def build_nodes_mesh(
         cmap_negative=layer.cmap_negative,
         color=color,
         alpha=alpha,
+        hide_subthreshold=False,
     )
     if isinstance(layer.alpha, str):
         rgba[:, 3] = node_values[layer.alpha].values
+    elif alpha == 1:
+        # We shouldn't have to do this, but for some reason either VTK or
+        # PyVista is adding transparency even if we set alpha to 1 when we use
+        # explicit RGBA to colour the mesh. Dropping the alpha channel
+        # fixes this.
+        rgba = rgba[:, :3]
 
     nodes.point_data[radius_str] = node_radius
     nodes.point_data[f'{layer.name}_rgba'] = rgba
     glyph = nodes.glyph(
         scale=radius_str,
         orient=False,
-        geom=pv.Icosphere(nsub=2),
+        geom=pv.Icosphere(nsub=3),
     )
     return glyph
 

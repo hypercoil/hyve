@@ -638,7 +638,7 @@ def filter_adjacency_data(
     if degree is not None:
         degree = pd.DataFrame(
             degree,
-            index=range(1, degree.shape[0] + 1),
+            index=range(degree.shape[0]),
             columns=(f'{name}_degree',),
         )
         if incidents is None:
@@ -646,7 +646,7 @@ def filter_adjacency_data(
     if incidents is not None:
         incidents = pd.DataFrame(
             incidents,
-            index=range(1, incidents.shape[0] + 1),
+            index=range(incidents.shape[0]),
             columns=(f'{name}_incidents',),
         )
         if degree is None:
