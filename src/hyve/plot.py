@@ -69,10 +69,11 @@ EDGE_ALPHA_DEFAULT_VALUE = 1.0
 
 
 @dataclasses.dataclass(frozen=True)
-class Layer:
-    """Container for metadata to construct a single layer of a plot."""
-    name: str
-    cmap: Any = DEFAULT_CMAP
+class _LayerBase:
+    """Base class for layers."""
+    name: Optional[str]
+    long_name: Optional[str] = None
+    cmap: Optional[Any] = DEFAULT_CMAP
     clim: Optional[Tuple[float, float]] = LAYER_CLIM_DEFAULT_VALUE
     cmap_negative: Optional[Any] = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
     clim_negative: Optional[Tuple[float, float]] = (
@@ -81,17 +82,25 @@ class Layer:
     color: Optional[Any] = LAYER_COLOR_DEFAULT_VALUE
     alpha: float = LAYER_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = LAYER_BELOW_COLOR_DEFAULT_VALUE
+    hide_subthreshold: bool = False
+    style: Optional[Mapping[str, Any]] = None
     blend_mode: Literal['source_over'] = LAYER_BLEND_MODE_DEFAULT_VALUE
 
 
+# Right now, it's the same as the base class, but we might want to add
+# additional parameters later.
 @dataclasses.dataclass(frozen=True)
-class EdgeLayer:
+class Layer(_LayerBase):
+    """Container for metadata to construct a single layer of a plot."""
+    name: str
+    hide_subthreshold: bool = True
+
+
+@dataclasses.dataclass(frozen=True)
+class EdgeLayer(_LayerBase):
     """Container for metadata to construct a single edge layer of a plot."""
     name: str
-    cmap: Any = DEFAULT_CMAP
-    cmap_negative = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
     clim: Optional[Tuple[float, float]] = EDGE_CLIM_DEFAULT_VALUE
-    clim_negative = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE
     color: str = EDGE_COLOR_DEFAULT_VALUE
     radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE
     radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE
@@ -99,13 +108,10 @@ class EdgeLayer:
 
 
 @dataclasses.dataclass(frozen=True)
-class NodeLayer:
+class NodeLayer(_LayerBase):
     """Container for metadata to construct a single node layer of a plot."""
     name: str
-    cmap: Any = DEFAULT_CMAP
-    cmap_negative = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
     clim: Optional[Tuple[float, float]] = NODE_CLIM_DEFAULT_VALUE
-    clim_negative = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE
     color: str = NODE_COLOR_DEFAULT_VALUE
     radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE
     radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE
@@ -340,7 +346,7 @@ def layer_rgba(
         clim_negative=layer.clim_negative,
         alpha=layer.alpha,
         below_color=layer.below_color,
-        hide_subthreshold=True,
+        hide_subthreshold=layer.hide_subthreshold,
     )
 
 
@@ -379,7 +385,7 @@ def compose_layers(
         color=color,
         alpha=dst.alpha,
         below_color=dst.below_color,
-        hide_subthreshold=True,
+        hide_subthreshold=dst.hide_subthreshold,
     )
     dst = premultiply_alpha(dst)
 
@@ -444,7 +450,7 @@ def add_points_scalars(
             color=layer.color,
             alpha=layer.alpha,
             below_color=layer.below_color,
-            hide_subthreshold=True,
+            hide_subthreshold=layer.hide_subthreshold,
         )
         plotter.add_points(
             points=dataset.points.points,
@@ -495,7 +501,7 @@ def build_edges_mesh(
         cmap_negative=layer.cmap_negative,
         color=color,
         alpha=alpha,
-        hide_subthreshold=False,
+        hide_subthreshold=layer.hide_subthreshold,
     )
     if isinstance(layer.alpha, str):
         rgba[:, 3] = edge_values[layer.alpha].values
@@ -553,7 +559,8 @@ def build_edges_meshes(
     #     num_radius_bins + 1,
     # )[1:]
     asgt = np.digitize(edge_radius, bins, right=True)
-    assert num_radius_bins == len(np.unique(bins)), (
+    #assert num_radius_bins == len(np.unique(bins)), (
+    assert num_radius_bins == len(bins), (
         'Binning failed to produce the correct number of bins. '
         'This is likely a bug. Please report it at '
         'https://github.com/hypercoil/hyve/issues.'
@@ -612,7 +619,7 @@ def build_nodes_mesh(
         cmap_negative=layer.cmap_negative,
         color=color,
         alpha=alpha,
-        hide_subthreshold=False,
+        hide_subthreshold=layer.hide_subthreshold,
     )
     if isinstance(layer.alpha, str):
         rgba[:, 3] = node_values[layer.alpha].values
