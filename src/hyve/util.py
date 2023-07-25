@@ -44,7 +44,7 @@ class PointData:
     ) -> 'PointData':
         if not condition:
             points = pv.PointSet(self.points.points + np.array(translation))
-            return PointData(
+            return self.__class__(
                 points,
                 self.point_size,
                 data=self.points.point_data,
@@ -65,7 +65,7 @@ class PointData:
         points = pv.PointSet(self.points.points[mask])
         for name, data in self.points.point_data.items():
             points.point_data[name] = data[mask]
-        return PointData(points, self.point_size)
+        return self.__class__(points, self.point_size)
 
     def __add__(self, other: 'PointData') -> 'PointData':
         # Note that there is no coalescing of point data. We should probably
@@ -82,7 +82,7 @@ class PointData:
             points.point_data[name] = np.concatenate([
                 data, other.points.point_data[name]
             ])
-        return PointData(points, self.point_size)
+        return self.__class__(points, self.point_size)
 
 
 class PointDataCollection:
@@ -93,7 +93,7 @@ class PointDataCollection:
         self.point_datasets = list(point_datasets) or []
 
     def add_point_dataset(self, point_dataset: PointData):
-        self.point_datasets.append(point_dataset)
+        return self.__class__(self.point_datasets + [point_dataset])
 
     def get_dataset(
         self,
@@ -134,7 +134,7 @@ class PointDataCollection:
         translation: Sequence[float],
         condition: Optional[callable] = None,
     ):
-        return PointDataCollection([
+        return self.__class__([
             ds.translate(translation, condition=condition)
             for ds in self.point_datasets
         ])
@@ -155,14 +155,125 @@ class PointDataCollection:
         return str(self)
 
     def __add__(self, other):
-        return PointDataCollection(self.point_datasets + other.point_datasets)
+        return self.__class__(self.point_datasets + other.point_datasets)
 
     def __radd__(self, other):
-        return PointDataCollection(other.point_datasets + self.point_datasets)
+        return self.__class__(other.point_datasets + self.point_datasets)
 
-    def __iadd__(self, other):
-        self.point_datasets += other.point_datasets
-        return self
+
+@dataclasses.dataclass(frozen=True)
+class NetworkData:
+    name: str
+    coor: Tensor
+    nodes: pd.DataFrame
+    edges: Optional[pd.DataFrame] = None
+    lh_mask: Optional[Tensor] = None
+
+    def translate(
+        self,
+        translation: Sequence[float],
+        condition: Optional[callable] = None,
+    ) -> 'PointData':
+        if not condition:
+            coor = self.coor + np.array(translation)
+        else:
+            mask = condition(self.coor, self.nodes, self.lh_mask)
+            coor = self.coor.copy()
+            coor[mask] = coor[mask] + np.array(translation)
+        return self.__class__(
+            self.name,
+            coor,
+            self.nodes,
+            self.edges,
+            self.lh_mask,
+        )
+
+
+class NetworkDataCollection:
+    def __init__(
+        self,
+        network_datasets: Optional[Sequence[NetworkData]] = None
+    ):
+        self.network_datasets = list(network_datasets) or []
+
+    def add_network_dataset(self, network_dataset: NetworkData):
+        return self.__class__(self.network_datasets + [network_dataset])
+
+    def get_dataset(
+        self,
+        key: str,
+        return_all: bool = False,
+        strict: bool = True,
+    ) -> Union[NetworkData, 'NetworkDataCollection']:
+        indices = [
+            i for i in range(len(self.network_datasets))
+            if self.network_datasets[i].name == key
+        ]
+        if len(indices) == 0:
+            raise KeyError(f'No node data with key {key}')
+        if not return_all:
+            if len(indices) > 1 and strict:
+                raise KeyError(f'Multiple node data with key {key}')
+            return self[indices[0]]
+        else:
+            return self.__class__([self[i] for i in indices])
+
+    def get_node_dataset(
+        self,
+        key: str,
+        return_all: bool = False,
+        strict: bool = True,
+    ) -> Union[NetworkData, Sequence[NetworkData], 'NetworkDataCollection']:
+        return self.get_dataset(
+            key,
+            return_all=return_all,
+            strict=strict,
+            search='nodes',
+        )
+
+    def get_edge_dataset(
+        self,
+        key: str,
+        return_all: bool = False,
+        strict: bool = True,
+    ) -> Union[NetworkData, Sequence[NetworkData], 'NetworkDataCollection']:
+        return self.get_dataset(
+            key,
+            return_all=return_all,
+            strict=strict,
+            search='edges',
+        )
+
+    def translate(
+        self,
+        translation: Sequence[float],
+        condition: Optional[callable] = None,
+    ):
+        return self.__class__([
+            ds.translate(translation, condition=condition)
+            for ds in self.network_datasets
+        ])
+
+    def __getitem__(self, key: int):
+        return self.network_datasets[key]
+
+    def __len__(self):
+        return len(self.network_datasets)
+
+    def __iter__(self):
+        return iter(self.network_datasets)
+
+    def __str__(self):
+        return f'NetworkDataCollection({self.network_datasets})'
+
+    def __repr__(self):
+        return str(self)
+
+    def __add__(self, other):
+        return self.__class__(self.network_datasets + other.network_datasets)
+
+    def __radd__(self, other):
+        return self.__class__(other.network_datasets + self.network_datasets)
 
 
 def cortex_theme() -> Any:
