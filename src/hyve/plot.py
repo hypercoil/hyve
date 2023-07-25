@@ -19,8 +19,8 @@ from .surf import (
     CortexTriSurface,
 )
 from .util import (
-    PointData,
     PointDataCollection,
+    NetworkDataCollection,
     premultiply_alpha,
     robust_clim,
     source_over,
@@ -252,8 +252,7 @@ def scalars_to_rgba(
     Convert scalar values to RGBA colors.
 
     Converting all scalars to RGBA colors enables us to plot multiple
-    scalar values on the same surface by leveraging blend operations from
-    PIL.
+    scalar values on the same surface by leveraging blend operations.
 
     Parameters
     ----------
@@ -420,6 +419,8 @@ def add_points_scalars(
     # layering the points on top of each other. VTK might be smart
     # enough to automatically apply a reasonable blend mode even in
     # this regime.
+    # TODO: Check out pyvista.StructuredGrid. Could be the right
+    #       data structure for this.
     for layer in layers:
         dataset = points.get_dataset(layer.name)
         scalar_array = dataset.points.point_data[layer.name]
@@ -483,7 +484,7 @@ def build_edges_mesh(
     )
 
     # TODO: This is a hack to get the glyphs to scale correctly.
-    # This magic scalar is used to scale the glyphs to the correct size.
+    # The magic scalar is used to scale the glyphs to the correct radius.
     # Where does it come from? I have no idea. It's just what works. And
     # that, only roughly. No guarantees that it will work on new data.
     geom = pv.Cylinder(resolution=10, radius=0.01 * radius)
@@ -603,9 +604,7 @@ def build_nodes_mesh(
 
 def add_network(
     plotter: pv.Plotter,
-    node_coor: np.ndarray,
-    node_values: pd.DataFrame,
-    edge_values: pd.DataFrame,
+    networks: NetworkDataCollection,
     layers: Sequence[NodeLayer],
     num_edge_radius_bins: int = 10,
     copy_actors: bool = False,
@@ -613,6 +612,10 @@ def add_network(
     # TODO: See if we're better off merging the nodes and edges into a
     #       single mesh, or if there's any reason to keep them separate.
     for layer in layers:
+        network = networks.get_dataset(layer.name)
+        node_coor = network.coor
+        node_values = network.nodes
+        edge_values = network.edges
         glyph = build_nodes_mesh(node_values, node_coor, layer)
         plotter.add_mesh(
             glyph,
@@ -665,17 +668,13 @@ def unified_plotter(
     points_scalars_layers: Optional[Sequence[Layer]] = (
         POINTS_SCALARS_LAYERS_DEFAULT_VALUE
     ),
-    node_values: Optional[pd.DataFrame] = None,
-    node_coor: Optional[np.ndarray] = None,
-    node_parcel_scalars: Optional[str] = None,
+    networks: Optional[NetworkDataCollection] = None,
     node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
     node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
     node_radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
     node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
     node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
     node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
-    node_lh: Optional[np.ndarray] = None,
-    edge_values: Optional[pd.DataFrame] = None,
     edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
     edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
     edge_radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
@@ -775,38 +774,21 @@ def unified_plotter(
         ``Layer`` object, which specifies the name of the layer, the colormap
         to use, the colormap limits, the color, the opacity, and the blend
         mode. If not specified, no layers will be plotted.
-    vol_coor : np.ndarray (default: ``None``)
-        The coordinates of the volumetric data to plot. If not specified, no
-        volumetric data will be plotted.
-    vol_scalars : np.ndarray (default: ``None``)
-        The volumetric data to plot. If not specified, no volumetric data will
-        be plotted.
-    vol_scalars_point_size : float (default: ``None``)
-        The size of the points to plot for the volumetric data. If not
-        specified, the size of the points will be automatically determined
-        based on the size of the volumetric data.
-    vol_voxdim : tuple (default: ``None``)
-        The dimensions of the voxels in the volumetric data.
-    vol_scalars_cmap : str (default: ``'viridis'``)
-        The colormap to use for the volumetric data.
-    vol_scalars_clim : tuple (default: ``None``)
-        The colormap limits to use for the volumetric data.
-    vol_scalars_alpha : float (default: ``1.0``)
-        The opacity of the volumetric data.
-    node_values : pd.DataFrame (default: ``None``)
-        A table containing node-valued variables. Columns in the table can be
-        used to specify attributes of plotted nodes, such as their color,
-        radius, and opacity.
-    node_coor : np.ndarray (default: ``None``)
-        The coordinates of the nodes to plot. If not specified, no nodes will
-        be plotted. Node coordinates can also be computed from a parcellation
-        by specifying ``node_parcel_scalars``.
-    node_parcel_scalars : str (default: ``None``)
-        If provided, node coordinates will be computed as the centroids of
-        parcels in the specified parcellation. The parcellation must be
-        available in the ``point_data`` attribute of the surface. If not
-        specified, node coordinates must be provided in ``node_coor`` or
-        nodes will not be plotted.
+    networks : NetworkDataCollection (default: ``None``)
+        A collection of networks to plot. If not specified, no networks will
+        be plotted. Each network in the collection must include a ``'coor'``
+        attribute, which specifies the coordinates of the nodes in the
+        network. The coordinates must be specified as a ``(N, 3)`` array,
+        where ``N`` is the number of nodes in the network. The collection may
+        also optionally include a ``'nodes'`` attribute, The node attributes
+        must be specified as a ``pandas.DataFrame`` with ``N`` rows, where
+        ``N`` is the number of nodes in the network. The collection may also
+        optionally include an ``'edges'`` attribute, which specifies the
+        edges in the network. The edge attributes must be specified as a
+        ``pandas.DataFrame`` with ``M`` rows, where ``M`` is the number of
+        edges in the network. Finally, the collection may also optionally
+        include a ``lh_mask`` attribute, which is a boolean-valued array
+        indicating which nodes belong to the left hemisphere.
     node_color : str or colour specification (default: ``'black'``)
         The color of the nodes. If ``node_values`` is specified, this argument
         can be used to specify a column in the table to use for the node
@@ -826,16 +808,6 @@ def unified_plotter(
         The opacity of the nodes. If ``node_values`` is specified, this
         argument can be used to specify a column in the table to use for the
         node opacities.
-    node_lh : np.ndarray (default: ``None``)
-        Boolean-valued array indicating which nodes belong to the left
-        hemisphere.
-    edge_values : pd.DataFrame (default: ``None``)
-        A table containing edge-valued variables. The table must have a
-        MultiIndex with two levels, where the first level contains the
-        starting node of each edge, and the second level contains the ending
-        node of each edge. Additional columns can be used to specify
-        attributes of plotted edges, such as their color, radius, and
-        opacity.
     edge_color : str or colour specification (default: ``'edge_sgn'``)
         The color of the edges. If ``edge_values`` is specified, this argument
         can be used to specify a column in the table to use for the edge
@@ -861,6 +833,18 @@ def unified_plotter(
         The opacity of the edges. If ``edge_values`` is specified, this
         argument can be used to specify a column in the table to use for the
         edge opacities.
+    num_edge_radius_bins : int (default: ``10``)
+        The number of bins to use when binning the edges by radius. Because
+        edges are intractable to render when there are many of them, this
+        argument can be used to bin the edges by radius and render each bin
+        separately. This can significantly improve performance when there are
+        many edges but will result in a loss of detail.
+    network_layers: list of NodeLayer (default: ``None``)
+        A list of layers to plot on the networks. Each layer is defined by a
+        ``NodeLayer`` object, which specifies the name of the layer, together
+        with various parameters for the nodes and edges in the layer. If not
+        specified, a single layer will be created for the first network in
+        ``networks``.
     hemisphere : str (default: ``None``)
         The hemisphere to plot. If not specified, both hemispheres will be
         plotted.
@@ -887,18 +871,6 @@ def unified_plotter(
         DocumentTheme will be used.
     """
 
-    # Helper functions for graph plots
-    def process_edge_values():
-        start_node, end_node = tuple(zip(*edge_values.index))
-        start_node, end_node = np.array(start_node), np.array(end_node)
-        start = node_coor[start_node]
-        end = node_coor[end_node]
-        centre = (start + end) / 2
-        direction = end - start
-        length = np.linalg.norm(direction, axis=-1)
-        direction = direction / length.reshape(-1, 1)
-        return centre, direction, length
-
     # TODO: cortex_theme doesn't work here for some reason. If the background
     #       is transparent, all of the points are also made transparent. So
     #       we're sticking with a white background for now.
@@ -918,11 +890,6 @@ def unified_plotter(
         surf_scalars_clim=surf_scalars_clim,
         surf_scalars_layers=surf_scalars_layers,
     )
-    if node_parcel_scalars is not None:
-        node_coor = surf.parcel_centres_of_mass(
-            node_parcel_scalars,
-            surf_projection,
-        )
 
     p = pv.Plotter(off_screen=off_screen, theme=theme)
 
@@ -939,42 +906,31 @@ def unified_plotter(
             hw_left = (surf.left.bounds[1] - surf.left.bounds[0]) / 2
             hw_right = (surf.right.bounds[1] - surf.right.bounds[0]) / 2
             hemi_gap = surf.right.center[0] - surf.left.center[0]
-        elif node_coor is not None and node_lh is not None:
+        elif networks is not None or points is not None:
+            if networks is not None:
+                ref_coor = np.concatenate([n.coor for n in networks])
+                if any([n.lh_mask is None for n in networks]):
+                    left_mask = ref_coor[:, 0] < 0
+                else:
+                    left_mask = np.concatenate([n.lh_mask for n in networks])
+            elif points is not None:
+                ref_coor = np.concatenate([p.points.points for p in points])
+                left_mask = ref_coor[:, 0] < 0
             hw_left = (
-                node_coor[node_lh, 0].max() - node_coor[node_lh, 0].min()
+                ref_coor[left_mask, 0].max()
+                - ref_coor[left_mask, 0].min()
             ) / 2
             hw_right = (
-                node_coor[~node_lh, 0].max() - node_coor[~node_lh, 0].min()
+                ref_coor[~left_mask, 0].max()
+                - ref_coor[~left_mask, 0].min()
             ) / 2
             hemi_gap = (
-                node_coor[~node_lh, 0].max() + node_coor[~node_lh, 0].min()
+                ref_coor[~left_mask, 0].max()
+                + ref_coor[~left_mask, 0].min()
             ) / 2 - (
-                node_coor[node_lh, 0].max() + node_coor[node_lh, 0].min()
+                ref_coor[left_mask, 0].max()
+                + ref_coor[left_mask, 0].min()
             ) / 2
-        elif points is not None:
-            slack_refdata = None
-            if points_scalars is not None:
-                slack_refdata = points.get_dataset(points_scalars)
-            elif points_scalars_layers:
-                slack_refdata = points.get_dataset(points_scalars_layers[0])
-            if slack_refdata is not None:
-                ref_coor = slack_refdata.points.points
-                left_mask = ref_coor[:, 0] < 0
-                hw_left = (
-                    ref_coor[left_mask, 0].max()
-                    - ref_coor[left_mask, 0].min()
-                ) / 2
-                hw_right = (
-                    ref_coor[~left_mask, 0].max()
-                    - ref_coor[~left_mask, 0].min()
-                ) / 2
-                hemi_gap = (
-                    ref_coor[~left_mask, 0].max()
-                    + ref_coor[~left_mask, 0].min()
-                ) / 2 - (
-                    ref_coor[left_mask, 0].max()
-                    + ref_coor[left_mask, 0].min()
-                ) / 2
         else:
             hw_left = hw_right = hemi_gap = 0
         min_gap = hw_left + hw_right
@@ -984,21 +940,31 @@ def unified_plotter(
             left = surf.left.translate((-displacement, 0, 0))
             right = surf.right.translate((displacement, 0, 0))
             surf = CortexTriSurface(left=left, right=right, mask=surf.mask)
-        if node_coor is not None and node_lh is not None:
-            # We need to make a copy of coordinate arrays because we might be
-            # making multiple calls to this function, and we don't want to
-            # keep displacing coordinates.
-            node_coor = node_coor.copy()
-            node_coor[node_lh, 0] -= displacement
-            node_coor[~node_lh, 0] += displacement
+        if networks is not None:
+            if any([n.lh_mask is None for n in networks]):
+                left_mask = ref_coor[:, 0] < 0
+                lh_condition = lambda coor, _, __: coor[:, 0] < 0
+                rh_condition = lambda coor, _, __: coor[:, 0] > 0
+            else:
+                left_mask = np.concatenate([n.lh_mask for n in networks])
+                lh_condition = lambda _, __, lh_mask: lh_mask
+                rh_condition = lambda _, __, lh_mask: ~lh_mask
+            networks = networks.translate(
+                (-displacement, 0, 0),
+                condition=lh_condition,
+            )
+            networks = networks.translate(
+                (displacement, 0, 0),
+                condition=rh_condition,
+            )
         if points is not None:
             left_points = points.translate(
                 (-displacement, 0, 0),
-                condition=lambda coor, data: coor[:, 0] < 0
+                condition=lambda coor, _: coor[:, 0] < 0,
             )
             right_points = points.translate(
                 (displacement, 0, 0),
-                condition=lambda coor, data: coor[:, 0] > 0
+                condition=lambda coor, _: coor[:, 0] > 0
             )
             points = PointDataCollection(
                 l + r for l, r in zip(left_points, right_points)
@@ -1089,38 +1055,39 @@ def unified_plotter(
             copy_actors=copy_actors,
         )
 
-    if node_values is not None:
-        if edge_values is not None:
-            base_edge_layers = [EdgeLayer(
-                name='network',
-                cmap=edge_cmap,
-                clim=edge_clim,
-                color=edge_color,
-                radius=edge_radius,
-                radius_range=edge_radius_range,
-                alpha=edge_alpha,
-            )]
-        else:
-            base_edge_layers = []
-        if network_layers is None:
-            network_layers = []
-        if node_coor is not None:
-            base_layer = NodeLayer(
-                name='network',
-                cmap=node_cmap,
-                clim=node_clim,
-                color=node_color,
-                radius=node_radius,
-                radius_range=node_radius_range,
-                alpha=node_alpha,
-                edge_layers=base_edge_layers,
-            )
-            network_layers = [base_layer] + list(network_layers)
+    if networks is not None:
+        if network_layers is None or len(network_layers) == 0:
+            # No point in multiple datasets without overlays, so we'll use the
+            # first network's specifications to build the base layer.
+            base_network = networks[0]
+            network_name = base_network.name
+            if base_network.edges is not None:
+                base_edge_layers = [EdgeLayer(
+                    name=network_name,
+                    cmap=edge_cmap,
+                    clim=edge_clim,
+                    color=edge_color,
+                    radius=edge_radius,
+                    radius_range=edge_radius_range,
+                    alpha=edge_alpha,
+                )]
+            else:
+                base_edge_layers = []
+            if base_network.coor is not None:
+                base_layer = NodeLayer(
+                    name=network_name,
+                    cmap=node_cmap,
+                    clim=node_clim,
+                    color=node_color,
+                    radius=node_radius,
+                    radius_range=node_radius_range,
+                    alpha=node_alpha,
+                    edge_layers=base_edge_layers,
+                )
+            network_layers = [base_layer]
         p = add_network(
             plotter=p,
-            node_coor=node_coor,
-            node_values=node_values,
-            edge_values=edge_values,
+            networks=networks,
             layers=network_layers,
             num_edge_radius_bins=num_edge_radius_bins,
             copy_actors=copy_actors,
