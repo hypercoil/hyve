@@ -555,7 +555,7 @@ def filter_node_data(
             f'{name}_val': val,
             f'{name}_sgn': sgn,
         },
-        index=pd.Index(index, name='node'),
+        index=pd.Index(index + 1, name=name),
     )
 
 
@@ -627,6 +627,7 @@ def filter_adjacency_data(
     adj = adj[indices_incl]
     sgn = sgn[indices_incl]
 
+    indices_incl = [i + 1 for i in indices_incl]
     edge_values = pd.DataFrame(
         {
             f'{name}_val': adj,
@@ -638,7 +639,7 @@ def filter_adjacency_data(
     if degree is not None:
         degree = pd.DataFrame(
             degree,
-            index=range(degree.shape[0]),
+            index=range(1, degree.shape[0] + 1),
             columns=(f'{name}_degree',),
         )
         if incidents is None:
@@ -646,7 +647,7 @@ def filter_adjacency_data(
     if incidents is not None:
         incidents = pd.DataFrame(
             incidents,
-            index=range(incidents.shape[0]),
+            index=range(1, incidents.shape[0] + 1),
             columns=(f'{name}_incidents',),
         )
         if degree is None:

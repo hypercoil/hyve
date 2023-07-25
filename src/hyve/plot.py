@@ -468,8 +468,10 @@ def build_edges_mesh(
     radius: float,
 ) -> pv.PolyData:
     edge_values = edge_values.reset_index()
-    target = edge_values.dst.values
-    source = edge_values.src.values
+    # DataFrame indices begin at 1 after we filter them, but we need them to
+    # begin at 0 for indexing into node_coor.
+    target = edge_values.dst.values - 1
+    source = edge_values.src.values - 1
     midpoints = (node_coor[target] + node_coor[source]) / 2
     orientations = node_coor[target] - node_coor[source]
     norm = np.linalg.norm(orientations, axis=-1)
