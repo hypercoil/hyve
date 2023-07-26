@@ -7,6 +7,7 @@ Unified plotter
 Unified plotting function for surface, volume, and network data.
 """
 import dataclasses
+import io
 from collections.abc import Mapping as MappingABC
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
@@ -14,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pyvista as pv
 import matplotlib.pyplot as plt
+from PIL import Image
 from matplotlib import cm, colors, patheffects
 from matplotlib.figure import Figure
 
@@ -372,34 +374,24 @@ def build_scalar_bar(
 
     f, ax = plt.subplots(figsize=figsize)
     ax.imshow(rgba)
-    ax.annotate(
-        f'{vmin:.{num_sig_figs}g}',
-        xycoords='axes fraction',
-        fontsize=width * lim_fontsize_multiplier,
-        fontfamily=font,
-        color=font_color,
-        path_effects=[
-            patheffects.withStroke(
-                linewidth=font_outline_width,
-                foreground=font_outline_color,
-            )
-        ],
-        **vmin_params,
-    )
-    ax.annotate(
-        f'{vmax:.{num_sig_figs}g}',
-        xycoords='axes fraction',
-        fontsize=width * lim_fontsize_multiplier,
-        fontfamily=font,
-        color=font_color,
-        path_effects=[
-            patheffects.withStroke(
-                linewidth=font_outline_width,
-                foreground=font_outline_color,
-            )
-        ],
-        **vmax_params,
-    )
+    for vlim, vlim_params in zip(
+        (vmin, vmax),
+        (vmin_params, vmax_params),
+    ):
+        ax.annotate(
+            f'{vlim:.{num_sig_figs}g}',
+            xycoords='axes fraction',
+            fontsize=width * lim_fontsize_multiplier,
+            fontfamily=font,
+            color=font_color,
+            path_effects=[
+                patheffects.withStroke(
+                    linewidth=font_outline_width,
+                    foreground=font_outline_color,
+                )
+            ],
+            **vlim_params,
+        )
     if name is not None:
         ax.annotate(
             name,
@@ -420,6 +412,116 @@ def build_scalar_bar(
     return f
 
 
+def collect_scalar_bars(
+    plotter: pv.Plotter,
+    builders: Sequence[ScalarBarBuilder],
+    spacing: float = SCALAR_BAR_DEFAULT_SPACING,
+    max_dimension: Optional[Tuple[int, int]] = (1920, 1080),
+    require_unique_names: bool = True,
+) -> Tuple[pv.Plotter, Tensor]:
+    # Algorithm from https://stackoverflow.com/a/28268965
+    if max_dimension is None:
+        max_dimension = plotter.window_size
+    if require_unique_names:
+        unique_names = set()
+        retained_builders = []
+        for builder in builders:
+            if builder.name not in unique_names:
+                unique_names.add(builder.name)
+                retained_builders.append(builder)
+        builders = retained_builders
+    count = len(builders)
+    max_width, max_height = max_dimension
+    if spacing < 1:
+        spacing = spacing * min(max_width, max_height)
+    spacing = int(spacing)
+    width = max([
+        builder.length
+        if builder.orientation == 'h'
+        else builder.width
+        for builder in builders
+    ])
+    height = max([
+        builder.width
+        if builder.orientation == 'h'
+        else builder.length
+        for builder in builders
+    ])
+    candidates = np.concatenate((
+        (max_width - np.arange(count) * spacing) /
+        (np.arange(1, count + 1) * width),
+        (max_height - np.arange(count) * spacing) /
+        (np.arange(1, count + 1) * height),
+    ))
+    candidates = np.sort(candidates[candidates > 0])
+    # Vectorising is probably faster than a binary search, so that's what
+    # we're doing here
+    n_col = np.floor((max_width + spacing) / (width * candidates + spacing))
+    n_row = np.floor((max_height + spacing) / (height * candidates + spacing))
+    feasible = (n_row * n_col) >= count
+    layout_idx = np.max(np.where(feasible))
+    layout = np.array([n_row[layout_idx], n_col[layout_idx]], dtype=int)
+    scalar = candidates[layout_idx]
+    width = int(scalar * width)
+    height = int(scalar * height)
+    # End algorithm from https://stackoverflow.com/a/28268965
+
+    images = []
+    buffers = []
+    for builder in builders:
+        builder_length = height if builder.orientation == 'v' else width
+        builder_width = width if builder.orientation == 'v' else height
+        builder = dataclasses.replace(
+            builder,
+            length=builder_length,
+            width=builder_width,
+        )
+        fig = build_scalar_bar(**builder)
+        # From https://stackoverflow.com/a/8598881
+        buffer = io.BytesIO()
+        fig.savefig(buffer, format='png', transparent=True)
+        buffer.seek(0)
+        images += [Image.open(buffer)]
+        buffers += [buffer]
+
+    #tight = {0: 'row', 1: 'col'}[np.argmin(layout)]
+    argtight = np.argmin(layout)
+    argslack = 1 - argtight
+    counttight = layout[argtight]
+    countrelaxed = np.ceil(count / counttight).astype(int)
+    layout = [None, None]
+    layout[argtight] = counttight
+    layout[argslack] = countrelaxed
+
+    # Things are about to get confusing because we're switching back and forth
+    # between array convention and Cartesian convention. Sorry.
+    canvas = Image.new('RGBA', (max_width, max_height), (0, 0, 0, 1))
+    active_canvas_size = (
+        layout[1] * width + (layout[1] - 1) * spacing,
+        layout[0] * height + (layout[0] - 1) * spacing,
+    )
+    offset = [0, 0]
+    offset[1 - argslack] = (
+        canvas.size[1 - argslack] - active_canvas_size[1 - argslack]
+    ) // 2
+    for i, image in enumerate(images):
+        # Unfortunately matplotlib invariably adds some padding, so an aspect
+        # preserving resize is still necessary (Lanczos interpolation)
+        image = image.resize((width, height), Image.ANTIALIAS)
+        canvas.paste(image, tuple(int(o) for o in offset))
+        # Filling this in row-major order
+        if i % layout[1] == layout[1] - 1:
+            offset[0] = 0
+            offset[1] += height + spacing
+        else:
+            offset[0] += width + spacing
+    canvas.show()
+
+    for buffer in buffers:
+        buffer.close()
+    return plotter, np.array(canvas)
+
+
 def overlay_scalar_bars(
     plotter: pv.Plotter,
     builders: Sequence[ScalarBarBuilder],
@@ -432,7 +534,7 @@ def overlay_scalar_bars(
         Mapping[str, Tuple[float, float]],
     ] = SCALAR_BAR_DEFAULT_SIZE,
     default_spacing: float = SCALAR_BAR_DEFAULT_SPACING,
-) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+) -> Tuple[pv.Plotter, None]:
     # tuple, but we want to be tolerant if the user provides a list or
     # something
     if loc is not None and not isinstance(loc, Mapping):
