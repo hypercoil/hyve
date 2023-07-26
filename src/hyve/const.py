@@ -12,6 +12,7 @@ from lytemaps.datasets import fetch_fsaverage
 
 DEFAULT_CMAP = 'viridis'
 DEFAULT_COLOR = 'white'
+TYPICAL_DPI = 96
 
 LAYER_CLIM_DEFAULT_VALUE = None
 LAYER_CMAP_NEGATIVE_DEFAULT_VALUE = None
@@ -20,6 +21,8 @@ LAYER_COLOR_DEFAULT_VALUE = None
 LAYER_ALPHA_DEFAULT_VALUE = 1.0
 LAYER_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
 LAYER_BLEND_MODE_DEFAULT_VALUE = 'source_over'
+
+NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE = None
 
 SURF_SCALARS_DEFAULT_VALUE = None
 SURF_SCALARS_CMAP_DEFAULT_VALUE = (None, None)
@@ -46,6 +49,26 @@ EDGE_RLIM_DEFAULT_VALUE = (0.1, 1.8)
 EDGE_CMAP_DEFAULT_VALUE = 'RdYlBu'
 EDGE_CLIM_DEFAULT_VALUE = (0, 1)
 EDGE_ALPHA_DEFAULT_VALUE = 1.0
+
+SCALAR_BAR_DEFAULT_NAME = None
+SCALAR_BAR_DEFAULT_BELOW_COLOR = None
+SCALAR_BAR_DEFAULT_LENGTH = 256
+SCALAR_BAR_DEFAULT_WIDTH = 24
+SCALAR_BAR_DEFAULT_ORIENTATION = 'v'
+SCALAR_BAR_DEFAULT_NUM_SIG_FIGS = 3
+SCALAR_BAR_DEFAULT_FONT = 'futura'
+# TODO: These are multiplied by the width of the scalar bar. This isn't great
+#       because the actual width of the scalar bar is determined by figure
+#       parameters rather than by the parameters here, which really only
+#       configure the aspect ratio of the scalar bar. We should change this to
+#       a fraction of the figure width, but this is difficult to do because
+#       we don't have access to the figure width until we've already created
+#       the figure.
+SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER = 0.5
+SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER = 0.4
+SCALAR_BAR_DEFAULT_FONT_COLOR = 'w'
+SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR = 'k'
+SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH = 1.0
 
 Tensor = Any
 

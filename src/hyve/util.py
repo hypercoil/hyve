@@ -318,7 +318,7 @@ def _relabel_parcels_hemi(
     data = data.astype(np.int32)
     data[data == null_value] = -1
     _, data = np.unique(data, return_inverse=True)
-    data[data == -1] = null_value
+    data[data == -1] = null_value - 1
     return data + 1
 
 

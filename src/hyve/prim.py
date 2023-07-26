@@ -46,6 +46,7 @@ from .const import (
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
+    NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
@@ -786,7 +787,7 @@ def add_network_overlay_f(
             (
                 f'{layer_name}_node_below_color',
                 'below_color',
-                LAYER_BELOW_COLOR_DEFAULT_VALUE,
+                NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
             ),
         ),
     )
@@ -816,7 +817,7 @@ def add_network_overlay_f(
             (
                 f'{layer_name}_edge_below_color',
                 'below_color',
-                LAYER_BELOW_COLOR_DEFAULT_VALUE,
+                NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
             ),
         ),
     )
