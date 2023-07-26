@@ -20,6 +20,8 @@ from hyve.util import (
     filter_node_data,
     PointDataCollection,
     PointData,
+    NetworkDataCollection,
+    NetworkData,
 )
 
 
@@ -169,16 +171,22 @@ def test_unified_plotter():
     edge_clim = (-1, 1)
     node_lh = np.zeros(400, dtype=bool)
     node_lh[:200] = True
+    network_data = NetworkDataCollection([
+        NetworkData(
+            'vis_conn',
+            coor=node_coor,
+            nodes=node_data,
+            edges=edge_data,
+            lh_mask=node_lh,
+        ),
+    ])
     unified_plotter(
-        node_values=node_data,
-        node_coor=node_coor,
+        networks=network_data,
         node_clim=node_clim,
         node_color='node_val',
         node_radius='radius',
         node_radius_range=(1, 10),
         node_alpha='opacity',
-        node_lh=node_lh,
-        edge_values=edge_data,
         edge_clim=edge_clim,
         hemisphere_slack=1.2,
         off_screen=False,
@@ -188,12 +196,9 @@ def test_unified_plotter():
         surf=surf_lr,
         surf_projection='inflated',
         surf_alpha=0.2,
-        node_values=node_data,
-        node_coor=node_coor,
+        networks=network_data,
         node_clim=node_clim,
         node_color='node_val',
-        node_lh=node_lh,
-        edge_values=edge_data,
         edge_clim=edge_clim,
         hemisphere_slack=1.2,
         off_screen=False,
@@ -208,12 +213,9 @@ def test_unified_plotter():
         surf_alpha=0.2,
         points=points,
         points_scalars_layers=(points_layer_pain,),
-        node_values=node_data,
-        node_coor=node_coor,
+        networks=network_data,
         node_clim=node_clim,
         node_color='node_val',
-        node_lh=node_lh,
-        edge_values=edge_data,
         edge_clim=edge_clim,
         hemisphere_slack=1.2,
         off_screen=False,

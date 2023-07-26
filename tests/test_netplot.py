@@ -11,7 +11,6 @@ import pandas as pd
 
 from conveyant import (
     ichain,
-    iochain,
 )
 from hyve.flows import add_network_data, joindata
 from hyve.prim import automap_unified_plotter_p
@@ -23,6 +22,9 @@ from hyve.transforms import (
     add_edge_variable,
     plot_to_image,
     save_snapshots,
+    node_coor_from_parcels,
+    build_network,
+    add_network_overlay,
 )
 
 
@@ -40,10 +42,9 @@ def test_net():
 
     chain = ichain(
         surf_from_archive(),
+        scalars_from_cifti('parcellation', plot=False),
         add_network_data(
-            add_node_variable(
-                'vis',
-            ),
+            add_node_variable('vis'),
             add_edge_variable(
                 "vis_conn",
                 threshold=10,
@@ -58,7 +59,8 @@ def test_net():
                 connected_node_selection=vis_nodes_edge_selection,
             ),
         ),
-        scalars_from_cifti('parcellation'),
+        node_coor_from_parcels('parcellation'),
+        build_network('vis'),
         parcellate_colormap('network', 'parcellation', target='node'),
         plot_to_image(),
         save_snapshots(
@@ -67,14 +69,12 @@ def test_net():
             ),
         ),
     )
-    f = iochain(automap_unified_plotter_p, chain)
-    f(
-        template="fsLR",
+    plot_f = chain(automap_unified_plotter_p)
+    plot_f(
+        template='fsLR',
         surf_projection='inflated',
         surf_alpha=0.2,
         parcellation_cifti=parcellation,
-        node_lh=(np.arange(400) < 200),
-        node_parcel_scalars='parcellation',
         node_radius='vis_conn_degree',
         node_color='index',
         edge_color='vis_conn_sgn',
@@ -82,7 +82,7 @@ def test_net():
         vis_nodal=vis_nodes_edge_selection.astype(int),
         vis_conn_adjacency=cov,
         vis_internal_conn_adjacency=cov,
-        views=("dorsal", "left", "posterior"),
+        views=('dorsal', 'left', 'posterior'),
         output_dir='/tmp',
     )
 
@@ -101,24 +101,29 @@ def test_net_highlight():
 
     chain = ichain(
         surf_from_archive(),
-        joindata(fill_value=0., how="left")(
-            add_edge_variable(
-                "vis_conn",
-                absolute=True,
-                incident_node_selection=vis_nodes_edge_selection,
+        scalars_from_cifti('parcellation', plot=False),
+        #build_network('vis'),
+        add_network_overlay(
+            'vis',
+            joindata(fill_value=0., how="left")(
+                add_edge_variable(
+                    "vis_conn",
+                    absolute=True,
+                    incident_node_selection=vis_nodes_edge_selection,
+                ),
+                add_edge_variable(
+                    "vis_internal_conn",
+                    absolute=True,
+                    connected_node_selection=vis_nodes_edge_selection,
+                    emit_degree=True,
+                    emit_incident_nodes=(0.2, 1),
+                    removed_val=0.03,
+                    surviving_val=1.0,
+                ),
             ),
-            add_edge_variable(
-                "vis_internal_conn",
-                absolute=True,
-                connected_node_selection=vis_nodes_edge_selection,
-                emit_degree=True,
-                emit_incident_nodes=(0.1, 1),
-                removed_val=0.05,
-                surviving_val=1.0,
-            ),
+            parcellate_colormap('modal', 'parcellation', target='node'),
+            node_coor_from_parcels('parcellation'),
         ),
-        scalars_from_cifti('parcellation'),
-        parcellate_colormap('modal', 'parcellation', target='node'),
         plot_to_image(),
         save_snapshots(
             fname_spec=(
@@ -126,21 +131,20 @@ def test_net_highlight():
             ),
         ),
     )
-    f = iochain(automap_unified_plotter_p, chain)
-    f(
+    plot_f = chain(automap_unified_plotter_p)
+    plot_f(
         template="fsLR",
+        surf_projection='veryinflated',
         surf_alpha=0.2,
         parcellation_cifti=parcellation,
-        node_lh=(np.arange(400) < 200),
-        node_parcel_scalars='parcellation',
-        node_radius='vis_internal_conn_degree',
-        node_color='index',
-        node_alpha='vis_internal_conn_incidents',
-        edge_color='vis_conn_sgn',
-        edge_radius='vis_conn_val',
-        edge_alpha='vis_internal_conn_val',
         vis_conn_adjacency=cov,
         vis_internal_conn_adjacency=cov,
+        vis_node_radius='vis_internal_conn_degree',
+        vis_node_color='index',
+        vis_node_alpha='vis_internal_conn_incidents',
+        vis_edge_color='vis_conn_sgn',
+        vis_edge_radius='vis_conn_val',
+        vis_edge_alpha='vis_internal_conn_val',
         views=("dorsal", "left", "posterior"),
         output_dir='/tmp',
     )
