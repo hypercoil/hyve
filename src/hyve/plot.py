@@ -7,12 +7,15 @@ Unified plotter
 Unified plotting function for surface, volume, and network data.
 """
 import dataclasses
+from collections.abc import Mapping as MappingABC
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import pyvista as pv
-from matplotlib import cm, colors
+import matplotlib.pyplot as plt
+from matplotlib import cm, colors, patheffects
+from matplotlib.figure import Figure
 
 from .const import (
     DEFAULT_CMAP,
@@ -30,6 +33,7 @@ from .const import (
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
+    NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
     NODE_ALPHA_DEFAULT_VALUE,
     NODE_CLIM_DEFAULT_VALUE,
     NODE_CMAP_DEFAULT_VALUE,
@@ -41,11 +45,24 @@ from .const import (
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
     POINTS_SCALARS_DEFAULT_VALUE,
     POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
+    SCALAR_BAR_DEFAULT_BELOW_COLOR,
+    SCALAR_BAR_DEFAULT_FONT,
+    SCALAR_BAR_DEFAULT_FONT_COLOR,
+    SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR,
+    SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH,
+    SCALAR_BAR_DEFAULT_LENGTH,
+    SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER,
+    SCALAR_BAR_DEFAULT_NAME,
+    SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER,
+    SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
+    SCALAR_BAR_DEFAULT_ORIENTATION,
+    SCALAR_BAR_DEFAULT_WIDTH,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    TYPICAL_DPI,
     Tensor,
 )
 from .surf import (
@@ -81,6 +98,9 @@ class _LayerBase:
     below_color: Optional[Any] = LAYER_BELOW_COLOR_DEFAULT_VALUE
     hide_subthreshold: bool = False
     style: Optional[Mapping[str, Any]] = None
+    scalar_bar_style: Optional[Mapping[str, Any]] = dataclasses.field(
+        default_factory=dict,
+    )
     blend_mode: Literal['source_over'] = LAYER_BLEND_MODE_DEFAULT_VALUE
 
 
@@ -102,6 +122,7 @@ class EdgeLayer(_LayerBase):
     radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE
     radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE
     alpha: float = EDGE_ALPHA_DEFAULT_VALUE
+    below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
 
 
 @dataclasses.dataclass(frozen=True)
@@ -113,7 +134,43 @@ class NodeLayer(_LayerBase):
     radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE
     radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE
     alpha: float = NODE_ALPHA_DEFAULT_VALUE
+    below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
     edge_layers: Sequence[EdgeLayer] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(frozen=True)
+class ScalarBarBuilder(MappingABC):
+    """Addressable container for scalar bar parameters."""
+    mapper: Optional[cm.ScalarMappable]
+    name: Optional[str] = SCALAR_BAR_DEFAULT_NAME
+    below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR
+    length: int = SCALAR_BAR_DEFAULT_LENGTH
+    width: int = SCALAR_BAR_DEFAULT_WIDTH
+    orientation: Literal['h', 'v'] = SCALAR_BAR_DEFAULT_ORIENTATION
+    num_sig_figs: int = SCALAR_BAR_DEFAULT_NUM_SIG_FIGS
+    font: str = SCALAR_BAR_DEFAULT_FONT
+    name_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER
+    )
+    lim_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER
+    )
+    font_color: Any = SCALAR_BAR_DEFAULT_FONT_COLOR
+    font_outline_color: Any = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
+    )
+    font_outline_width: float = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH
+    )
+
+    def __getitem__(self, key):
+        return self.__getattribute__(key)
+
+    def __iter__(self):
+        return iter(dataclasses.asdict(self))
+
+    def __len__(self):
+        return len(dataclasses.asdict(self))
 
 
 @dataclasses.dataclass
@@ -219,27 +276,186 @@ def _null_auxwriter(metadata):
     return metadata
 
 
+def build_scalar_bar(
+    *,
+    mapper: cm.ScalarMappable,
+    name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
+    below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
+    length: int = SCALAR_BAR_DEFAULT_LENGTH,
+    width: int = SCALAR_BAR_DEFAULT_WIDTH,
+    orientation: Literal['h', 'v'] = SCALAR_BAR_DEFAULT_ORIENTATION,
+    num_sig_figs: int = SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
+    font: str = SCALAR_BAR_DEFAULT_FONT,
+    name_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER
+    ),
+    lim_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER
+    ),
+    font_color: Any = SCALAR_BAR_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
+    ),
+    font_outline_width: float = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH
+    ),
+) -> Figure:
+    vmin, vmax = mapper.get_clim()
+    static_length = num_sig_figs * width // 2
+    dynamic_length = length - 2 * static_length
+    dynamic = mapper.to_rgba(np.linspace(vmin, vmax, dynamic_length))
+    above = np.tile(mapper.to_rgba(vmax), (static_length, 1))
+    if below_color is not None:
+        below = np.tile(colors.to_rgba(below_color), (static_length, 1))
+    else:
+        below = np.tile(mapper.to_rgba(vmin), (static_length, 1))
+    colors = np.stack(width * [np.concatenate([below, dynamic, above])])
+
+    match orientation:
+        case 'h':
+            figsize = (length / TYPICAL_DPI, width / TYPICAL_DPI)
+            vmin_params = {
+                'xy': (0, 0),
+                'xytext': (0.02, 0.5),
+                'rotation': 0,
+                'ha': 'left',
+                'va': 'center',
+            }
+            vmax_params = {
+                'xy': (1, 0),
+                'xytext': (0.98, 0.5),
+                'rotation': 0,
+                'ha': 'right',
+                'va': 'center',
+            }
+            name_params = {
+                'xy': (0.5, 0),
+                'xytext': (0.5, 0.5),
+                'rotation': 0,
+                'ha': 'center',
+                'va': 'center',
+            }
+        case 'v':
+            figsize = (width / TYPICAL_DPI, length / TYPICAL_DPI)
+            colors = colors.swapaxes(0, 1)
+            vmin_params = {
+                'xy': (0, 0),
+                'xytext': (0.5, 0.02),
+                'rotation': 90,
+                'ha': 'center',
+                'va': 'bottom',
+            }
+            vmax_params = {
+                'xy': (0, 1),
+                'xytext': (0.5, 0.98),
+                'rotation': 90,
+                'ha': 'center',
+                'va': 'top',
+            }
+            name_params = {
+                'xy': (0, .5),
+                'xytext': (0.5, 0.5),
+                'rotation': 90,
+                'ha': 'center',
+                'va': 'center',
+            }
+        case _:
+            raise ValueError(f'Invalid orientation: {orientation}')
+
+    f, ax = plt.subplots(figsize=figsize)
+    ax.imshow(colors)
+    ax.annotate(
+        f'{vmin:.{num_sig_figs}g}',
+        xycoords='axes fraction',
+        fontsize=width * lim_fontsize_multiplier,
+        fontfamily=font,
+        color=font_color,
+        path_effects=[
+            patheffects.withStroke(
+                linewidth=font_outline_width,
+                foreground=font_outline_color,
+            )
+        ],
+        **vmin_params,
+    )
+    ax.annotate(
+        f'{vmax:.{num_sig_figs}g}',
+        xycoords='axes fraction',
+        fontsize=width * lim_fontsize_multiplier,
+        fontfamily=font,
+        color=font_color,
+        path_effects=[
+            patheffects.withStroke(
+                linewidth=font_outline_width,
+                foreground=font_outline_color,
+            )
+        ],
+        **vmax_params,
+    )
+    name = 'SCALARS'
+    if name is not None:
+        ax.annotate(
+            name,
+            xycoords='axes fraction',
+            fontsize=width * name_fontsize_multiplier,
+            fontfamily=font,
+            color=font_color,
+            path_effects=[
+                patheffects.withStroke(
+                    linewidth=font_outline_width,
+                    foreground=font_outline_color,
+                )
+            ],
+            **name_params,
+        )
+    ax.axis('off')
+    f.subplots_adjust(0, 0, 1, 1)
+    return f
+
+    # scalar_bar = pv.ChartMPL(f, size=(0.6, 0.6), loc=(0.06, 0.06))
+    # scalar_bar.background_color = (0, 0, 0, 0)
+    # scalar_bar.border_color = (0, 0, 0, 0)
+
+    # p = pv.Plotter()
+    # p.add_chart(scalar_bar)
+
+
 def _rgba_impl(
     scalars: Tensor,
     clim: Optional[Tuple[float, float]] = None,
     cmap: Any = 'viridis',
     below_color: Optional[str] = None,
     hide_subthreshold: bool = False,
-):
+    scalar_bar_builder: Optional[ScalarBarBuilder] = None,
+) -> Tuple[Tensor, Optional[ScalarBarBuilder]]:
     if clim == 'robust':
         clim = robust_clim(scalars)
     if clim is not None:
         vmin, vmax = clim
-        norm = colors.Normalize(vmin=vmin, vmax=vmax)
     else:
-        vmin, vmax, norm = None, None, None
-    rgba = cm.ScalarMappable(norm=norm, cmap=cmap).to_rgba(scalars)
+        vmin, vmax = scalars.min(), scalars.max()
+        hide_subthreshold = False
+    norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
+    rgba = mapper.to_rgba(scalars)
     if below_color is not None and vmin is not None:
         rgba[scalars < vmin] = colors.to_rgba(below_color)
     elif vmin is not None and hide_subthreshold:
         # Set alpha to 0 for sub-threshold values
         rgba[scalars < vmin, 3] = 0
-    return rgba
+    if scalar_bar_builder is not None:
+        scalar_bar_builder = ScalarBarBuilder(**{
+            **scalar_bar_builder,
+            **{
+                'mapper': mapper,
+                'below_color': below_color,
+            }
+        })
+        # build_scalar_bar(
+        #     mapper=mapper,
+        #     below_color=below_color,
+        # )
+    return rgba, scalar_bar_builder
 
 
 def scalars_to_rgba(
@@ -252,7 +468,8 @@ def scalars_to_rgba(
     alpha: Optional[float] = None,
     below_color: Optional[str] = None,
     hide_subthreshold: bool = False,
-) -> Tensor:
+    scalar_bar_builder: Optional[ScalarBarBuilder] = None,
+) -> Tuple[Tensor, Sequence[Optional[ScalarBarBuilder]]]:
     """
     Convert scalar values to RGBA colors.
 
@@ -277,13 +494,23 @@ def scalars_to_rgba(
         for the colormap(s).
     color : str, optional
         Color to use for all scalar values.
+    below_color : str, optional
+        Color to use for values below ``clim``. If ``clim_neg`` is also
+        specified, this is the color to use for small absolute values
+        between ``-clim_neg[0]`` and ``clim[0]``.
+    hide_subthreshold : bool, optional
+        If ``True``, set the alpha value to 0 for values below ``clim``.
+    scalar_bar_builder : ScalarBarBuilder, optional
+        Template for building scalar bars. If not specified, no scalar bar
+        will be built.
     """
     if color is not None:
         rgba = np.tile(colors.to_rgba(color), (len(scalars), 1))
         if alpha is not None:
             rgba[:, 3] = alpha
-        return rgba
+        return rgba, (None,)
 
+    scalar_bar_builder_negative = None
     if cmap_negative is not None:
         if clim_negative is None:
             clim_negative = clim
@@ -291,33 +518,83 @@ def scalars_to_rgba(
         neg_idx = scalars_negative > 0
         scalars_negative[scalars_negative < 0] = 0
         scalars[neg_idx] = 0
-        rgba_neg = _rgba_impl(
+        if scalar_bar_builder is not None:
+            scalar_bar_builder_negative = ScalarBarBuilder(**{
+                **scalar_bar_builder,
+                **{'name': f'{scalar_bar_builder.name} (—)'}
+            })
+            scalar_bar_builder = ScalarBarBuilder(**{
+                **scalar_bar_builder,
+                **{'name': f'{scalar_bar_builder.name} (+)'}
+            })
+        rgba_neg, scalar_bar_builder_negative = _rgba_impl(
             scalars=scalars_negative,
             clim=clim_negative,
             cmap=cmap_negative,
             below_color=below_color,
             hide_subthreshold=hide_subthreshold,
+            scalar_bar_builder=scalar_bar_builder_negative,
         )
 
-    rgba = _rgba_impl(
+    rgba, scalar_bar_builder = _rgba_impl(
         scalars=scalars,
         clim=clim,
         cmap=cmap,
         below_color=below_color,
         hide_subthreshold=hide_subthreshold,
+        scalar_bar_builder=scalar_bar_builder,
     )
     if cmap_negative is not None:
         rgba[neg_idx] = rgba_neg[neg_idx]
     if alpha is not None:
         rgba[:, 3] *= alpha
-    return rgba
+    return rgba, (scalar_bar_builder, scalar_bar_builder_negative)
 
 
 def layer_rgba(
+    layer: Layer,
+    scalar_array: Tensor,
+) -> Tuple[Tensor, Sequence[ScalarBarBuilder]]:
+    cmap = layer.cmap or DEFAULT_CMAP
+    if layer.scalar_bar_style is not None:
+        scalar_bar_builder = ScalarBarBuilder(mapper=None, name=layer.name)
+    else:
+        scalar_bar_builder = None
+    rgba, scalar_bar_builders = scalars_to_rgba(
+        scalars=scalar_array,
+        cmap=cmap,
+        clim=layer.clim,
+        cmap_negative=layer.cmap_negative,
+        clim_negative=layer.clim_negative,
+        color=layer.color,
+        alpha=layer.alpha,
+        below_color=layer.below_color,
+        hide_subthreshold=layer.hide_subthreshold,
+        scalar_bar_builder=scalar_bar_builder,
+    )
+    if layer.scalar_bar_style is not None:
+        # We should be able to override anything in the scalar bar builder
+        # with the layer's scalar bar style, including the mapper and name
+        # if we want to.
+        scalar_bar_builders = tuple(
+            ScalarBarBuilder(**{
+                **scalar_bar_builder,
+                **layer.scalar_bar_style,
+            })
+            for scalar_bar_builder in scalar_bar_builders
+            if scalar_bar_builder is not None
+        )
+    else:
+        scalar_bar_builders = ()
+
+    return rgba, scalar_bar_builders
+
+
+def surf_layer_rgba(
     surf: pv.PolyData,
     layer: Layer,
     data_domain: Literal['point_data', 'cell_data'],
-) -> Tensor:
+) -> Tuple[Tensor, Sequence[ScalarBarBuilder]]:
     """
     Convert a layer to RGBA colors.
     """
@@ -334,23 +611,15 @@ def layer_rgba(
             'that, if you have mapped any layer to faces, all '
             'other layers are also mapped to faces.'
         )
-    cmap = layer.cmap or DEFAULT_CMAP
-    return scalars_to_rgba(
-        scalars=scalar_array,
-        cmap=cmap,
-        clim=layer.clim,
-        cmap_negative=layer.cmap_negative,
-        clim_negative=layer.clim_negative,
-        alpha=layer.alpha,
-        below_color=layer.below_color,
-        hide_subthreshold=layer.hide_subthreshold,
-    )
+    rgba, scalar_bar_builders = layer_rgba(layer, scalar_array)
+
+    return rgba, scalar_bar_builders
 
 
 def compose_layers(
     surf: pv.PolyData,
     layers: Sequence[Layer],
-) -> Tuple[Tensor, str]:
+) -> Tuple[Tensor, str, Sequence[ScalarBarBuilder]]:
     """
     Compose layers into a single RGB(A) array.
     """
@@ -373,8 +642,8 @@ def compose_layers(
             scalar_array = np.empty(surf.n_points)
         cmap = dst.cmap
         color = None if cmap else DEFAULT_COLOR
-    dst = scalars_to_rgba(
-        scalars=scalar_array,
+    dst = Layer(
+        name=dst.name,
         cmap=cmap,
         clim=dst.clim,
         cmap_negative=dst.cmap_negative,
@@ -383,24 +652,27 @@ def compose_layers(
         alpha=dst.alpha,
         below_color=dst.below_color,
         hide_subthreshold=dst.hide_subthreshold,
+        scalar_bar_style=dst.scalar_bar_style,
     )
+    dst, scalar_bar_builders = layer_rgba(dst, scalar_array)
     dst = premultiply_alpha(dst)
 
     for layer in layers[1:]:
-        src = layer_rgba(surf, layer, data_domain)
+        src, new_builders = surf_layer_rgba(surf, layer, data_domain)
         src = premultiply_alpha(src)
         blend_layers = BLEND_MODES[layer.blend_mode]
         dst = blend_layers(src, dst)
+        scalar_bar_builders = scalar_bar_builders + new_builders
     dst = unmultiply_alpha(dst)
-    return dst, data_domain
+    return dst, data_domain, scalar_bar_builders
 
 
 def add_composed_rgba(
     surf: pv.PolyData,
     layers: Sequence[Layer],
     surf_alpha: float,
-) -> Tuple[pv.PolyData, str]:
-    rgba, data_domain = compose_layers(surf, layers)
+) -> Tuple[pv.PolyData, str, Sequence[ScalarBarBuilder]]:
+    rgba, data_domain, scalar_bar_builders = compose_layers(surf, layers)
     # We shouldn't have to do this, but for some reason exporting to
     # HTML adds transparency even if we set alpha to 1 when we use
     # explicit RGBA to colour the mesh. Dropping the alpha channel
@@ -416,7 +688,7 @@ def add_composed_rgba(
         surf.cell_data[name] = rgba
     elif data_domain == 'point_data':
         surf.point_data[name] = rgba
-    return surf, name
+    return surf, name, scalar_bar_builders
 
 
 def add_points_scalars(
@@ -424,7 +696,7 @@ def add_points_scalars(
     points: PointDataCollection,
     layers: Sequence[Layer],
     copy_actors: bool = False,
-) -> pv.Plotter:
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
     # We could implement blend modes for points, but it's not clear
     # that it would be worth the tradeoff of potentially having to
     # compute the union of all coors in the dataset at every blend
@@ -438,17 +710,7 @@ def add_points_scalars(
     for layer in layers:
         dataset = points.get_dataset(layer.name)
         scalar_array = dataset.points.point_data[layer.name]
-        rgba = scalars_to_rgba(
-            scalars=scalar_array,
-            cmap=layer.cmap,
-            clim=layer.clim,
-            cmap_negative=layer.cmap_negative,
-            clim_negative=layer.clim_negative,
-            color=layer.color,
-            alpha=layer.alpha,
-            below_color=layer.below_color,
-            hide_subthreshold=layer.hide_subthreshold,
-        )
+        rgba, scalar_bar_builders = layer_rgba(layer, scalar_array)
         plotter.add_points(
             points=dataset.points.points,
             render_points_as_spheres=False,
@@ -461,7 +723,7 @@ def add_points_scalars(
             rgb=True,
             copy_mesh=copy_actors,
         )
-    return plotter
+    return plotter, scalar_bar_builders
 
 
 def build_edges_mesh(
@@ -469,7 +731,7 @@ def build_edges_mesh(
     node_coor: np.ndarray,
     layer: EdgeLayer,
     radius: float,
-) -> pv.PolyData:
+) -> Tuple[pv.PolyData, Sequence[ScalarBarBuilder]]:
     edge_values = edge_values.reset_index()
     # DataFrame indices begin at 1 after we filter them, but we need them to
     # begin at 0 for indexing into node_coor.
@@ -490,16 +752,8 @@ def build_edges_mesh(
         alpha = layer.alpha
     else:
         alpha = None
-    rgba = scalars_to_rgba(
-        scalars=scalars,
-        clim=layer.clim,
-        clim_negative=layer.clim_negative,
-        cmap=layer.cmap,
-        cmap_negative=layer.cmap_negative,
-        color=color,
-        alpha=alpha,
-        hide_subthreshold=layer.hide_subthreshold,
-    )
+    flayer = dataclasses.replace(layer, alpha=alpha, color=color)
+    rgba, scalar_bar_builders = layer_rgba(flayer, scalars)
     if isinstance(layer.alpha, str):
         rgba[:, 3] = edge_values[layer.alpha].values
     elif alpha == 1:
@@ -524,7 +778,7 @@ def build_edges_mesh(
         geom=geom,
         factor=1,
     )
-    return glyph
+    return glyph, scalar_bar_builders
 
 
 def build_edges_meshes(
@@ -532,7 +786,7 @@ def build_edges_meshes(
     node_coor: np.ndarray,
     layer: EdgeLayer,
     num_radius_bins: int = 10,
-) -> Sequence[pv.PolyData]:
+) -> Tuple[pv.PolyData, Sequence[ScalarBarBuilder]]:
     if not isinstance(layer.radius, str):
         radius_str = 'edge_radius'
         edge_radius = np.full(len(edge_values), layer.radius)
@@ -569,21 +823,24 @@ def build_edges_meshes(
         selected = edge_values[idx]
         if len(selected) == 0:
             continue
-        mesh = build_edges_mesh(
+        # TODO: We're replacing the builders at every call. We definitely
+        #       don't want to get multiple builders, but is this really the
+        #       right way to do it? Double check to make sure it makes sense.
+        mesh, scalar_bar_builders = build_edges_mesh(
             selected,
             node_coor,
             layer,
             bins[i],
         )
         edges = edges.merge(mesh)
-    return edges
+    return edges, scalar_bar_builders
 
 
 def build_nodes_mesh(
     node_values: pd.DataFrame,
     node_coor: np.ndarray,
     layer: NodeLayer,
-) -> pv.PolyData:
+) -> Tuple[pv.PolyData, Sequence[ScalarBarBuilder]]:
     node_values = node_values.reset_index()
     nodes = pv.PolyData(node_coor)
     if not isinstance(layer.radius, str):
@@ -608,16 +865,8 @@ def build_nodes_mesh(
         alpha = layer.alpha
     else:
         alpha = None
-    rgba = scalars_to_rgba(
-        scalars=scalars,
-        clim=layer.clim,
-        clim_negative=layer.clim_negative,
-        cmap=layer.cmap,
-        cmap_negative=layer.cmap_negative,
-        color=color,
-        alpha=alpha,
-        hide_subthreshold=layer.hide_subthreshold,
-    )
+    flayer = dataclasses.replace(layer, alpha=alpha, color=color)
+    rgba, scalar_bar_builders = layer_rgba(flayer, scalars)
     if isinstance(layer.alpha, str):
         rgba[:, 3] = node_values[layer.alpha].values
     elif alpha == 1:
@@ -634,7 +883,7 @@ def build_nodes_mesh(
         orient=False,
         geom=pv.Icosphere(nsub=3),
     )
-    return glyph
+    return glyph, scalar_bar_builders
 
 
 def add_network(
@@ -643,15 +892,16 @@ def add_network(
     layers: Sequence[NodeLayer],
     num_edge_radius_bins: int = 10,
     copy_actors: bool = False,
-) -> pv.Plotter:
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
     # TODO: See if we're better off merging the nodes and edges into a
     #       single mesh, or if there's any reason to keep them separate.
+    scalar_bar_builders = ()
     for layer in layers:
         network = networks.get_dataset(layer.name)
         node_coor = network.coor
         node_values = network.nodes
         edge_values = network.edges
-        glyph = build_nodes_mesh(node_values, node_coor, layer)
+        glyph, new_builder = build_nodes_mesh(node_values, node_coor, layer)
         plotter.add_mesh(
             glyph,
             scalars=f'{layer.name}_rgba',
@@ -660,8 +910,9 @@ def add_network(
             copy_mesh=copy_actors,
         )
 
+        layer_builders = new_builder
         for edge_layer in layer.edge_layers:
-            glyphs = build_edges_meshes(
+            glyphs, new_builder = build_edges_meshes(
                 edge_values,
                 node_coor,
                 edge_layer,
@@ -673,8 +924,15 @@ def add_network(
                 rgb=True,
                 copy_mesh=copy_actors,
             )
+            if new_builder[0].name == layer_builders[0].name:
+                new_builder = (dataclasses.replace(
+                    new_builder[0],
+                    name=f'{layer.name} (edges)',
+                ),)
+            layer_builders = layer_builders + new_builder
+        scalar_bar_builders = scalar_bar_builders + layer_builders
 
-    return plotter
+    return plotter, scalar_bar_builders
 
 
 def unified_plotter(
@@ -1008,6 +1266,8 @@ def unified_plotter(
         for hemisphere in hemispheres:
             surf.__getattribute__(hemisphere).project(surf_projection)
 
+    scalar_bar_builders = ()
+
     if surf is not None:
         for hemisphere in hemispheres:
             hemi_surf = surf.__getattribute__(hemisphere)
@@ -1028,7 +1288,7 @@ def unified_plotter(
                 below_color=surf_scalars_below_color,
             )
             hemi_layers = [base_layer] + list(hemi_layers)
-            hemi_surf, hemi_scalars = add_composed_rgba(
+            hemi_surf, hemi_scalars, new_builders = add_composed_rgba(
                 surf=hemi_surf,
                 layers=hemi_layers,
                 surf_alpha=surf_alpha,
@@ -1068,6 +1328,7 @@ def unified_plotter(
                     color=surf_scalars_boundary_color,
                     line_width=surf_scalars_boundary_width,
                 )
+            scalar_bar_builders = scalar_bar_builders + new_builders
 
     if points is not None:
         if points_scalars_layers is None:
@@ -1083,12 +1344,13 @@ def unified_plotter(
                 below_color=points_scalars_below_color,
             )
             points_scalars_layers = [base_layer] + list(points_scalars_layers)
-        p = add_points_scalars(
+        p, new_builders = add_points_scalars(
             plotter=p,
             points=points,
             layers=points_scalars_layers,
             copy_actors=copy_actors,
         )
+        scalar_bar_builders = scalar_bar_builders + new_builders
 
     if networks is not None:
         if network_layers is None or len(network_layers) == 0:
@@ -1120,13 +1382,14 @@ def unified_plotter(
                     edge_layers=base_edge_layers,
                 )
             network_layers = [base_layer]
-        p = add_network(
+        p, new_builders = add_network(
             plotter=p,
             networks=networks,
             layers=network_layers,
             num_edge_radius_bins=num_edge_radius_bins,
             copy_actors=copy_actors,
         )
+        scalar_bar_builders = scalar_bar_builders + new_builders
 
     if postprocessors is None or len(postprocessors) == 0:
         postprocessors = [_null_postprocessor]
