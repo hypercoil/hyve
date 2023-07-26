@@ -52,10 +52,13 @@ from .const import (
     SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH,
     SCALAR_BAR_DEFAULT_LENGTH,
     SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER,
+    SCALAR_BAR_DEFAULT_LOC,
     SCALAR_BAR_DEFAULT_NAME,
     SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
     SCALAR_BAR_DEFAULT_ORIENTATION,
+    SCALAR_BAR_DEFAULT_SIZE,
+    SCALAR_BAR_DEFAULT_SPACING,
     SCALAR_BAR_DEFAULT_WIDTH,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
@@ -300,16 +303,21 @@ def build_scalar_bar(
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH
     ),
 ) -> Figure:
+    name = name.upper() # TODO: change this! work into style
     vmin, vmax = mapper.get_clim()
     static_length = num_sig_figs * width // 2
     dynamic_length = length - 2 * static_length
     dynamic = mapper.to_rgba(np.linspace(vmin, vmax, dynamic_length))
     above = np.tile(mapper.to_rgba(vmax), (static_length, 1))
     if below_color is not None:
+        if len(below_color) == 4 and below_color[-1] == 0:
+            # Not ideal, but looks better than transparent and too many
+            # color bars actually end in black
+            below_color = '#444444'
         below = np.tile(colors.to_rgba(below_color), (static_length, 1))
     else:
         below = np.tile(mapper.to_rgba(vmin), (static_length, 1))
-    colors = np.stack(width * [np.concatenate([below, dynamic, above])])
+    rgba = np.stack(width * [np.concatenate([below, dynamic, above])])
 
     match orientation:
         case 'h':
@@ -337,7 +345,7 @@ def build_scalar_bar(
             }
         case 'v':
             figsize = (width / TYPICAL_DPI, length / TYPICAL_DPI)
-            colors = colors.swapaxes(0, 1)
+            rgba = rgba.swapaxes(0, 1)[::-1]
             vmin_params = {
                 'xy': (0, 0),
                 'xytext': (0.5, 0.02),
@@ -363,7 +371,7 @@ def build_scalar_bar(
             raise ValueError(f'Invalid orientation: {orientation}')
 
     f, ax = plt.subplots(figsize=figsize)
-    ax.imshow(colors)
+    ax.imshow(rgba)
     ax.annotate(
         f'{vmin:.{num_sig_figs}g}',
         xycoords='axes fraction',
@@ -392,7 +400,6 @@ def build_scalar_bar(
         ],
         **vmax_params,
     )
-    name = 'SCALARS'
     if name is not None:
         ax.annotate(
             name,
@@ -412,12 +419,61 @@ def build_scalar_bar(
     f.subplots_adjust(0, 0, 1, 1)
     return f
 
-    # scalar_bar = pv.ChartMPL(f, size=(0.6, 0.6), loc=(0.06, 0.06))
-    # scalar_bar.background_color = (0, 0, 0, 0)
-    # scalar_bar.border_color = (0, 0, 0, 0)
 
-    # p = pv.Plotter()
-    # p.add_chart(scalar_bar)
+def overlay_scalar_bars(
+    plotter: pv.Plotter,
+    builders: Sequence[ScalarBarBuilder],
+    loc: Union[
+        Tuple[float, float],
+        Mapping[str, Tuple[float, float]],
+    ] = SCALAR_BAR_DEFAULT_LOC,
+    size: Union[
+        Tuple[float, float],
+        Mapping[str, Tuple[float, float]],
+    ] = SCALAR_BAR_DEFAULT_SIZE,
+    default_spacing: float = SCALAR_BAR_DEFAULT_SPACING,
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    # tuple, but we want to be tolerant if the user provides a list or
+    # something
+    if loc is not None and not isinstance(loc, Mapping):
+        loc = {'__start__': loc}
+    if loc is None or '__start__' not in loc:
+        # This is gonna break when people want to plot multiple scalar
+        # bars with different orientations. We'll cross that bridge when
+        # we get there.
+        if builders[0].orientation == 'v':
+            loc = {'__start__': (0.02, 0.1)}
+        elif builders[0].orientation == 'h':
+            loc = {'__start__': (0.1, 0.02)}
+    if size is not None and not isinstance(size, Mapping):
+        size = {'__default__': size}
+    if size is None or '__default__' not in size:
+        # This is gonna break when people want to plot multiple scalar
+        # bars with different orientations. We'll cross that bridge when
+        # we get there.
+        if builders[0].orientation == 'v':
+            size = {'__default__': (0.05, 0.8)}
+        elif builders[0].orientation == 'h':
+            size = {'__default__': (0.8, 0.05)}
+
+    offset = 0
+    for builder in builders:
+        bloc = loc.get(builder.name, loc['__start__'])
+        bsize = size.get(builder.name, size['__default__'])
+        if bloc == loc['__start__']:
+            if builder.orientation == 'v':
+                bloc = (bloc[0] + offset, bloc[1])
+                offset += (bsize[0] + default_spacing)
+            elif builder.orientation == 'h':
+                bloc = (bloc[0], bloc[1] + offset)
+                offset += (bsize[1] + default_spacing)
+        fig = build_scalar_bar(**builder)
+        scalar_bar = pv.ChartMPL(fig, size=bsize, loc=bloc)
+        scalar_bar.background_color = (0, 0, 0, 0)
+        scalar_bar.border_color = (0, 0, 0, 0)
+
+        plotter.add_chart(scalar_bar)
+    return plotter, None
 
 
 def _rgba_impl(
@@ -451,10 +507,6 @@ def _rgba_impl(
                 'below_color': below_color,
             }
         })
-        # build_scalar_bar(
-        #     mapper=mapper,
-        #     below_color=below_color,
-        # )
     return rgba, scalar_bar_builder
 
 
@@ -981,6 +1033,7 @@ def unified_plotter(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,
 ) -> Optional[pv.Plotter]:
     """
@@ -1186,6 +1239,12 @@ def unified_plotter(
 
     p = pv.Plotter(off_screen=off_screen, theme=theme)
 
+    # TODO: We can see that the conditionals below suggest a more general
+    #       approach to plotting. We should refactor this code to make the
+    #       unified plotter accept plotting primitives (e.g., surfaces,
+    #       volumes, graphs) and then apply the appropriate plotting
+    #       operations to them. This would make it easier to add new
+    #       primitives in the future.
     if hemisphere_slack == 'default':
         proj_require_slack = {'inflated', 'veryinflated', 'sphere'}
         if surf_projection in proj_require_slack:
@@ -1271,7 +1330,6 @@ def unified_plotter(
     if surf is not None:
         for hemisphere in hemispheres:
             hemi_surf = surf.__getattribute__(hemisphere)
-            # hemi_surf.project(surf_projection)
             hemi_clim = hemi_params.get(hemisphere, 'surf_scalars_clim')
             hemi_cmap = hemi_params.get(hemisphere, 'surf_scalars_cmap')
             hemi_layers = hemi_params.get(hemisphere, 'surf_scalars_layers')
@@ -1302,17 +1360,6 @@ def unified_plotter(
                 show_edges=False,
                 copy_mesh=copy_actors,
             )
-            # p.add_mesh(
-            #     hemi_surf,
-            #     scalars=surf_scalars,
-            #     show_edges=False,
-            #     cmap=hemi_cmap,
-            #     clim=hemi_clim,
-            #     opacity=surf_alpha,
-            #     color=hemi_color,
-            #     below_color=surf_scalars_below_color,
-            #     copy_mesh=copy_actors,
-            # )
             if (
                 surf_scalars_boundary_width > 0
                 and surf_scalars is not None
@@ -1390,6 +1437,10 @@ def unified_plotter(
             copy_actors=copy_actors,
         )
         scalar_bar_builders = scalar_bar_builders + new_builders
+
+    if sbprocessor is None:
+        sbprocessor = overlay_scalar_bars
+    p, scalar_bar = sbprocessor(plotter=p, builders=scalar_bar_builders)
 
     if postprocessors is None or len(postprocessors) == 0:
         postprocessors = [_null_postprocessor]
