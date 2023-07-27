@@ -16,7 +16,7 @@ from conveyant import (
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
-    scalars_from_nifti,
+    points_scalars_from_nifti,
     plot_to_image,
     save_snapshots,
 )
@@ -26,7 +26,7 @@ def test_vol_scalars():
     nii = nb.load('/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz')
     plot_f = ichain(
         surf_from_archive(),
-        scalars_from_nifti('pain'),
+        points_scalars_from_nifti('pain'),
         plot_to_image(),
         save_snapshots(
             fname_spec=(

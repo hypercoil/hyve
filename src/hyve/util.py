@@ -8,7 +8,14 @@ Utilities for plotting and reporting.
 """
 import dataclasses
 from typing import (
-    Any, Dict, Literal, Mapping, Optional, Sequence, Tuple, Union
+    Any,
+    Dict,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
 )
 
 import numpy as np

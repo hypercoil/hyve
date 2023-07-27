@@ -18,15 +18,15 @@ from conveyant import (
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
-    resample_to_surface,
-    plot_to_image,
-    scalars_from_cifti,
-    scalars_from_gifti,
+    surf_scalars_from_cifti,
+    surf_scalars_from_gifti,
+    surf_scalars_from_nifti,
     parcellate_colormap,
-    parcellate_scalars,
+    parcellate_surf_scalars,
     scatter_into_parcels,
     vertex_to_face,
     plot_to_html,
+    plot_to_image,
     save_snapshots,
 )
 
@@ -40,7 +40,7 @@ def print_params(**params):
 def test_scalars():
     chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gmdensity', template='fsaverage', plot=True),
+        surf_scalars_from_nifti('gmdensity', template='fsaverage', plot=True),
         plot_to_image(),
         save_snapshots(
             fname_spec=(
@@ -68,7 +68,7 @@ def test_scalars():
 def test_parcellation():
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=True),
+        surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
         vertex_to_face('parcellation'),
         plot_to_image(),
@@ -97,7 +97,7 @@ def test_parcellation():
 
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=True),
+        surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
         plot_to_image(),
         save_snapshots(
@@ -130,7 +130,7 @@ def test_parcellation():
 def test_parcellation_modal_cmap():
     chain = ichain(
         surf_from_archive(),
-        scalars_from_gifti('parcellation', plot=True),
+        surf_scalars_from_gifti('parcellation', plot=True),
         parcellate_colormap('modal', 'parcellation'),
         vertex_to_face('parcellation'),
         plot_to_image(),
@@ -163,7 +163,7 @@ def test_parcellation_modal_cmap():
 
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=True),
+        surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('modal', 'parcellation'),
         plot_to_image(),
         save_snapshots(
@@ -195,7 +195,7 @@ def test_parcellation_modal_cmap():
 def test_parcellation_html():
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=True),
+        surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
         vertex_to_face('parcellation'),
         plot_to_html(
@@ -224,9 +224,9 @@ def test_parcellation_html():
 def test_parcellated_scalars():
     chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gmdensity', template='fsLR', plot=False),
-        scalars_from_cifti('parcellation', plot=False),
-        parcellate_scalars('gmdensity', 'parcellation'),
+        surf_scalars_from_nifti('gmdensity', template='fsLR', plot=False),
+        surf_scalars_from_cifti('parcellation', plot=False),
+        parcellate_surf_scalars('gmdensity', 'parcellation'),
         vertex_to_face('gmdensityParcellated', interpolation='mode'),
         plot_to_image(),
         save_snapshots(
@@ -258,7 +258,7 @@ def test_parcellated_scalars():
     parcellated = np.random.rand(400)
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=False),
+        surf_scalars_from_cifti('parcellation', plot=False),
         scatter_into_parcels('noise', 'parcellation'),
         vertex_to_face('noise', interpolation='mode'),
         plot_to_image(),

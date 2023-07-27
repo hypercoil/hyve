@@ -11,10 +11,10 @@ from conveyant import ichain, iochain
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
-    scalars_from_cifti,
-    scalars_from_gifti,
-    scalars_from_array,
-    resample_to_surface,
+    surf_scalars_from_cifti,
+    surf_scalars_from_gifti,
+    surf_scalars_from_array,
+    surf_scalars_from_nifti,
     parcellate_colormap,
     vertex_to_face,
     plot_to_image,
@@ -24,8 +24,8 @@ from hyve.transforms import (
 @pytest.mark.parametrize('cmap', ['network', 'modal'])
 @pytest.mark.parametrize('parcellation_name, parcellation_path', [
     ('Schaefer400', '/Users/rastkociric/Downloads/desc-schaefer_res-0400_atlas.nii'),
-    ('MyConnectomeWard400', '/tmp/myconnectome_ward400_parcellation.nii.gz'),
-    ('MSCWard400', '/tmp/MSC_ward400_parcellation.nii.gz'),
+    ('MyConnectomeWard400', '/Users/rastkociric/Downloads/myconnectome_ward400_parcellation.nii.gz'),
+    ('MSCWard400', '/Users/rastkociric/Downloads/MSC_ward400_parcellation.nii.gz'),
     ('Glasser360', (
         '/Users/rastkociric/Downloads/Glasser_2016.32k.L.label.gii',
         '/Users/rastkociric/Downloads/Glasser_2016.32k.R.label.gii',
@@ -61,7 +61,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
             f'{parcellation_name}_gifti_left': parcellation_path_L,
             f'{parcellation_name}_gifti_right': parcellation_path_R,
         }
-        transform = scalars_from_gifti(
+        transform = surf_scalars_from_gifti(
             parcellation_name,
             is_masked=False,
             apply_mask=True,
@@ -69,7 +69,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
         )
     elif parcellation_path.endswith('.nii.gz'):
         filearg = {f'{parcellation_name}_nifti': parcellation_path}
-        transform = resample_to_surface(
+        transform = surf_scalars_from_nifti(
             parcellation_name,
             template='fsLR',
             method='nearest',
@@ -80,7 +80,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
     elif parcellation_path.endswith('.nii'):
         # Not always, but here yes
         filearg = {f'{parcellation_name}_cifti': parcellation_path}
-        transform = scalars_from_cifti(
+        transform = surf_scalars_from_cifti(
             parcellation_name,
             plot=True,
             allow_multihemisphere=False,

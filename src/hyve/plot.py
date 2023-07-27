@@ -11,13 +11,13 @@ import io
 from collections.abc import Mapping as MappingABC
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyvista as pv
-import matplotlib.pyplot as plt
-from PIL import Image
 from matplotlib import cm, colors, patheffects
 from matplotlib.figure import Figure
+from PIL import Image
 
 from .const import (
     DEFAULT_CMAP,
@@ -40,8 +40,8 @@ from .const import (
     NODE_CLIM_DEFAULT_VALUE,
     NODE_CMAP_DEFAULT_VALUE,
     NODE_COLOR_DEFAULT_VALUE,
-    NODE_RLIM_DEFAULT_VALUE,
     NODE_RADIUS_DEFAULT_VALUE,
+    NODE_RLIM_DEFAULT_VALUE,
     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
@@ -74,8 +74,8 @@ from .surf import (
     CortexTriSurface,
 )
 from .util import (
-    PointDataCollection,
     NetworkDataCollection,
+    PointDataCollection,
     premultiply_alpha,
     robust_clim,
     source_over,
@@ -488,10 +488,10 @@ def collect_scalar_bars(
     argtight = np.argmin(layout)
     argslack = 1 - argtight
     counttight = layout[argtight]
-    countrelaxed = np.ceil(count / counttight).astype(int)
+    countslack = np.ceil(count / counttight).astype(int)
     layout = [None, None]
     layout[argtight] = counttight
-    layout[argslack] = countrelaxed
+    layout[argslack] = countslack
 
     # Things are about to get confusing because we're switching back and forth
     # between array convention and Cartesian convention. Sorry.
@@ -537,6 +537,8 @@ def overlay_scalar_bars(
 ) -> Tuple[pv.Plotter, None]:
     # tuple, but we want to be tolerant if the user provides a list or
     # something
+    if len(builders) == 0:
+        return plotter, None
     if loc is not None and not isinstance(loc, Mapping):
         loc = {'__start__': loc}
     if loc is None or '__start__' not in loc:
@@ -1397,12 +1399,16 @@ def unified_plotter(
         if networks is not None:
             if any([n.lh_mask is None for n in networks]):
                 left_mask = ref_coor[:, 0] < 0
-                lh_condition = lambda coor, _, __: coor[:, 0] < 0
-                rh_condition = lambda coor, _, __: coor[:, 0] > 0
+                def lh_condition(coor, _, __):
+                    return coor[:, 0] < 0
+                def rh_condition(coor, _, __):
+                    return coor[:, 0] > 0
             else:
                 left_mask = np.concatenate([n.lh_mask for n in networks])
-                lh_condition = lambda _, __, lh_mask: lh_mask
-                rh_condition = lambda _, __, lh_mask: ~lh_mask
+                def lh_condition(_, __, lh_mask):
+                    return lh_mask
+                def rh_condition(_, __, lh_mask):
+                    return ~lh_mask
             networks = networks.translate(
                 (-displacement, 0, 0),
                 condition=lh_condition,
@@ -1421,7 +1427,7 @@ def unified_plotter(
                 condition=lambda coor, _: coor[:, 0] > 0
             )
             points = PointDataCollection(
-                l + r for l, r in zip(left_points, right_points)
+                lp + rp for lp, rp in zip(left_points, right_points)
             )
     elif surf is not None:
         for hemisphere in hemispheres:

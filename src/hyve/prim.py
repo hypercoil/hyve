@@ -39,6 +39,12 @@ from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 
 from .const import (
+    EDGE_ALPHA_DEFAULT_VALUE,
+    EDGE_CLIM_DEFAULT_VALUE,
+    EDGE_CMAP_DEFAULT_VALUE,
+    EDGE_COLOR_DEFAULT_VALUE,
+    EDGE_RADIUS_DEFAULT_VALUE,
+    EDGE_RLIM_DEFAULT_VALUE,
     LAYER_ALPHA_DEFAULT_VALUE,
     LAYER_BELOW_COLOR_DEFAULT_VALUE,
     LAYER_BLEND_MODE_DEFAULT_VALUE,
@@ -47,6 +53,12 @@ from .const import (
     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
     NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    NODE_ALPHA_DEFAULT_VALUE,
+    NODE_CLIM_DEFAULT_VALUE,
+    NODE_CMAP_DEFAULT_VALUE,
+    NODE_COLOR_DEFAULT_VALUE,
+    NODE_RADIUS_DEFAULT_VALUE,
+    NODE_RLIM_DEFAULT_VALUE,
     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
@@ -57,18 +69,6 @@ from .const import (
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
-    NODE_ALPHA_DEFAULT_VALUE,
-    NODE_CLIM_DEFAULT_VALUE,
-    NODE_CMAP_DEFAULT_VALUE,
-    NODE_COLOR_DEFAULT_VALUE,
-    NODE_RADIUS_DEFAULT_VALUE,
-    NODE_RLIM_DEFAULT_VALUE,
-    EDGE_ALPHA_DEFAULT_VALUE,
-    EDGE_CLIM_DEFAULT_VALUE,
-    EDGE_CMAP_DEFAULT_VALUE,
-    EDGE_COLOR_DEFAULT_VALUE,
-    EDGE_RADIUS_DEFAULT_VALUE,
-    EDGE_RLIM_DEFAULT_VALUE,
     Tensor,
 )
 from .plot import (
@@ -83,10 +83,10 @@ from .plot import (
 )
 from .surf import CortexTriSurface
 from .util import (
-    PointData,
-    PointDataCollection,
     NetworkData,
     NetworkDataCollection,
+    PointData,
+    PointDataCollection,
     auto_focus,
     cortex_cameras,
     filter_adjacency_data,
@@ -118,7 +118,7 @@ def surf_from_archive_f(
     )
 
 
-def scalars_from_cifti_f(
+def surf_scalars_from_cifti_f(
     surf: CortexTriSurface,
     scalars: str,
     cifti: nb.Cifti2Image,
@@ -148,7 +148,7 @@ def scalars_from_cifti_f(
     return surf, surf_scalars
 
 
-def scalars_from_gifti_f(
+def surf_scalars_from_gifti_f(
     surf: CortexTriSurface,
     scalars: str,
     left_gifti: Optional[nb.gifti.GiftiImage] = None,
@@ -180,7 +180,7 @@ def scalars_from_gifti_f(
     return surf, surf_scalars
 
 
-def scalars_from_nifti_f(
+def points_scalars_from_nifti_f(
     scalars: str,
     nifti: nb.Nifti1Image,
     null_value: Optional[float] = 0.0,
@@ -218,7 +218,7 @@ def scalars_from_nifti_f(
     return points, points_scalars
 
 
-def points_from_array_f(
+def points_scalars_from_array_f(
     scalars: str,
     coor: Tensor,
     values: Tensor,
@@ -241,7 +241,7 @@ def points_from_array_f(
     return points, points_scalars
 
 
-def scalars_from_array_f(
+def surf_scalars_from_array_f(
     surf: CortexTriSurface,
     scalars: str,
     surf_scalars: Sequence[str] = (),
@@ -281,7 +281,7 @@ def scalars_from_array_f(
     return surf, surf_scalars
 
 
-def resample_to_surface_f(
+def surf_scalars_from_nifti_f(
     surf: CortexTriSurface,
     scalars: str,
     nifti: nb.Nifti1Image,
@@ -446,7 +446,7 @@ def parcellate_colormap_f(
     return ret
 
 
-def parcellate_scalars_f(
+def parcellate_surf_scalars_f(
     surf: CortexTriSurface,
     scalars: str,
     sink: str,
@@ -1661,49 +1661,49 @@ surf_from_archive_p = Primitive(
 )
 
 
-scalars_from_cifti_p = Primitive(
-    scalars_from_cifti_f,
-    'scalars_from_cifti',
+surf_scalars_from_cifti_p = Primitive(
+    surf_scalars_from_cifti_f,
+    'surf_scalars_from_cifti',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 
 
-scalars_from_gifti_p = Primitive(
-    scalars_from_gifti_f,
-    'scalars_from_gifti',
+surf_scalars_from_gifti_p = Primitive(
+    surf_scalars_from_gifti_f,
+    'surf_scalars_from_gifti',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 
 
-scalars_from_array_p = Primitive(
-    scalars_from_array_f,
-    'scalars_from_array',
+surf_scalars_from_array_p = Primitive(
+    surf_scalars_from_array_f,
+    'surf_scalars_from_array',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 
 
-scalars_from_nifti_p = Primitive(
-    scalars_from_nifti_f,
-    'scalars_from_nifti',
+points_scalars_from_nifti_p = Primitive(
+    points_scalars_from_nifti_f,
+    'points_scalars_from_nifti',
     output=('points', 'points_scalars'),
     forward_unused=True,
 )
 
 
-points_from_array_p = Primitive(
-    points_from_array_f,
-    'points_from_array',
+points_scalars_from_array_p = Primitive(
+    points_scalars_from_array_f,
+    'points_scalars_from_array',
     output=('points', 'points_scalars'),
     forward_unused=True,
 )
 
 
-resample_to_surface_p = Primitive(
-    resample_to_surface_f,
-    'resample_to_surface',
+surf_scalars_from_nifti_p = Primitive(
+    surf_scalars_from_nifti_f,
+    'surf_scalars_from_nifti',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
@@ -1717,9 +1717,9 @@ parcellate_colormap_p = Primitive(
 )
 
 
-parcellate_scalars_p = Primitive(
-    parcellate_scalars_f,
-    'parcellate_scalars',
+parcellate_surf_scalars_p = Primitive(
+    parcellate_surf_scalars_f,
+    'parcellate_surf_scalars',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )

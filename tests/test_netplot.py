@@ -16,7 +16,7 @@ from hyve.flows import add_network_data, joindata
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
-    scalars_from_cifti,
+    surf_scalars_from_cifti,
     parcellate_colormap,
     add_node_variable,
     add_edge_variable,
@@ -42,7 +42,7 @@ def test_net():
 
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=False),
+        surf_scalars_from_cifti('parcellation', plot=False),
         add_network_data(
             add_node_variable('vis'),
             add_edge_variable(
@@ -101,7 +101,7 @@ def test_net_highlight():
 
     chain = ichain(
         surf_from_archive(),
-        scalars_from_cifti('parcellation', plot=False),
+        surf_scalars_from_cifti('parcellation', plot=False),
         #build_network('vis'),
         add_network_overlay(
             'vis',

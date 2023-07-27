@@ -8,6 +8,7 @@ import pytest
 from pkg_resources import resource_filename
 
 import nibabel as nb
+import numpy as np
 
 from conveyant import (
     ichain,
@@ -15,15 +16,39 @@ from conveyant import (
 from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
-    resample_to_surface,
+    surf_scalars_from_nifti,
+    surf_scalars_from_cifti,
+    points_scalars_from_array,
     plot_to_image,
     plot_to_html,
-    scalars_from_cifti,
     parcellate_colormap,
     save_snapshots,
     add_surface_overlay,
+    add_points_overlay,
     vertex_to_face,
 )
+
+
+def create_sphere(radius=30, inner_radius=25, inmost_radius=20):
+    sphere_bounds = np.arange(-radius, radius, 3)
+    sphere_coor = np.concatenate([
+        c.reshape(1, -1) for c in
+        np.meshgrid(sphere_bounds, sphere_bounds, sphere_bounds)
+    ]).T
+    coor_radius = np.sqrt((sphere_coor ** 2).sum(-1))
+    sphere_index = coor_radius < radius
+    coor_radius = coor_radius[sphere_index]
+    sphere_coor = sphere_coor[sphere_index]
+    sphere_inner_index = coor_radius < inner_radius
+    sphere_data = 1 + ((coor_radius - inner_radius) / (radius - inner_radius))
+    sphere_data[sphere_inner_index] = -(
+        1 + ((coor_radius[sphere_inner_index] - inmost_radius) / (
+            inner_radius - inmost_radius
+        )))
+    sphere_inmost_index = coor_radius < inmost_radius
+    sphere_data[sphere_inmost_index] = np.random.randn(
+        sphere_inmost_index.sum())
+    return sphere_coor, sphere_data
 
 
 @pytest.mark.parametrize('output', ['image', 'html'])
@@ -49,17 +74,21 @@ def test_parcellation_modal_cmap(output, v2f):
         out_transform_sequence = [
             plot_to_html(fname_spec=fname_spec),
         ]
+    sphere_coor, sphere_data = create_sphere()
 
     plot_f = ichain(
         surf_from_archive(),
         add_surface_overlay(
-            scalars_from_cifti('parcellation'),
+            surf_scalars_from_cifti('parcellation'),
             parcellate_colormap('modal', 'parcellation'),
             *v2f_transform_sequence[0],
         ),
         add_surface_overlay(
-            resample_to_surface('pain', template='fsLR'),
+            surf_scalars_from_nifti('pain', template='fsLR'),
             *v2f_transform_sequence[1],
+        ),
+        add_points_overlay(
+            points_scalars_from_array('sphere', point_size=8),
         ),
         *out_transform_sequence,
     )(automap_unified_plotter_p)
@@ -75,6 +104,11 @@ def test_parcellation_modal_cmap(output, v2f):
         pain_cmap='inferno',
         pain_clim='robust',
         pain_alpha=0.5,
+        sphere_coor=sphere_coor,
+        sphere_values=sphere_data,
+        sphere_cmap='Reds',
+        sphere_cmap_negative='Blues',
+        sphere_clim=(1.0, 2.0),
         surf_projection=('veryinflated',),
         # surf_scalars_boundary_color='black',
         # surf_scalars_boundary_width=5,

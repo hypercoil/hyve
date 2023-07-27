@@ -13,8 +13,8 @@ from hyve.transforms import (
     plot_final_image,
     save_snapshots,
     surf_from_archive,
-    scalars_from_nifti,
-    resample_to_surface,
+    surf_scalars_from_nifti,
+    points_scalars_from_nifti,
 )
 
 
@@ -22,8 +22,8 @@ from hyve.transforms import (
 def test_plotter_flow_syntax():
     chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gmdensity', template='fsaverage'),
-        scalars_from_nifti('pain'),
+        surf_scalars_from_nifti('gmdensity', template='fsaverage'),
+        points_scalars_from_nifti('pain'),
         plot_to_display(),
     )
     plot_f = chain(automap_unified_plotter_p)
@@ -46,8 +46,8 @@ def test_plotter_flow_syntax():
 def test_plotter_final_capture():
     chain = ichain(
         surf_from_archive(),
-        resample_to_surface('gmdensity', template='fsaverage'),
-        scalars_from_nifti('pain'),
+        surf_scalars_from_nifti('gmdensity', template='fsaverage'),
+        points_scalars_from_nifti('pain'),
         plot_final_image(n_scenes=1), # n_scenes > 1 is not supported yet
         save_snapshots(
             fname_spec=(

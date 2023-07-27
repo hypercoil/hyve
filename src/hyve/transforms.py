@@ -27,14 +27,14 @@ from conveyant import (
 from .const import Tensor
 from .prim import (
     surf_from_archive_p,
-    scalars_from_cifti_p,
-    scalars_from_gifti_p,
-    scalars_from_nifti_p,
-    scalars_from_array_p,
-    points_from_array_p,
-    resample_to_surface_p,
+    surf_scalars_from_array_p,
+    surf_scalars_from_cifti_p,
+    surf_scalars_from_gifti_p,
+    surf_scalars_from_nifti_p,
+    points_scalars_from_array_p,
+    points_scalars_from_nifti_p,
     parcellate_colormap_p,
-    parcellate_scalars_p,
+    parcellate_surf_scalars_p,
     scatter_into_parcels_p,
     vertex_to_face_p,
     add_surface_overlay_p,
@@ -131,7 +131,7 @@ def surf_from_archive(
     return transform
 
 
-def scalars_from_cifti(
+def surf_scalars_from_cifti(
     scalars: str,
     is_masked: bool = True,
     apply_mask: bool = False,
@@ -182,7 +182,7 @@ def scalars_from_cifti(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            scalars_from_cifti_p,
+            surf_scalars_from_cifti_p,
             scalars=scalars,
             is_masked=is_masked,
             apply_mask=apply_mask,
@@ -217,7 +217,7 @@ def scalars_from_cifti(
     return transform
 
 
-def scalars_from_gifti(
+def surf_scalars_from_gifti(
     scalars: str,
     is_masked: bool = True,
     apply_mask: bool = False,
@@ -268,7 +268,7 @@ def scalars_from_gifti(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            scalars_from_gifti_p,
+            surf_scalars_from_gifti_p,
             scalars=scalars,
             is_masked=is_masked,
             apply_mask=apply_mask,
@@ -305,7 +305,7 @@ def scalars_from_gifti(
     return transform
 
 
-def scalars_from_array(
+def surf_scalars_from_array(
     scalars: str,
     left_slice: Optional[slice] = None,
     right_slice: Optional[slice] = None,
@@ -324,7 +324,7 @@ def scalars_from_array(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            scalars_from_array_p,
+            surf_scalars_from_array_p,
             scalars=scalars,
             left_slice=left_slice,
             right_slice=right_slice,
@@ -368,7 +368,7 @@ def scalars_from_array(
 
 #TODO: replace null_value arg with the option to provide one of our hypermaths
 #      expressions.
-def scalars_from_nifti(
+def points_scalars_from_nifti(
     scalars: str,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
@@ -379,7 +379,7 @@ def scalars_from_nifti(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            scalars_from_nifti_p,
+            points_scalars_from_nifti_p,
             scalars=scalars,
             null_value=null_value,
             point_size=point_size,
@@ -409,7 +409,7 @@ def scalars_from_nifti(
     return transform
 
 
-def points_from_array(
+def points_scalars_from_array(
     scalars: str,
     point_size: float = 1.0,
     plot: bool = True,
@@ -419,7 +419,7 @@ def points_from_array(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            points_from_array_p,
+            points_scalars_from_array_p,
             scalars=scalars,
             point_size=point_size,
             plot=plot,
@@ -453,7 +453,7 @@ def points_from_array(
     return transform
 
 
-def resample_to_surface(
+def surf_scalars_from_nifti(
     scalars: str,
     template: str = 'fsLR',
     method: Literal['nearest', 'linear'] = 'linear',
@@ -511,7 +511,7 @@ def resample_to_surface(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            resample_to_surface_p,
+            surf_scalars_from_nifti_p,
             scalars=scalars,
             f_resample=f_resample,
             method=method,
@@ -609,7 +609,7 @@ def parcellate_colormap(
     return transform
 
 
-def parcellate_scalars(
+def parcellate_surf_scalars(
     scalars: str,
     parcellation_name: str,
     plot: bool = True,
@@ -643,7 +643,7 @@ def parcellate_scalars(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
-            parcellate_scalars_p,
+            parcellate_surf_scalars_p,
             scalars=scalars,
             parcellation_name=parcellation_name,
             sink=sink,
