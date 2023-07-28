@@ -1014,6 +1014,7 @@ def scalar_focus_camera(
                     'hemispheres',
                     'surf_scalars',
                     'surf_projection',
+                    'close_plotter',
                 ),
             ),
             auxwriter=Partial(
@@ -1055,6 +1056,7 @@ def closest_ortho_camera(
                     'hemispheres',
                     'surf_scalars',
                     'surf_projection',
+                    'close_plotter',
                 ),
             ),
             auxwriter=Partial(
@@ -1100,6 +1102,7 @@ def planar_sweep_camera(
                 __allowed__=(
                     'surf',
                     'hemispheres',
+                    'close_plotter',
                 ),
             ),
             auxwriter=Partial(
@@ -1149,6 +1152,7 @@ def auto_camera(
                     'hemispheres',
                     'surf_scalars',
                     'surf_projection',
+                    'close_plotter',
                 ),
             ),
             auxwriter=Partial(
@@ -1195,7 +1199,7 @@ def plot_to_image() -> callable:
                 views=views,
                 window_size=window_size,
                 plot_scalar_bar=plot_scalar_bar,
-                __allowed__=('hemispheres',),
+                __allowed__=('hemispheres', 'close_plotter'),
             )
             # The inconsistent naming of the `hemisphere` parameter is
             # intentional, but not ideal. The `hemispheres` variable is
@@ -1247,6 +1251,7 @@ def plot_final_image(
                 n_scenes=n_scenes,
                 window_size=window_size,
                 plot_scalar_bar=plot_scalar_bar,
+                __allowed__=('close_plotter',),
             )
             auxwriter = Partial(
                 _auxwriter,
@@ -1297,7 +1302,7 @@ def plot_to_html(
             postprocessor = Partial(
                 _postprocessor,
                 window_size=window_size,
-                __allowed__=(),
+                __allowed__=('close_plotter',),
             )
             postprocessors = params.get('postprocessors', None)
             _f_transformed = compositor(

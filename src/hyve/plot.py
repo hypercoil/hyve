@@ -1137,6 +1137,7 @@ def unified_plotter(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    plotter: Optional[pv.Plotter] = None,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,
 ) -> Optional[pv.Plotter]:
@@ -1341,7 +1342,22 @@ def unified_plotter(
         surf_scalars_layers=surf_scalars_layers,
     )
 
-    p = pv.Plotter(off_screen=off_screen, theme=theme)
+    if plotter is None:
+        p = pv.Plotter(off_screen=off_screen, theme=theme)
+        close_plotter = True # for potential use by postprocessors at binding
+    else:
+        import vtk
+        p = plotter
+        p.clear()
+        light_kit = vtk.vtkLightKit()
+        light_kit.AddLightsToRenderer(p.renderer)
+        vtk_lights = p.renderer.lights
+        p.renderer.remove_all_lights()
+        for vtk_light in vtk_lights:
+            light = pv.Light.from_vtk(vtk_light)
+            p.renderer.add_light(light)
+        p.renderer.LightFollowCameraOn()
+        close_plotter = False # for potential use by postprocessors at binding
 
     # TODO: We can see that the conditionals below suggest a more general
     #       approach to plotting. We should refactor this code to make the

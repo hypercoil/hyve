@@ -1366,6 +1366,7 @@ def plot_to_image_f(
     window_size: Tuple[int, int] = (1920, 1080),
     hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
     plot_scalar_bar: bool = False,
+    close_plotter: bool = True,
 ) -> Tuple[Tensor]:
     if len(hemispheres) == 1:
         hemisphere = hemispheres[0]
@@ -1395,7 +1396,8 @@ def plot_to_image_f(
             return_img=True,
         )
         ret.append(img)
-    plotter.close()
+    if close_plotter:
+        plotter.close()
     return tuple(ret)
 
 
@@ -1429,6 +1431,7 @@ def plot_final_view_f(
     window_size: Tuple[int, int] = (1920, 1080),
     n_scenes: int = 1,
     plot_scalar_bar: bool = False,
+    close_plotter: bool = True,
 ) -> Tuple[Tensor]:
     if not plot_scalar_bar:
         # TODO: This breaks if there's more than one scalar bar. We'll
@@ -1445,16 +1448,21 @@ def plot_final_view_f(
         )
         for _ in range(n_scenes)
     ]
-    plotter.close()
+    if close_plotter:
+        plotter.close()
     return tuple(snapshots)
 
 
 def plot_to_html_buffer_f(
     plotter: pv.Plotter,
     window_size: Tuple[int, int] = (1920, 1080),
+    close_plotter: bool = True,
 ) -> StringIO:
     plotter.window_size = window_size
-    return plotter.export_html(filename=None)
+    html_buffer = plotter.export_html(filename=None)
+    if close_plotter:
+        plotter.close()
+    return html_buffer
 
 
 def save_snapshots_f(
@@ -1589,6 +1597,7 @@ def automap_unified_plotter_f(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    use_single_plotter: bool = True,
     postprocessors: Optional[
         Sequence[Mapping[str, Tuple[callable, callable]]]
     ] = None,
@@ -1604,6 +1613,14 @@ def automap_unified_plotter_f(
     ]
     params.pop('map_spec')
     mapper = replicate(spec=map_spec, weave_type='maximal')
+
+    use_single_plotter = params.pop('use_single_plotter')
+    if use_single_plotter:
+        plotter = pv.Plotter(off_screen=off_screen, theme=theme)
+        plotter_param = {'plotter': plotter}
+    else:
+        plotter_param = {}
+    params = {**params, **plotter_param}
 
     postprocessors = params.pop('postprocessors', None)
     postprocessors = postprocessors or {'plotter': (None, None)}
