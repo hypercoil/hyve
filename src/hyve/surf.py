@@ -828,6 +828,25 @@ class CortexTriSurface:
                 right_data,
                 null_value=null_value,
             )
+
+        if left_data is None:
+            count_left = 0
+        elif left_data.ndim == 1:
+            count_left = 1
+        else:
+            count_left = left_data.shape[0]
+        if right_data is None:
+            count_right = 0
+        elif right_data.ndim == 1:
+            count_right = 1
+        else:
+            count_right = right_data.shape[0]
+        if allow_multihemisphere:
+            count = max(count_left, count_right)
+        else:
+            count = count_left + count_right
+        zero_prefix = int(np.ceil(np.log10(count)))
+
         if left_data is not None:
             scalars_names_L = self._assign_hemisphere_vertex_data(
                 name=name,
@@ -840,6 +859,7 @@ class CortexTriSurface:
                 exclude=exclude,
                 offset=offset,
                 coerce_to_scalar=coerce_to_scalar,
+                zero_prefix=zero_prefix,
             )
         if not allow_multihemisphere:
             offset = len(scalars_names_L)
@@ -855,6 +875,7 @@ class CortexTriSurface:
                 exclude=exclude,
                 offset=offset,
                 coerce_to_scalar=coerce_to_scalar,
+                zero_prefix=zero_prefix,
             )
         return tuple(set(scalars_names_L + scalars_names_R))
 
@@ -1219,6 +1240,7 @@ class CortexTriSurface:
         exclude: Optional[Sequence[int]] = None,
         offset: int = 0,
         coerce_to_scalar: bool = True,
+        zero_prefix: int = 0,
     ) -> None:
         data = self._hemisphere_vertex_data_impl(
             data,
@@ -1240,7 +1262,7 @@ class CortexTriSurface:
                 exclude = [i for i in range(n_scalars) if i not in select]
 
             names = [
-                f'{name}{i + offset}'
+                f'{name}{i + offset:0{zero_prefix}d}'
                 for i in range(n_scalars)
                 if i not in exclude
             ]
