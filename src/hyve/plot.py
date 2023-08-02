@@ -1349,14 +1349,7 @@ def unified_plotter(
         import vtk
         p = plotter
         p.clear()
-        light_kit = vtk.vtkLightKit()
-        light_kit.AddLightsToRenderer(p.renderer)
-        vtk_lights = p.renderer.lights
-        p.renderer.remove_all_lights()
-        for vtk_light in vtk_lights:
-            light = pv.Light.from_vtk(vtk_light)
-            p.renderer.add_light(light)
-        p.renderer.LightFollowCameraOn()
+        p.enable_lightkit()
         close_plotter = False # for potential use by postprocessors at binding
 
     # TODO: We can see that the conditionals below suggest a more general

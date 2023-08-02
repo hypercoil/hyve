@@ -28,7 +28,7 @@ from conveyant import (
     ichain,
 )
 from conveyant import (
-    SanitisedFunctionWrapper as F,
+    FunctionWrapper as F,
 )
 from conveyant.compositors import (
     _dict_to_seq,

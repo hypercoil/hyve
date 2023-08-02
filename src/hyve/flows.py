@@ -10,7 +10,14 @@ flows of visualisation functions.
 """
 from typing import Any, Literal, Optional, Sequence
 
+from conveyant import ichain
 from conveyant.flows import join
+
+from .prim import automap_unified_plotter_p
+
+
+def plotdef(*pparams: Sequence[callable]) -> callable:
+    return ichain(*pparams)(automap_unified_plotter_p)
 
 
 def joindata(

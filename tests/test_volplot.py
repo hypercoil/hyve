@@ -10,10 +10,7 @@ from pkg_resources import resource_filename as pkgrf
 
 import nibabel as nb
 
-from conveyant import (
-    ichain,
-)
-from hyve.prim import automap_unified_plotter_p
+from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
     points_scalars_from_nifti,
@@ -24,7 +21,7 @@ from hyve.transforms import (
 
 def test_vol_scalars():
     nii = nb.load('/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz')
-    plot_f = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         points_scalars_from_nifti('pain'),
         plot_to_image(),
@@ -33,7 +30,7 @@ def test_vol_scalars():
                 'scalars-pain_view-{view}'
             ),
         ),
-    )(automap_unified_plotter_p)
+    )
     plot_f(
         template='fsaverage',
         surf_projection=('pial',),

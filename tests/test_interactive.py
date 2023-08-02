@@ -6,8 +6,7 @@ Tests that require an interactive plotter display window
 """
 import pytest
 import templateflow.api as tflow
-from conveyant import ichain
-from hyve.prim import automap_unified_plotter_p
+from hyve.flows import plotdef
 from hyve.transforms import (
     plot_to_display,
     plot_final_image,
@@ -20,13 +19,12 @@ from hyve.transforms import (
 
 @pytest.mark.ci_unsupported
 def test_plotter_flow_syntax():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_nifti('gmdensity', template='fsaverage'),
         points_scalars_from_nifti('pain'),
         plot_to_display(),
     )
-    plot_f = chain(automap_unified_plotter_p)
     plot_f(
         template='fsaverage',
         load_mask=True,
@@ -44,7 +42,7 @@ def test_plotter_flow_syntax():
 
 @pytest.mark.ci_unsupported
 def test_plotter_final_capture():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_nifti('gmdensity', template='fsaverage'),
         points_scalars_from_nifti('pain'),
@@ -55,7 +53,6 @@ def test_plotter_final_capture():
             ),
         ),
     )
-    plot_f = chain(automap_unified_plotter_p)
     plot_f(
         template='fsaverage',
         load_mask=True,

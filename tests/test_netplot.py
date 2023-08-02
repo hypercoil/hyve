@@ -9,11 +9,8 @@ from pkg_resources import resource_filename as pkgrf
 import numpy as np
 import pandas as pd
 
-from conveyant import (
-    ichain,
-)
+from hyve.flows import plotdef
 from hyve.flows import add_network_data, joindata
-from hyve.prim import automap_unified_plotter_p
 from hyve.transforms import (
     surf_from_archive,
     surf_scalars_from_cifti,
@@ -40,7 +37,7 @@ def test_net():
     vis_nodes_edge_selection[0:5] = True
     vis_nodes_edge_selection[200:205] = True
 
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=False),
         add_network_data(
@@ -69,7 +66,6 @@ def test_net():
             ),
         ),
     )
-    plot_f = chain(automap_unified_plotter_p)
     plot_f(
         template='fsLR',
         surf_projection='inflated',
@@ -99,7 +95,7 @@ def test_net_highlight():
     vis_nodes_edge_selection[0:2] = True
     vis_nodes_edge_selection[200:202] = True
 
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=False),
         #build_network('vis'),
@@ -131,7 +127,6 @@ def test_net_highlight():
             ),
         ),
     )
-    plot_f = chain(automap_unified_plotter_p)
     plot_f(
         template="fsLR",
         surf_projection='veryinflated',

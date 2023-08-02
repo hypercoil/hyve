@@ -6,9 +6,7 @@ Unit tests using the parcellations in the OHBM ``sparque`` poster
 """
 import pytest
 
-from conveyant import ichain, iochain
-
-from hyve.prim import automap_unified_plotter_p
+from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
     surf_scalars_from_cifti,
@@ -87,7 +85,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
         )
         
 
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         transform,
         parcellate_colormap(cmap, parcellation_name),
@@ -100,7 +98,6 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template='fsLR',
         load_mask=True,

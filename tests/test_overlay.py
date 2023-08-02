@@ -10,10 +10,7 @@ from pkg_resources import resource_filename
 import nibabel as nb
 import numpy as np
 
-from conveyant import (
-    ichain,
-)
-from hyve.prim import automap_unified_plotter_p
+from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
     surf_scalars_from_nifti,
@@ -76,7 +73,7 @@ def test_parcellation_modal_cmap(output, v2f):
         ]
     sphere_coor, sphere_data = create_sphere()
 
-    plot_f = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         add_surface_overlay(
             surf_scalars_from_cifti('parcellation'),
@@ -91,7 +88,7 @@ def test_parcellation_modal_cmap(output, v2f):
             points_scalars_from_array('sphere', point_size=8),
         ),
         *out_transform_sequence,
-    )(automap_unified_plotter_p)
+    )
 
     plot_f(
         template="fsLR",

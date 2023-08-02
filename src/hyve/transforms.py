@@ -21,8 +21,8 @@ import pyvista as pv
 
 from conveyant import (
     direct_compositor,
-    SanitisedPartialApplication as Partial,
-    SanitisedFunctionWrapper as F,
+    PartialApplication as Partial,
+    FunctionWrapper as F,
 )
 from .const import Tensor
 from .prim import (

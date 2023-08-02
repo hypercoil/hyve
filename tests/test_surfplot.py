@@ -11,11 +11,7 @@ from pkg_resources import resource_filename as pkgrf
 import numpy as np
 import templateflow.api as tflow
 
-from conveyant import (
-    ichain,
-    iochain,
-)
-from hyve.prim import automap_unified_plotter_p
+from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
     surf_scalars_from_cifti,
@@ -38,7 +34,7 @@ def print_params(**params):
 
 @pytest.mark.ci_unsupported
 def test_scalars():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_nifti('gmdensity', template='fsaverage', plot=True),
         plot_to_image(),
@@ -48,7 +44,6 @@ def test_scalars():
             ),
         ),
     )
-    plot_f = chain(automap_unified_plotter_p)
     plot_f(
         template='fsaverage',
         load_mask=True,
@@ -66,7 +61,7 @@ def test_scalars():
 
 @pytest.mark.ci_unsupported
 def test_parcellation():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
@@ -78,7 +73,6 @@ def test_parcellation():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -95,7 +89,7 @@ def test_parcellation():
         output_dir='/tmp',
     )
 
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
@@ -106,7 +100,6 @@ def test_parcellation():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -128,7 +121,7 @@ def test_parcellation():
 
 @pytest.mark.ci_unsupported
 def test_parcellation_modal_cmap():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_gifti('parcellation', plot=True),
         parcellate_colormap('modal', 'parcellation'),
@@ -140,7 +133,6 @@ def test_parcellation_modal_cmap():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -161,7 +153,7 @@ def test_parcellation_modal_cmap():
         output_dir='/tmp',
     )
 
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('modal', 'parcellation'),
@@ -172,7 +164,6 @@ def test_parcellation_modal_cmap():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -193,7 +184,7 @@ def test_parcellation_modal_cmap():
 
 @pytest.mark.ci_unsupported
 def test_parcellation_html():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
         parcellate_colormap('network', 'parcellation'),
@@ -204,7 +195,6 @@ def test_parcellation_html():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -222,7 +212,7 @@ def test_parcellation_html():
 
 @pytest.mark.ci_unsupported
 def test_parcellated_scalars():
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_nifti('gmdensity', template='fsLR', plot=False),
         surf_scalars_from_cifti('parcellation', plot=False),
@@ -235,7 +225,6 @@ def test_parcellated_scalars():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -256,7 +245,7 @@ def test_parcellated_scalars():
     )
 
     parcellated = np.random.rand(400)
-    chain = ichain(
+    plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=False),
         scatter_into_parcels('noise', 'parcellation'),
@@ -268,7 +257,6 @@ def test_parcellated_scalars():
             ),
         ),
     )
-    plot_f = iochain(automap_unified_plotter_p, chain)
     plot_f(
         template="fsLR",
         load_mask=True,
