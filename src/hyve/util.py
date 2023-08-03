@@ -7,6 +7,7 @@ Plot and report utilities
 Utilities for plotting and reporting.
 """
 import dataclasses
+from math import floor
 from typing import (
     Any,
     Dict,
@@ -21,6 +22,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 import pyvista as pv
+from PIL import Image
 from pyvista.plotting.helpers import view_vectors
 
 from .const import Tensor
@@ -471,6 +473,20 @@ def cortex_cameras(
             else:
                 raise e
     return position
+
+
+def scale_image_preserve_aspect_ratio(
+    img: Image.Image,
+    target_size: Tuple[int, int],
+) -> Image.Image:
+    width, height = img.size
+    target_width, target_height = target_size
+    width_ratio = target_width / width
+    height_ratio = target_height / height
+    ratio = min(width_ratio, height_ratio)
+    new_width = floor(width * ratio)
+    new_height = floor(height * ratio)
+    return img.resize((new_width, new_height))
 
 
 def robust_clim(

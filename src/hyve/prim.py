@@ -7,6 +7,7 @@ Primitive functional atoms
 Atomic functional primitives for building more complex functions.
 """
 from io import StringIO
+from math import ceil
 from typing import (
     Any,
     Callable,
@@ -37,6 +38,7 @@ from conveyant.compositors import (
 )
 from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
+from PIL import Image
 
 from .const import (
     EDGE_ALPHA_DEFAULT_VALUE,
@@ -71,6 +73,7 @@ from .const import (
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Tensor,
 )
+from .layout import CellLayout, grid
 from .plot import (
     EdgeLayer,
     Layer,
@@ -92,6 +95,7 @@ from .util import (
     filter_adjacency_data,
     filter_node_data,
     format_position_as_string,
+    scale_image_preserve_aspect_ratio,
     set_default_views,
 )
 
@@ -692,7 +696,6 @@ def add_points_overlay_f(
             ),
         ),
     )
-
 
     layer = Layer(
         name=layer_name,
@@ -1473,7 +1476,6 @@ def save_snapshots_f(
     extension: str = 'png',
 ) -> None:
     def writer(img, fname):
-        from PIL import Image
         img = Image.fromarray(img)
         img.save(fname)
 
@@ -1532,6 +1534,91 @@ def plot_to_display_f(
             extension=None,
         )
         cplotter.close()
+
+
+def save_figure_f(
+    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    canvas_size: Tuple[int, int],
+    layout: CellLayout,
+    output_dir: str,
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = None,
+    extension: str = 'png',
+    padding: int = 0,
+    canvas_color: Any = (255, 255, 255, 255),
+) -> None: # Union[Tuple[Image.Image], Image.Image]:
+    panels_per_page = len(layout)
+    try:
+        n_scenes = len(snapshots)
+        if n_scenes > panels_per_page:
+            n_panels = panels_per_page
+            n_pages = ceil(n_scenes / n_panels)
+            snapshots = tuple(
+                snapshots[i * n_panels:(i + 1) * n_panels]
+                for i in range(n_pages)
+            )
+        else:
+            n_pages = 1
+            n_panels = n_scenes
+            snapshots = (snapshots,)
+    except TypeError:
+        # snapshots is a single snapshot
+        snapshots = ((snapshots,),)
+        n_scenes = 1
+        n_pages = 1
+        n_panels = 1
+    cells = list(layout.partition(*canvas_size, padding=padding))
+
+    def writer(snapshot_group, fname):
+        canvas = Image.new('RGBA', canvas_size, color=canvas_color)
+        for i, (cimg, cmeta) in enumerate(snapshot_group):
+            panel = cells[i]
+            cimg = Image.fromarray(cimg, mode='RGB')
+            cimg = scale_image_preserve_aspect_ratio(
+                cimg,
+                target_size=panel.cell_dim,
+            )
+            canvas.paste(cimg, panel.cell_loc)
+        canvas.save(fname)
+
+    for i, snapshot_group in enumerate(snapshots):
+        page = f'{i + 1:{len(str(n_pages))}d}'
+        write_f(
+            writer=writer,
+            argument=snapshot_group,
+            entities={'page': page},
+            output_dir=output_dir,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
+        )
+
+
+def save_grid_f(
+    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    canvas_size: Tuple[int, int],
+    n_rows: int,
+    n_cols: int,
+    output_dir: str,
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = None,
+    extension: str = 'png',
+    order: Literal['row', 'column'] = 'row',
+    padding: int = 0,
+    canvas_color: Any = (255, 255, 255, 255),
+) -> None:
+    layout = grid(n_rows=n_rows, n_cols=n_cols, order=order)
+    save_figure_f(
+        snapshots=snapshots,
+        canvas_size=canvas_size,
+        layout=layout,
+        output_dir=output_dir,
+        fname_spec=fname_spec,
+        suffix=suffix,
+        extension=extension,
+        padding=padding,
+        canvas_color=canvas_color,
+    )
 
 
 def write_f(
@@ -1921,6 +2008,22 @@ save_html_p = Primitive(
 plot_to_display_p = Primitive(
     plot_to_display_f,
     'plot_to_display',
+    output=(),
+    forward_unused=True,
+)
+
+
+save_figure_p = Primitive(
+    save_figure_f,
+    'save_figure',
+    output=(),
+    forward_unused=True,
+)
+
+
+save_grid_p = Primitive(
+    save_grid_f,
+    'save_grid',
     output=(),
     forward_unused=True,
 )

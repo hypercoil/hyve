@@ -8,16 +8,10 @@ Functions for transforming the input and output of visualisation functions.
 See also ``flows.py`` for functions that transform the control flow of
 visualisation functions.
 """
-from itertools import chain
-from math import ceil
 from pkg_resources import resource_filename as pkgrf
-from typing import Literal, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
-import nibabel as nb
-import pandas as pd
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
-import matplotlib.pyplot as plt
-import pyvista as pv
 
 from conveyant import (
     direct_compositor,
@@ -25,6 +19,7 @@ from conveyant import (
     FunctionWrapper as F,
 )
 from .const import Tensor
+from .layout import CellLayout
 from .prim import (
     surf_from_archive_p,
     surf_scalars_from_array_p,
@@ -60,17 +55,14 @@ from .prim import (
     plot_to_html_buffer_f,
     save_snapshots_p,
     save_html_p,
+    save_figure_p,
+    save_grid_p,
     plot_to_display_p,
 )
 from .surf import CortexTriSurface
 from .util import (
-    auto_focus,
-    filter_adjacency_data,
-    filter_node_data,
     PointDataCollection,
-    PointData,
     NetworkDataCollection,
-    NetworkData,
 )
 
 
@@ -1353,6 +1345,76 @@ def save_snapshots(
     ) -> callable:
         transformer_f = Partial(
             save_snapshots_p,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
+        )
+
+        def f_transformed(output_dir: str, **params):
+            return compositor(transformer_f, f)(
+                output_dir=output_dir,
+            )(**params)
+
+        return f_transformed
+    return transform
+
+
+def save_figure(
+    layout: CellLayout,
+    canvas_size: Tuple[int, int] = (2048, 2048),
+    padding: int = 0,
+    canvas_color: Any = (255, 255, 255, 255),
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = 'scene',
+    extension: str = 'png',
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            save_figure_p,
+            layout=layout,
+            canvas_size=canvas_size,
+            padding=padding,
+            canvas_color=canvas_color,
+            fname_spec=fname_spec,
+            suffix=suffix,
+            extension=extension,
+        )
+
+        def f_transformed(output_dir: str, **params):
+            return compositor(transformer_f, f)(
+                output_dir=output_dir,
+            )(**params)
+
+        return f_transformed
+    return transform
+
+
+def save_grid(
+    n_rows: int,
+    n_cols: int,
+    order: Literal['row', 'column'] = 'row',
+    canvas_size: Tuple[int, int] = (2048, 2048),
+    padding: int = 0,
+    canvas_color: Any = (255, 255, 255, 255),
+    fname_spec: Optional[str] = None,
+    suffix: Optional[str] = 'scene',
+    extension: str = 'png',
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            save_grid_p,
+            n_rows=n_rows,
+            n_cols=n_cols,
+            order=order,
+            canvas_size=canvas_size,
+            padding=padding,
+            canvas_color=canvas_color,
             fname_spec=fname_spec,
             suffix=suffix,
             extension=extension,
