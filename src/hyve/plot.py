@@ -269,6 +269,42 @@ def _normalise_to_range(values, valid_range):
     )
 
 
+def _eval_robust_clim(
+    surf: CortexTriSurface,
+    layers: Sequence[Layer],
+    hemispheres: Sequence[str],
+) -> Sequence[Layer]:
+    surfs = {
+        'left': getattr(surf, 'left', None),
+        'right': getattr(surf, 'right', None),
+    }
+    layers_eval = []
+    for layer in layers:
+        clim = layer.clim
+        arrays = []
+        if clim == 'robust':
+            for hemisphere in hemispheres:
+                hemi_surf = surfs[hemisphere]
+                if hemi_surf is None:
+                    continue
+                try:
+                    scalar_array = hemi_surf.cell_data[layer.name]
+                except KeyError:
+                    try:
+                        scalar_array = hemi_surf.point_data[layer.name]
+                    except KeyError:
+                        scalar_array = None
+                if scalar_array is not None:
+                    arrays.append(scalar_array)
+            if len(arrays) > 0:
+                clim = robust_clim(np.concatenate(arrays))
+            else:
+                clim = (0, 1)
+        layer = dataclasses.replace(layer, clim=clim)
+        layers_eval.append(layer)
+    return layers_eval
+
+
 def _null_op(**params):
     return params
 
@@ -412,6 +448,16 @@ def build_scalar_bar(
     return f
 
 
+def _uniquify_names(builders: Sequence[ScalarBarBuilder]):
+    unique_names = set()
+    retained_builders = []
+    for builder in builders:
+        if builder.name not in unique_names:
+            unique_names.add(builder.name)
+            retained_builders.append(builder)
+    return retained_builders
+
+
 def collect_scalar_bars(
     plotter: pv.Plotter,
     builders: Sequence[ScalarBarBuilder],
@@ -423,13 +469,7 @@ def collect_scalar_bars(
     if max_dimension is None:
         max_dimension = plotter.window_size
     if require_unique_names:
-        unique_names = set()
-        retained_builders = []
-        for builder in builders:
-            if builder.name not in unique_names:
-                unique_names.add(builder.name)
-                retained_builders.append(builder)
-        builders = retained_builders
+        builders = _uniquify_names(builders)
     count = len(builders)
     max_width, max_height = max_dimension
     if spacing < 1:
@@ -534,11 +574,14 @@ def overlay_scalar_bars(
         Mapping[str, Tuple[float, float]],
     ] = SCALAR_BAR_DEFAULT_SIZE,
     default_spacing: float = SCALAR_BAR_DEFAULT_SPACING,
+    require_unique_names: bool = True,
 ) -> Tuple[pv.Plotter, None]:
     # tuple, but we want to be tolerant if the user provides a list or
     # something
     if len(builders) == 0:
         return plotter, None
+    if require_unique_names:
+        builders = _uniquify_names(builders)
     if loc is not None and not isinstance(loc, Mapping):
         loc = {'__start__': loc}
     if loc is None or '__start__' not in loc:
@@ -1463,6 +1506,11 @@ def unified_plotter(
                 below_color=surf_scalars_below_color,
             )
             hemi_layers = [base_layer] + list(hemi_layers)
+            hemi_layers = _eval_robust_clim(
+                surf=surf,
+                layers=hemi_layers,
+                hemispheres=hemispheres,
+            )
             hemi_surf, hemi_scalars, new_builders = add_composed_rgba(
                 surf=hemi_surf,
                 layers=hemi_layers,
