@@ -51,7 +51,7 @@ from .const import (
     SCALAR_BAR_DEFAULT_FONT,
     SCALAR_BAR_DEFAULT_FONT_COLOR,
     SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR,
-    SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH,
+    SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_LENGTH,
     SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_LOC,
@@ -164,8 +164,8 @@ class ScalarBarBuilder(MappingABC):
     font_outline_color: Any = (
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
     )
-    font_outline_width: float = (
-        SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH
+    font_outline_multiplier: float = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
     )
 
     def __getitem__(self, key):
@@ -337,8 +337,8 @@ def build_scalar_bar(
     font_outline_color: Any = (
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
     ),
-    font_outline_width: float = (
-        SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH
+    font_outline_multiplier: float = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
     ),
 ) -> Figure:
     name = name.upper() # TODO: change this! work into style
@@ -410,34 +410,37 @@ def build_scalar_bar(
 
     f, ax = plt.subplots(figsize=figsize)
     ax.imshow(rgba)
+    mul = TYPICAL_DPI / f.dpi
     for vlim, vlim_params in zip(
         (vmin, vmax),
         (vmin_params, vmax_params),
     ):
+        fontsize = width * lim_fontsize_multiplier * mul
         ax.annotate(
             f'{vlim:.{num_sig_figs}g}',
             xycoords='axes fraction',
-            fontsize=width * lim_fontsize_multiplier,
+            fontsize=fontsize,
             fontfamily=font,
             color=font_color,
             path_effects=[
                 patheffects.withStroke(
-                    linewidth=font_outline_width,
+                    linewidth=font_outline_multiplier * fontsize,
                     foreground=font_outline_color,
                 )
             ],
             **vlim_params,
         )
     if name is not None:
+        fontsize = width * name_fontsize_multiplier * mul
         ax.annotate(
             name,
             xycoords='axes fraction',
-            fontsize=width * name_fontsize_multiplier,
+            fontsize=fontsize,
             fontfamily=font,
             color=font_color,
             path_effects=[
                 patheffects.withStroke(
-                    linewidth=font_outline_width,
+                    linewidth=font_outline_multiplier * fontsize,
                     foreground=font_outline_color,
                 )
             ],
@@ -462,7 +465,7 @@ def collect_scalar_bars(
     plotter: pv.Plotter,
     builders: Sequence[ScalarBarBuilder],
     spacing: float = SCALAR_BAR_DEFAULT_SPACING,
-    max_dimension: Optional[Tuple[int, int]] = (1920, 1080),
+    max_dimension: Optional[Tuple[int, int]] = None,
     require_unique_names: bool = True,
 ) -> Tuple[pv.Plotter, Tensor]:
     # Algorithm from https://stackoverflow.com/a/28268965
@@ -614,6 +617,18 @@ def overlay_scalar_bars(
             elif builder.orientation == 'h':
                 bloc = (bloc[0], bloc[1] + offset)
                 offset += (bsize[1] + default_spacing)
+        if plotter.window_size is not None:
+            aspect_ratio = builder.width / builder.length
+            if builder.orientation == 'v':
+                length = round(bsize[1] * plotter.window_size[1])
+            elif builder.orientation == 'h':
+                length = round(bsize[0] * plotter.window_size[0])
+            width = round(length * aspect_ratio)
+            builder = dataclasses.replace(
+                builder,
+                width=width,
+                length=length,
+            )
         fig = build_scalar_bar(**builder)
         scalar_bar = pv.ChartMPL(fig, size=bsize, loc=bloc)
         scalar_bar.background_color = (0, 0, 0, 0)
@@ -1180,6 +1195,7 @@ def unified_plotter(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    window_size: Optional[Tuple[int, int]] = None,
     plotter: Optional[pv.Plotter] = None,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,
@@ -1386,7 +1402,11 @@ def unified_plotter(
     )
 
     if plotter is None:
-        p = pv.Plotter(off_screen=off_screen, theme=theme)
+        p = pv.Plotter(
+            window_size=window_size,
+            off_screen=off_screen,
+            theme=theme,
+        )
         close_plotter = True # for potential use by postprocessors at binding
     else:
         import vtk

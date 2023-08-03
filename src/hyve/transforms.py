@@ -1205,7 +1205,9 @@ def plot_to_image() -> callable:
                 __allowed__=('hemisphere',),
             )
             postprocessors = params.get('postprocessors', None)
-            return compositor(f, transformer_f)(**params)(
+            return compositor(f, transformer_f)(
+                window_size=window_size, **params
+            )(
                 name='snapshots',
                 postprocessor=postprocessor,
                 postprocessors=postprocessors,
@@ -1255,6 +1257,7 @@ def plot_final_image(
             _ = params.pop('off_screen', False)
             return compositor(f, transformer_f)(
                 off_screen=False,
+                window_size=window_size,
                 **params,
             )(
                 name='snapshots',
@@ -1299,7 +1302,9 @@ def plot_to_html(
             postprocessors = params.get('postprocessors', None)
             _f_transformed = compositor(
                 transformer_fo,
-                compositor(f, transformer_fi)(**params),
+                compositor(f, transformer_fi)(
+                    window_size=window_size, **params
+                ),
             )
             return _f_transformed(output_dir=output_dir)(
                 name='html_buffer',
@@ -1327,6 +1332,7 @@ def plot_to_display(
             _ = params.pop('off_screen', False)
             return compositor(transformer_f, f)()(
                 off_screen=False,
+                window_size=window_size,
                 **params,
             )
 

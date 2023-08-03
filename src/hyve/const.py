@@ -8,11 +8,12 @@ Plotting constants
 """
 from typing import Any, Optional
 
+from matplotlib import rcParams
 from lytemaps.datasets import fetch_fsaverage
 
 DEFAULT_CMAP = 'viridis'
 DEFAULT_COLOR = 'white'
-TYPICAL_DPI = 96
+TYPICAL_DPI = round(rcParams['figure.dpi'])
 
 LAYER_CLIM_DEFAULT_VALUE = None
 LAYER_CMAP_NEGATIVE_DEFAULT_VALUE = None
@@ -64,11 +65,11 @@ SCALAR_BAR_DEFAULT_FONT = 'futura'
 #       a fraction of the figure width, but this is difficult to do because
 #       we don't have access to the figure width until we've already created
 #       the figure.
-SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER = 0.5
-SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER = 0.4
+SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER = 0.4
+SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER = 0.35
 SCALAR_BAR_DEFAULT_FONT_COLOR = 'w'
 SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR = 'k'
-SCALAR_BAR_DEFAULT_FONT_OUTLINE_WIDTH = 1.0
+SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER = 0.2
 SCALAR_BAR_DEFAULT_LOC = None
 SCALAR_BAR_DEFAULT_SIZE = None
 SCALAR_BAR_DEFAULT_SPACING = 0.02

@@ -1684,6 +1684,7 @@ def automap_unified_plotter_f(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    window_size: Optional[Tuple[int, int]] = None,
     use_single_plotter: bool = True,
     postprocessors: Optional[
         Sequence[Mapping[str, Tuple[callable, callable]]]
@@ -1703,7 +1704,11 @@ def automap_unified_plotter_f(
 
     use_single_plotter = params.pop('use_single_plotter')
     if use_single_plotter:
-        plotter = pv.Plotter(off_screen=off_screen, theme=theme)
+        plotter = pv.Plotter(
+            window_size=window_size,
+            off_screen=off_screen,
+            theme=theme,
+        )
         plotter_param = {'plotter': plotter}
     else:
         plotter_param = {}
