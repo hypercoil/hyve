@@ -201,39 +201,40 @@ def hsplit(
 
 
 def grid(
-    nrows: int,
-    ncols: int,
+    n_rows: int,
+    n_cols: int,
     order: Literal['row', 'col'] = 'row',
+    kernel: callable = Cell,
 ) -> CellLayout:
     """
     Create a grid layout
     """
     if order == 'row':
         layout = hsplit(
-            1 / nrows,
+            1 / n_rows,
             *[
                 vsplit(
-                    1 / ncols,
+                    1 / n_cols,
                     *[
-                        Cell()
-                        for _ in range(ncols)
+                        kernel()
+                        for _ in range(n_cols)
                     ]
                 )
-                for _ in range(nrows)
+                for _ in range(n_rows)
             ]
         )
     elif order == 'col':
         layout = vsplit(
-            1 / ncols,
+            1 / n_cols,
             *[
                 hsplit(
-                    1 / nrows,
+                    1 / n_rows,
                     *[
-                        Cell()
-                        for _ in range(nrows)
+                        kernel()
+                        for _ in range(n_rows)
                     ]
                 )
-                for _ in range(ncols)
+                for _ in range(n_cols)
             ]
         )
     else:

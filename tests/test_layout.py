@@ -33,14 +33,14 @@ def test_simple_layout():
 
 
 def test_grid_layout():
-    gridlayout = grid(ncols=6, nrows=5).partition(1200, 900)
+    gridlayout = grid(n_cols=6, n_rows=5).partition(1200, 900)
     cells = list(gridlayout)
     assert all([cells[i].cell_dim == (200, 180) for i in range(30)])
     for i in range(5):
         for j in range(6):
             assert cells[6 * i + j].cell_loc == (200 * j, 180 * i)
 
-    gridlayout = grid(ncols=6, nrows=5, order='col').partition(1200, 900)
+    gridlayout = grid(n_cols=6, n_rows=5, order='col').partition(1200, 900)
     cells = list(gridlayout)
     assert all([cells[i].cell_dim == (200, 180) for i in range(30)])
     for i in range(5):
