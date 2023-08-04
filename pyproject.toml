@@ -28,6 +28,7 @@ dependencies = [
     "nibabel",
     "numpy",
     "pandas",
+    "pkg_resources",
     "pyvista",
     "scipy",
     "templateflow",

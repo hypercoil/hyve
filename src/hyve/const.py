@@ -8,8 +8,8 @@ Plotting constants
 """
 from typing import Any, Optional
 
-from matplotlib import rcParams
 from lytemaps.datasets import fetch_fsaverage
+from matplotlib import rcParams
 
 DEFAULT_CMAP = 'viridis'
 DEFAULT_COLOR = 'white'

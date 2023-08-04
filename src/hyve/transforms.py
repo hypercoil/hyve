@@ -8,61 +8,66 @@ Functions for transforming the input and output of visualisation functions.
 See also ``flows.py`` for functions that transform the control flow of
 visualisation functions.
 """
-from pkg_resources import resource_filename as pkgrf
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
-import numpy as np
-from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 
+import numpy as np
 from conveyant import (
-    direct_compositor,
-    PartialApplication as Partial,
     FunctionWrapper as F,
 )
+from conveyant import (
+    PartialApplication as Partial,
+)
+from conveyant import (
+    direct_compositor,
+)
+from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
+from pkg_resources import resource_filename as pkgrf
+
 from .const import Tensor
 from .layout import CellLayout
 from .prim import (
+    add_edge_variable_p,
+    add_network_overlay_p,
+    add_node_variable_p,
+    add_points_overlay_p,
+    add_postprocessor_p,
+    add_surface_overlay_p,
+    auto_camera_aux_p,
+    auto_camera_p,
+    build_network_p,
+    closest_ortho_camera_aux_p,
+    closest_ortho_camera_p,
+    node_coor_from_parcels_p,
+    parcellate_colormap_p,
+    parcellate_surf_scalars_p,
+    planar_sweep_camera_aux_p,
+    planar_sweep_camera_p,
+    plot_final_view_f,
+    plot_to_display_p,
+    plot_to_html_buffer_f,
+    plot_to_image_aux_p,
+    plot_to_image_f,
+    points_scalars_from_array_p,
+    points_scalars_from_nifti_p,
+    save_figure_p,
+    save_grid_p,
+    save_html_p,
+    save_snapshots_p,
+    scalar_focus_camera_aux_p,
+    scalar_focus_camera_p,
+    scatter_into_parcels_p,
     surf_from_archive_p,
     surf_scalars_from_array_p,
     surf_scalars_from_cifti_p,
     surf_scalars_from_gifti_p,
     surf_scalars_from_nifti_p,
-    points_scalars_from_array_p,
-    points_scalars_from_nifti_p,
-    parcellate_colormap_p,
-    parcellate_surf_scalars_p,
-    scatter_into_parcels_p,
-    vertex_to_face_p,
-    add_surface_overlay_p,
-    add_points_overlay_p,
-    add_network_overlay_p,
-    build_network_p,
-    node_coor_from_parcels_p,
-    add_node_variable_p,
-    add_edge_variable_p,
-    add_postprocessor_p,
     transform_postprocessor_p,
-    scalar_focus_camera_p,
-    scalar_focus_camera_aux_p,
-    closest_ortho_camera_p,
-    closest_ortho_camera_aux_p,
-    planar_sweep_camera_p,
-    planar_sweep_camera_aux_p,
-    auto_camera_p,
-    auto_camera_aux_p,
-    plot_to_image_f,
-    plot_to_image_aux_p,
-    plot_final_view_f,
-    plot_to_html_buffer_f,
-    save_snapshots_p,
-    save_html_p,
-    save_figure_p,
-    save_grid_p,
-    plot_to_display_p,
+    vertex_to_face_p,
 )
 from .surf import CortexTriSurface
 from .util import (
-    PointDataCollection,
     NetworkDataCollection,
+    PointDataCollection,
 )
 
 
@@ -627,7 +632,8 @@ def parcellate_surf_scalars(
         function and return a new plotting function with different input and
         output arguments.
         * If ``plot`` is ``True``, the transformed function will automatically
-          add the parcellated scalar dataset to the sequence of scalars to plot.
+          add the parcellated scalar dataset to the sequence of scalars to
+          plot.
     """
     sink = f'{scalars}Parcellated'
     def transform(
