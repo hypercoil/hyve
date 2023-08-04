@@ -140,6 +140,7 @@ class ProjectedPolyData(pv.PolyData):
     ):
         super().__init__(*pparams, **params)
         self.point_data[f'_projection_{projection}'] = self.points.copy()
+        self.active_projection = projection
 
     def __repr__(self):
         return super().__repr__()
@@ -264,6 +265,8 @@ class ProjectedPolyData(pv.PolyData):
         projection : str
             Name of the projection to switch to.
         """
+        if projection == self.active_projection:
+            return
         projections = self.projections
         if projection not in projections:
             raise KeyError(
@@ -271,6 +274,18 @@ class ProjectedPolyData(pv.PolyData):
                 f'Available projections: {set(projections.keys())}'
             )
         self.points = projections[projection]
+        self.active_projection = projection
+
+    def translate(
+        self,
+        xyz: Tensor,
+        transform_all_input_vectors: bool = False,
+    ) -> 'ProjectedPolyData':
+        translated = super().translate(xyz, transform_all_input_vectors)
+        translated.active_projection = self.active_projection
+        proj_coor = self.get_projection(self.active_projection)
+        translated.add_projection(self.active_projection, proj_coor + xyz)
+        return translated
 
 
 @dataclass
