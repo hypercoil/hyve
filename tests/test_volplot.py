@@ -27,7 +27,7 @@ def test_vol_scalars():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-pain_view-{view}'
+                'scalars-{pointsscalars}_view-{view}'
             ),
         ),
     )

@@ -7,14 +7,26 @@ Unified plotter
 Unified plotting function for surface, volume, and network data.
 """
 import dataclasses
+import inspect
 import io
 from collections.abc import Mapping as MappingABC
-from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
+from functools import WRAPPER_ASSIGNMENTS, wraps
+from typing import (
+    Any,
+    Literal,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyvista as pv
+from conveyant import Primitive, emulate_assignment
 from matplotlib import cm, colors, patheffects
 from matplotlib.figure import Figure
 from PIL import Image
@@ -85,6 +97,19 @@ from .util import (
 BLEND_MODES = {
     'source_over': source_over,
 }
+
+
+class PlotPrimitive(NamedTuple):
+    name: str
+    plot: callable
+    meta: callable
+    topo: Mapping[str, Tuple[Optional[callable], Optional[callable]]]
+
+
+class TopoTransform(NamedTuple):
+    name: str
+    fit: callable
+    transform: callable
 
 
 @dataclasses.dataclass(frozen=True)
@@ -229,7 +254,7 @@ def _get_hemisphere_parameters(
 
 def _cfg_hemispheres(
     hemisphere: Optional[Literal['left', 'right']] = None,
-    surf_scalars: Optional[Union[str, Sequence[str]]] = None,
+    key_scalars: Optional[Union[str, Sequence[str]]] = None,
     surf: Optional[CortexTriSurface] = None,
 ):
     hemispheres = (
@@ -240,8 +265,7 @@ def _cfg_hemispheres(
     #       scalars can be the "key", which will be used to automatically
     #       remove any hemispheres that the scalar isn't present in. For now,
     #       we just use the only scalar that's present.
-    key_scalars = surf_scalars
-    if surf is not None and surf_scalars is not None:
+    if surf is not None and key_scalars is not None:
         hemispheres = tuple(
             hemi for hemi in hemispheres
             if key_scalars is None or (
@@ -289,10 +313,10 @@ def _eval_robust_clim(
                     continue
                 try:
                     scalar_array = hemi_surf.cell_data[layer.name]
-                except KeyError:
+                except (KeyError, TypeError):
                     try:
                         scalar_array = hemi_surf.point_data[layer.name]
-                    except KeyError:
+                    except (KeyError, TypeError):
                         scalar_array = None
                 if scalar_array is not None:
                     arrays.append(scalar_array)
@@ -1149,7 +1173,149 @@ def add_network(
     return plotter, scalar_bar_builders
 
 
-def unified_plotter(
+def bind_primitives(
+    prims: Sequence[PlotPrimitive],
+    transforms: Optional[Sequence[TopoTransform]] = None,
+) -> callable:
+    def _bind_primitives_inner(
+        plot_func: Optional[callable] = None,
+        meta_func: Optional[callable] = None,
+    ) -> callable:
+        plot_prim = [
+            Primitive(
+                prim.plot,
+                name=prim.name,
+                output=('plotter', 'scalar_bar_builders'),
+                forward_unused=False,
+            )
+            for prim in prims
+        ]
+        meta_prim = [
+            Primitive(
+                prim.meta,
+                name=prim.name,
+                output=None,
+                forward_unused=False,
+            )
+            for prim in prims
+        ]
+
+        if transforms is None:
+            topo_signatures = []
+            topo_params = []
+        else:
+            topo_signatures = [
+                inspect.signature(topo.fit) for topo in transforms
+            ]
+            topo_params = [
+                p
+                for topo_signature in topo_signatures
+                for p in topo_signature.parameters.values()
+                if p.kind == p.KEYWORD_ONLY
+            ]
+
+        if plot_func is None:
+            transformed_plot_func = None
+        else:
+            @wraps(
+                plot_func,
+                assigned=WRAPPER_ASSIGNMENTS + ('__kwdefaults__',),
+            )
+            def transformed_plot_func(**params):
+                plot_primitives = params.pop('plot_primitives', [])
+                plot_primitives = list(plot_primitives) + plot_prim
+
+                topo_transforms = params.pop('topo_transforms', [])
+                if transforms is not None:
+                    topo_transforms = list(topo_transforms) + list(transforms)
+                for i, topo in enumerate(topo_transforms):
+                    fit, transform = topo.fit, topo.transform
+                    for prim in prims:
+                        _fit, _transform = prim.topo.get(
+                            topo.name, (None, None)
+                        )
+                        if _fit is not None:
+                            fit = _fit(fit)
+                        if _transform is not None:
+                            transform = _transform(transform)
+                    topo_transforms[i] = TopoTransform(
+                        topo.name, fit, transform
+                    )
+
+                return plot_func(
+                    plot_primitives=plot_primitives,
+                    topo_transforms=topo_transforms,
+                    **params,
+                )
+
+            prim_signatures = [inspect.signature(prim.plot) for prim in prims]
+            func_signature = inspect.signature(plot_func)
+            prim_params = [
+                p
+                for prim_signature in prim_signatures
+                for p in prim_signature.parameters.values()
+                if p.kind == p.KEYWORD_ONLY
+            ]
+            func_params = [
+                p for p in func_signature.parameters.values()
+                if p.kind != p.VAR_KEYWORD and p.kind != p.VAR_POSITIONAL
+            ]
+
+            transformed_signature = func_signature.replace(
+                parameters=func_params + prim_params + topo_params
+            )
+            transformed_plot_func.__signature__ = transformed_signature
+            # transformed_plot_func.__kwdefaults__ = {
+            #     **(transformed_plot_func.__kwdefaults__ or {}),
+            #     **{
+            #         p.name: p.default
+            #         for p in prim_params
+            #         if p.default is not p.empty
+            #     },
+            # }
+
+        if meta_func is None:
+            transformed_meta_func = None
+        else:
+            @wraps(
+                meta_func,
+                assigned=WRAPPER_ASSIGNMENTS + ('__kwdefaults__',),
+            )
+            def transformed_meta_func(**params):
+                meta_primitives = params.pop('meta_primitives', [])
+                meta_primitives = list(meta_primitives) + meta_prim
+                return meta_func(meta_primitives=meta_primitives, **params)
+
+            prim_signatures = [inspect.signature(prim.meta) for prim in prims]
+            func_signature = inspect.signature(meta_func)
+            prim_params = [
+                p
+                for prim_signature in prim_signatures
+                for p in prim_signature.parameters.values()
+                if p.kind == p.KEYWORD_ONLY
+            ]
+            func_params = [
+                p for p in func_signature.parameters.values()
+                if p.kind != p.VAR_KEYWORD and p.kind != p.VAR_POSITIONAL
+            ]
+
+            transformed_signature = func_signature.replace(
+                parameters=func_params + prim_params + topo_params
+            )
+            transformed_meta_func.__signature__ = transformed_signature
+
+        return (
+            emulate_assignment()(transformed_plot_func),
+            emulate_assignment(strict=False)(transformed_meta_func),
+        )
+    return _bind_primitives_inner
+
+
+def plot_surf_f(
+    plotter: pv.Plotter,
+    scalar_bar_builders: Sequence[ScalarBarBuilder],
+    hemispheres: Sequence[str],
+    copy_actors: bool = False,
     *,
     surf: Optional['CortexTriSurface'] = None,
     surf_projection: str = 'pial',
@@ -1164,6 +1330,119 @@ def unified_plotter(
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
     ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    # Sometimes by construction surf_scalars is an empty tuple or list, which
+    # causes problems later on. So we convert it to None if it's empty.
+    if surf_scalars is not None:
+        surf_scalars = None if len(surf_scalars) == 0 else surf_scalars
+
+    surf_hemi_params = _get_hemisphere_parameters(
+        surf_scalars_cmap=surf_scalars_cmap,
+        surf_scalars_clim=surf_scalars_clim,
+        surf_scalars_layers=surf_scalars_layers,
+    )
+    if surf is not None:
+        for hemisphere in hemispheres:
+            hemi_surf = surf.__getattribute__(hemisphere)
+            hemi_surf.project(surf_projection)
+            hemi_clim = surf_hemi_params.get(hemisphere, 'surf_scalars_clim')
+            hemi_cmap = surf_hemi_params.get(hemisphere, 'surf_scalars_cmap')
+            hemi_layers = surf_hemi_params.get(
+                hemisphere,
+                'surf_scalars_layers',
+            )
+            if hemi_layers is None:
+                hemi_layers = []
+
+            base_layer = Layer(
+                name=surf_scalars,
+                cmap=hemi_cmap,
+                clim=hemi_clim,
+                cmap_negative=None,
+                color=None,
+                alpha=surf_alpha,
+                below_color=surf_scalars_below_color,
+            )
+            hemi_layers = [base_layer] + list(hemi_layers)
+            hemi_layers = _eval_robust_clim(
+                surf=surf,
+                layers=hemi_layers,
+                hemispheres=hemispheres,
+            )
+            hemi_surf, hemi_scalars, new_builders = add_composed_rgba(
+                surf=hemi_surf,
+                layers=hemi_layers,
+                surf_alpha=surf_alpha,
+            )
+            # TODO: copying the mesh seems like it could create memory issues.
+            #       A better solution would be delayed execution.
+            plotter.add_mesh(
+                hemi_surf,
+                scalars=hemi_scalars,
+                rgb=True,
+                show_edges=False,
+                copy_mesh=copy_actors,
+            )
+            if (
+                surf_scalars_boundary_width > 0
+                and surf_scalars is not None
+                and surf_scalars not in hemi_surf.cell_data
+            ):
+                plotter.add_mesh(
+                    hemi_surf.contour(
+                        isosurfaces=range(
+                            int(max(hemi_surf.point_data[surf_scalars]))
+                        ),
+                        scalars=surf_scalars,
+                    ),
+                    color=surf_scalars_boundary_color,
+                    line_width=surf_scalars_boundary_width,
+                )
+            scalar_bar_builders = scalar_bar_builders + new_builders
+    return plotter, scalar_bar_builders
+
+
+def plot_surf_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    *,
+    surf: Optional['CortexTriSurface'] = None,
+    surf_projection: str = 'pial',
+    surf_alpha: float = 1.0,
+    surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
+    surf_scalars_boundary_color: str = 'black',
+    surf_scalars_boundary_width: int = 0,
+    surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    surf_scalars_layers: Union[
+        Optional[Sequence[Layer]],
+        Tuple[Optional[Sequence[Layer]]]
+    ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+) -> Mapping[str, Sequence[str]]:
+    metadata['surfscalars'] = [surf_scalars or None]
+    metadata['projection'] = [surf_projection or None]
+    if surf_scalars_layers is not None:
+        layers = surf_scalars_layers
+        if len(layers) == 2 and isinstance(layers[0], (list, tuple)):
+            layers = (
+                layers[0]
+                if metadata['hemisphere'][0] != 'right'
+                else layers[1]
+            )
+        layers = '+'.join(layer.name for layer in layers)
+        metadata['surfscalars'] = (
+            [f'{metadata["surfscalars"][0]}+{layers}']
+            if metadata['surfscalars'][0] is not None
+            else [layers]
+        )
+    return metadata
+
+
+def plot_points_f(
+    plotter: pv.Plotter,
+    scalar_bar_builders: Sequence[ScalarBarBuilder],
+    copy_actors: bool = False,
+    *,
     points: Optional[PointDataCollection] = None,
     points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
     points_alpha: float = 1.0,
@@ -1175,6 +1454,62 @@ def unified_plotter(
     points_scalars_layers: Optional[Sequence[Layer]] = (
         POINTS_SCALARS_LAYERS_DEFAULT_VALUE
     ),
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    if points is not None:
+        if points_scalars_layers is None:
+            points_scalars_layers = []
+        if points_scalars is not None:
+            base_layer = Layer(
+                name=points_scalars,
+                cmap=points_scalars_cmap,
+                clim=points_scalars_clim,
+                cmap_negative=None,
+                color=None,
+                alpha=points_alpha,
+                below_color=points_scalars_below_color,
+            )
+            points_scalars_layers = [base_layer] + list(points_scalars_layers)
+        plotter, new_builders = add_points_scalars(
+            plotter=plotter,
+            points=points,
+            layers=points_scalars_layers,
+            copy_actors=copy_actors,
+        )
+        scalar_bar_builders = scalar_bar_builders + new_builders
+    return plotter, scalar_bar_builders
+
+
+def plot_points_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    *,
+    points: Optional[PointDataCollection] = None,
+    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
+    points_alpha: float = 1.0,
+    points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
+    points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_below_color: str = (
+        POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE
+    ),
+    points_scalars_layers: Optional[Sequence[Layer]] = (
+        POINTS_SCALARS_LAYERS_DEFAULT_VALUE
+    ),
+) -> Mapping[str, Sequence[str]]:
+    metadata['pointsscalars'] = [points_scalars or None]
+    if points_scalars_layers is not None:
+        layers = '+'.join(layer.name for layer in points_scalars_layers)
+        metadata['pointsscalars'] = (
+            [f'{metadata["pointsscalars"][0]}+{layers}']
+            if metadata['pointsscalars'][0] is not None
+            else [layers]
+        )
+    return metadata
+
+
+def plot_network_f(
+    plotter: pv.Plotter,
+    scalar_bar_builders: Sequence[ScalarBarBuilder],
+    copy_actors: bool = False,
+    *,
     networks: Optional[NetworkDataCollection] = None,
     node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
     node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
@@ -1190,17 +1525,557 @@ def unified_plotter(
     edge_alpha: Union[float, str] = 1.0,
     num_edge_radius_bins: int = 10,
     network_layers: Optional[Sequence[NodeLayer]] = None,
-    hemisphere: Optional[Literal['left', 'right']] = None,
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    if networks is not None:
+        if network_layers is None or len(network_layers) == 0:
+            # No point in multiple datasets without overlays, so we'll use the
+            # first network's specifications to build the base layer.
+            base_network = networks[0]
+            network_name = base_network.name
+            if base_network.edges is not None:
+                base_edge_layers = [EdgeLayer(
+                    name=network_name,
+                    cmap=edge_cmap,
+                    clim=edge_clim,
+                    color=edge_color,
+                    radius=edge_radius,
+                    radius_range=edge_radius_range,
+                    alpha=edge_alpha,
+                )]
+            else:
+                base_edge_layers = []
+            if base_network.coor is not None:
+                base_layer = NodeLayer(
+                    name=network_name,
+                    cmap=node_cmap,
+                    clim=node_clim,
+                    color=node_color,
+                    radius=node_radius,
+                    radius_range=node_radius_range,
+                    alpha=node_alpha,
+                    edge_layers=base_edge_layers,
+                )
+            network_layers = [base_layer]
+        plotter, new_builders = add_network(
+            plotter=plotter,
+            networks=networks,
+            layers=network_layers,
+            num_edge_radius_bins=num_edge_radius_bins,
+            copy_actors=copy_actors,
+        )
+        scalar_bar_builders = scalar_bar_builders + new_builders
+    return plotter, scalar_bar_builders
+
+
+def plot_network_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    *,
+    networks: Optional[NetworkDataCollection] = None,
+    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
+    node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
+    node_radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
+    node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
+    node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
+    node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
+    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
+    edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
+    edge_radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
+    edge_cmap: Any = EDGE_CMAP_DEFAULT_VALUE,
+    edge_clim: Tuple[float, float] = EDGE_CLIM_DEFAULT_VALUE,
+    edge_alpha: Union[float, str] = 1.0,
+    num_edge_radius_bins: int = 10,
+    network_layers: Optional[Sequence[NodeLayer]] = None,
+) -> Mapping[str, Sequence[str]]:
+    node = networks is not None and any(
+        network.coor is not None for network in networks
+    )
+    edge = networks is not None and any(
+        network.edges is not None for network in networks
+    )
+    if node is not None:
+        metadata['nodecolor'] = [node_color or None]
+        metadata['noderadius'] = [node_radius or None]
+        metadata['nodealpha'] = [node_alpha or None]
+    if edge is not None:
+        metadata['edgecolor'] = [edge_color or None]
+        metadata['edgeradius'] = [edge_radius or None]
+        metadata['edgealpha'] = [edge_alpha or None]
+    if network_layers is not None:
+        colors = '+'.join(layer.color for layer in network_layers)
+        radii = '+'.join(layer.radius for layer in network_layers)
+        alphas = '+'.join(layer.alpha for layer in network_layers)
+        metadata['nodecolor'] = (
+            [f'{metadata["nodecolor"][0]}+{colors}']
+            if metadata['nodecolor'][0] is not None
+            else [colors]
+        )
+        metadata['noderadius'] = (
+            [f'{metadata["noderadius"][0]}+{radii}']
+            if metadata['noderadius'][0] is not None
+            else [radii]
+        )
+        metadata['nodealpha'] = (
+            [f'{metadata["nodealpha"][0]}+{alphas}']
+            if metadata['nodealpha'][0] is not None
+            else [alphas]
+        )
+
+        if edge:
+            colors = '+'.join(
+                layer.edge_layers[0].color for layer in network_layers
+            )
+            radii = '+'.join(
+                layer.edge_layers[0].radius for layer in network_layers
+            )
+            alphas = '+'.join(
+                layer.edge_layers[0].alpha for layer in network_layers
+            )
+            metadata['edgecolor'] = (
+                [f'{metadata["edgecolor"][0]}+{colors}']
+                if metadata['edgecolor'][0] is not None
+                else [colors]
+            )
+            metadata['edgeradius'] = (
+                [f'{metadata["edgeradius"][0]}+{radii}']
+                if metadata['edgeradius'][0] is not None
+                else [radii]
+            )
+            metadata['edgealpha'] = (
+                [f'{metadata["edgealpha"][0]}+{alphas}']
+                if metadata['edgealpha'][0] is not None
+                else [alphas]
+            )
+    return metadata
+
+
+def hemisphere_slack_fit(
+    hemispheres: Sequence[str],
+    surf_projection: Optional[str] = None,
+    *,
     hemisphere_slack: Optional[Union[float, Literal['default']]] = 'default',
+    **params,
+) -> Mapping[str, Any]:
+    if hemisphere_slack == 'default':
+        proj_require_slack = {'inflated', 'veryinflated', 'sphere'}
+        if surf_projection in proj_require_slack:
+            hemisphere_slack = 1.1
+        else:
+            hemisphere_slack = None
+    return {
+        'hemispheres': hemispheres,
+        'hemisphere_slack': hemisphere_slack,
+    }
+
+
+def hemisphere_slack_transform(
+    fit_params: Mapping[str, Any],
+    **params,
+) -> Mapping[str, Any]:
+    return {}
+
+
+def hemisphere_slack_get_displacement(
+    hemisphere_slack: float,
+    hemi_gap: float,
+    hw_left: float,
+    hw_right: float,
+) -> float:
+    min_gap = hw_left + hw_right
+    target_gap = min_gap * hemisphere_slack
+    displacement = (target_gap - hemi_gap) / 2
+    return displacement
+
+
+def hemisphere_slack_get_displacement_from_coor(
+    hemisphere_slack: float,
+    coor: Tensor,
+    left_mask: Tensor,
+) -> float:
+    hw_left = (
+        coor[left_mask, 0].max()
+        - coor[left_mask, 0].min()
+    ) / 2
+    hw_right = (
+        coor[~left_mask, 0].max()
+        - coor[~left_mask, 0].min()
+    ) / 2
+    hemi_gap = (
+        coor[~left_mask, 0].max()
+        + coor[~left_mask, 0].min()
+    ) / 2 - (
+        coor[left_mask, 0].max()
+        + coor[left_mask, 0].min()
+    ) / 2
+    return hemisphere_slack_get_displacement(
+        hemisphere_slack=hemisphere_slack,
+        hemi_gap=hemi_gap,
+        hw_left=hw_left,
+        hw_right=hw_right,
+    )
+
+
+def hemisphere_slack_fit_surf(f: callable) -> callable:
+    def _hemisphere_slack_fit_surf(
+        surf: Optional[CortexTriSurface] = None,
+        surf_projection: Optional[str] = None,
+        **params,
+    ) -> Mapping[str, Any]:
+        fit_params = f(surf_projection=surf_projection, **params)
+        displacement = fit_params.get('displacement', None)
+        if displacement is not None:
+            return fit_params
+
+        hemispheres = fit_params.get('hemispheres', ())
+        hemisphere_slack = fit_params.get('hemisphere_slack', None)
+        if len(hemispheres) == 2 and hemisphere_slack is not None:
+            if surf is not None:
+                surf.left.project(surf_projection)
+                surf.right.project(surf_projection)
+                hw_left = (surf.left.bounds[1] - surf.left.bounds[0]) / 2
+                hw_right = (surf.right.bounds[1] - surf.right.bounds[0]) / 2
+                hemi_gap = surf.right.center[0] - surf.left.center[0]
+                displacement = hemisphere_slack_get_displacement(
+                    hemisphere_slack=hemisphere_slack,
+                    hemi_gap=hemi_gap,
+                    hw_left=hw_left,
+                    hw_right=hw_right,
+                )
+                fit_params['displacement'] = displacement
+
+        return fit_params
+    return _hemisphere_slack_fit_surf
+
+
+def hemisphere_slack_fit_network(f: callable) -> callable:
+    def _hemisphere_slack_fit_network(
+        networks: Optional[Sequence[NetworkDataCollection]] = None,
+        **params,
+    ) -> Mapping[str, Any]:
+        fit_params = f(**params)
+        displacement = fit_params.get('displacement', None)
+        if displacement is not None:
+            return fit_params
+
+        hemispheres = fit_params.get('hemispheres', ())
+        hemisphere_slack = fit_params.get('hemisphere_slack', None)
+        if len(hemispheres) == 2 and hemisphere_slack is not None:
+            if networks is not None:
+                ref_coor = np.concatenate([n.coor for n in networks])
+                if any([n.lh_mask is None for n in networks]):
+                    left_mask = ref_coor[:, 0] < 0
+                else:
+                    left_mask = np.concatenate([n.lh_mask for n in networks])
+                displacement = hemisphere_slack_get_displacement_from_coor(
+                    hemisphere_slack=hemisphere_slack,
+                    coor=ref_coor,
+                    left_mask=left_mask,
+                )
+                fit_params['displacement'] = displacement
+
+        return fit_params
+    return _hemisphere_slack_fit_network
+
+
+def hemisphere_slack_fit_points(f: callable) -> callable:
+    def _hemisphere_slack_fit_points(
+        points: Optional[Sequence[PointDataCollection]] = None,
+        **params,
+    ) -> Mapping[str, Any]:
+        fit_params = f(**params)
+        displacement = fit_params.get('displacement', None)
+        if displacement is not None:
+            return fit_params
+
+        hemispheres = fit_params.get('hemispheres', ())
+        hemisphere_slack = fit_params.get('hemisphere_slack', None)
+        if len(hemispheres) == 2 and hemisphere_slack is not None:
+            if points is not None:
+                ref_coor = np.concatenate([p.points.points for p in points])
+                left_mask = ref_coor[:, 0] < 0
+                displacement = hemisphere_slack_get_displacement_from_coor(
+                    hemisphere_slack=hemisphere_slack,
+                    coor=ref_coor,
+                    left_mask=left_mask,
+                )
+                fit_params['displacement'] = displacement
+
+        return fit_params
+    return _hemisphere_slack_fit_points
+
+
+def hemisphere_slack_transform_surf(f: callable) -> callable:
+    def _hemisphere_slack_transform_surf(
+        surf: Optional[CortexTriSurface] = None,
+        fit_params: Optional[Mapping[str, Any]] = None,
+        **params,
+    ) -> Mapping[str, Any]:
+        result = f(fit_params=fit_params, **params)
+        displacement = fit_params.get('displacement', None)
+        if displacement is None:
+            return result
+
+        hemispheres = fit_params.get('hemispheres', ())
+        hemisphere_slack = fit_params.get('hemisphere_slack', None)
+        if len(hemispheres) == 2 and hemisphere_slack is not None:
+            if surf is not None:
+                left = surf.left.translate((-displacement, 0, 0))
+                right = surf.right.translate((displacement, 0, 0))
+                surf = CortexTriSurface(left=left, right=right, mask=surf.mask)
+                result['surf'] = surf
+
+        return result
+    return _hemisphere_slack_transform_surf
+
+
+def hemisphere_slack_transform_network(f: callable) -> callable:
+    def _hemisphere_slack_transform_network(
+        networks: Optional[Sequence[NetworkDataCollection]] = None,
+        fit_params: Optional[Mapping[str, Any]] = None,
+        **params,
+    ) -> Mapping[str, Any]:
+        result = f(fit_params=fit_params, **params)
+        displacement = fit_params.get('displacement', None)
+        if displacement is None:
+            return result
+
+        hemispheres = fit_params.get('hemispheres', ())
+        hemisphere_slack = fit_params.get('hemisphere_slack', None)
+        if len(hemispheres) == 2 and hemisphere_slack is not None:
+            if networks is not None:
+                if any([n.lh_mask is None for n in networks]):
+                    def lh_condition(coor, _, __):
+                        return coor[:, 0] < 0
+                    def rh_condition(coor, _, __):
+                        return coor[:, 0] > 0
+                else:
+                    def lh_condition(_, __, lh_mask):
+                        return lh_mask
+                    def rh_condition(_, __, lh_mask):
+                        return ~lh_mask
+                networks = networks.translate(
+                    (-displacement, 0, 0),
+                    condition=lh_condition,
+                )
+                networks = networks.translate(
+                    (displacement, 0, 0),
+                    condition=rh_condition,
+                )
+                result['networks'] = networks
+
+        return result
+    return _hemisphere_slack_transform_network
+
+
+def hemisphere_slack_transform_points(f: callable) -> callable:
+    def _hemisphere_slack_transform_points(
+        points: Optional[Sequence[PointDataCollection]] = None,
+        fit_params: Optional[Mapping[str, Any]] = None,
+        **params,
+    ) -> Mapping[str, Any]:
+        result = f(fit_params=fit_params, **params)
+        displacement = fit_params.get('displacement', None)
+        if displacement is None:
+            return result
+
+        hemispheres = fit_params.get('hemispheres', ())
+        hemisphere_slack = fit_params.get('hemisphere_slack', None)
+        if len(hemispheres) == 2 and hemisphere_slack is not None:
+            if points is not None:
+                left_points = points.translate(
+                    (-displacement, 0, 0),
+                    condition=lambda coor, _: coor[:, 0] < 0,
+                )
+                right_points = points.translate(
+                    (displacement, 0, 0),
+                    condition=lambda coor, _: coor[:, 0] > 0
+                )
+                points = PointDataCollection(
+                    lp + rp for lp, rp in zip(left_points, right_points)
+                )
+                result['points'] = points
+
+        return result
+    return _hemisphere_slack_transform_points
+
+
+hemisphere_slack = TopoTransform(
+    name='hemisphere_slack',
+    fit=hemisphere_slack_fit,
+    transform=hemisphere_slack_transform,
+)
+
+
+plot_surf_p = PlotPrimitive(
+    name='surf',
+    plot=plot_surf_f,
+    meta=plot_surf_aux_f,
+    topo={
+        'hemisphere_slack': (
+            hemisphere_slack_fit_surf,
+            hemisphere_slack_transform_surf,
+        ),
+    },
+)
+
+
+plot_points_p = PlotPrimitive(
+    name='points',
+    plot=plot_points_f,
+    meta=plot_points_aux_f,
+    topo={
+        'hemisphere_slack': (
+            hemisphere_slack_fit_points,
+            hemisphere_slack_transform_points,
+        ),
+    },
+)
+
+
+plot_network_p = PlotPrimitive(
+    name='network',
+    plot=plot_network_f,
+    meta=plot_network_aux_f,
+    topo={
+        'hemisphere_slack': (
+            hemisphere_slack_fit_network,
+            hemisphere_slack_transform_network,
+        ),
+    },
+)
+
+
+# TODO: There are some nasty anti-patterns in this function:
+#       - using locals() and indefinite kwargs
+#       - arguments and variables that are apparently unused / not accessed
+#         but are in fact packaged into the params dict
+#       - delayed binding of parameters
+#       I'm not sure this can be improved without substantially reducing the
+#       flexibility of the function. This is supposed to be low-level code
+#       that is used to build higher-level functions, so a potential approach
+#       could be having the operations that build the higher-level functions
+#       be responsible for sanitising the inputs to this function and building
+#       an informative documentation string.
+def base_plotter(
+    *,
+    plot_primitives: Sequence[Primitive] = (),
+    topo_transforms: Optional[Sequence[TopoTransform]] = (),
+    hemisphere: Optional[str] = None,
+    key_scalars: Optional[str] = None,
+    plotter: Optional[pv.Plotter] = None,
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
     window_size: Optional[Tuple[int, int]] = None,
-    plotter: Optional[pv.Plotter] = None,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,
-) -> Optional[pv.Plotter]:
-    """
+    **params,
+) -> Tuple[Any]:
+
+    # TODO: cortex_theme doesn't work here for some reason. If the background
+    #       is transparent, all of the points are also made transparent. So
+    #       we're sticking with a white background for now.
+    theme = theme or pv.themes.DocumentTheme()
+
+    if plotter is None:
+        plotter = pv.Plotter(
+            window_size=window_size,
+            off_screen=off_screen,
+            theme=theme,
+        )
+        close_plotter = True # for potential use by postprocessors at binding
+    else:
+        plotter.clear()
+        plotter.enable_lightkit()
+        close_plotter = False # for potential use by postprocessors at binding
+
+    # TODO: hemisphere config should maybe be a topo transform, but this
+    #       would require refactoring the metadata functions to use those
+    #       transforms. Maybe the real takeaway is that the metadata functions
+    #       should be made part of the base plotter.
+    hemispheres, hemisphere_str = _cfg_hemispheres(
+        hemisphere=hemisphere,
+        key_scalars=key_scalars,
+        surf=params.get('surf', None),
+    )
+
+    params = {**locals(), **params}
+    for transform in topo_transforms or ():
+        fit_params = transform.fit(**params)
+        result = transform.transform(fit_params=fit_params, **params)
+        #assert 0
+        params = {**params, **result}
+
+    scalar_bar_builders = ()
+    params = {**locals(), **params}
+    for prim in plot_primitives or ():
+        result = prim(**params)
+        params = {**params, **result}
+
+    if sbprocessor is None:
+        sbprocessor = overlay_scalar_bars
+    plotter, scalar_bar = sbprocessor(
+        plotter=params['plotter'],
+        builders=params['scalar_bar_builders'],
+    )
+
+    if postprocessors is None or len(postprocessors) == 0:
+        postprocessors = [_null_postprocessor]
+    postprocessors = [
+        w if w is not None else _null_postprocessor for w in postprocessors
+    ]
+    for i, w in enumerate(postprocessors):
+        try:
+            postprocessors[i] = w.bind(**params)
+        except AttributeError:
+            pass
+    out = tuple(w(plotter=plotter) for w in postprocessors)
+    return out
+
+
+def base_plotmeta(
+    *,
+    meta_primitives: Sequence[Primitive] = (),
+    hemisphere: Optional[str] = None,
+    key_scalars: Optional[str] = None,
+    entity_writers: Optional[Sequence[callable]] = None,
+    **params,
+) -> Mapping[str, Sequence[str]]:
+    metadata = {}
+    _, hemisphere_str = _cfg_hemispheres(
+        hemisphere=hemisphere,
+        key_scalars=key_scalars,
+        surf=params.get('surf', None),
+    )
+    metadata['hemisphere'] = [hemisphere_str]
+
+    for prim in meta_primitives or ():
+        metadata = prim(metadata=metadata, **params)
+
+    if entity_writers is None:
+        entity_writers = [_null_auxwriter]
+    entity_writers = [
+        w if w is not None else _null_auxwriter for w in entity_writers
+    ]
+    for i, w in enumerate(entity_writers):
+        try:
+            entity_writers[i] = w.bind(**{**params, **metadata})
+        except AttributeError:
+            pass
+    metadata = tuple(w(metadata=metadata) for w in entity_writers)
+    return metadata
+
+
+unified_plotter, plotted_entities = bind_primitives(
+    prims=(
+        plot_surf_p,
+        plot_points_p,
+        plot_network_p,
+    ),
+    transforms=(
+        hemisphere_slack,
+    ),
+)(base_plotter, base_plotmeta)
+unified_plotter.__doc__ = """
     Plot a surface, volume, and/or graph in a single figure.
 
     This is the main plotting function for this package. It uses PyVista
@@ -1380,318 +2255,3 @@ def unified_plotter(
         The PyVista plotter theme to use. If not specified, the default
         DocumentTheme will be used.
     """
-
-    # TODO: cortex_theme doesn't work here for some reason. If the background
-    #       is transparent, all of the points are also made transparent. So
-    #       we're sticking with a white background for now.
-    theme = theme or pv.themes.DocumentTheme()
-
-    # Sometimes by construction surf_scalars is an empty tuple or list, which
-    # causes problems later on. So we convert it to None if it's empty.
-    if surf_scalars is not None:
-        surf_scalars = None if len(surf_scalars) == 0 else surf_scalars
-    hemispheres, hemisphere_str = _cfg_hemispheres(
-        hemisphere=hemisphere,
-        surf_scalars=surf_scalars,
-        surf=surf,
-    )
-    hemi_params = _get_hemisphere_parameters(
-        surf_scalars_cmap=surf_scalars_cmap,
-        surf_scalars_clim=surf_scalars_clim,
-        surf_scalars_layers=surf_scalars_layers,
-    )
-
-    if plotter is None:
-        p = pv.Plotter(
-            window_size=window_size,
-            off_screen=off_screen,
-            theme=theme,
-        )
-        close_plotter = True # for potential use by postprocessors at binding
-    else:
-        import vtk
-        p = plotter
-        p.clear()
-        p.enable_lightkit()
-        close_plotter = False # for potential use by postprocessors at binding
-
-    # TODO: We can see that the conditionals below suggest a more general
-    #       approach to plotting. We should refactor this code to make the
-    #       unified plotter accept plotting primitives (e.g., surfaces,
-    #       volumes, graphs) and then apply the appropriate plotting
-    #       operations to them. This would make it easier to add new
-    #       primitives in the future.
-    if hemisphere_slack == 'default':
-        proj_require_slack = {'inflated', 'veryinflated', 'sphere'}
-        if surf_projection in proj_require_slack:
-            hemisphere_slack = 1.1
-        else:
-            hemisphere_slack = None
-    if len(hemispheres) == 2 and hemisphere_slack is not None:
-        if surf is not None:
-            surf.left.project(surf_projection)
-            surf.right.project(surf_projection)
-            hw_left = (surf.left.bounds[1] - surf.left.bounds[0]) / 2
-            hw_right = (surf.right.bounds[1] - surf.right.bounds[0]) / 2
-            hemi_gap = surf.right.center[0] - surf.left.center[0]
-        elif networks is not None or points is not None:
-            if networks is not None:
-                ref_coor = np.concatenate([n.coor for n in networks])
-                if any([n.lh_mask is None for n in networks]):
-                    left_mask = ref_coor[:, 0] < 0
-                else:
-                    left_mask = np.concatenate([n.lh_mask for n in networks])
-            elif points is not None:
-                ref_coor = np.concatenate([p.points.points for p in points])
-                left_mask = ref_coor[:, 0] < 0
-            hw_left = (
-                ref_coor[left_mask, 0].max()
-                - ref_coor[left_mask, 0].min()
-            ) / 2
-            hw_right = (
-                ref_coor[~left_mask, 0].max()
-                - ref_coor[~left_mask, 0].min()
-            ) / 2
-            hemi_gap = (
-                ref_coor[~left_mask, 0].max()
-                + ref_coor[~left_mask, 0].min()
-            ) / 2 - (
-                ref_coor[left_mask, 0].max()
-                + ref_coor[left_mask, 0].min()
-            ) / 2
-        else:
-            hw_left = hw_right = hemi_gap = 0
-        min_gap = hw_left + hw_right
-        target_gap = min_gap * hemisphere_slack
-        displacement = (target_gap - hemi_gap) / 2
-        if surf is not None:
-            left = surf.left.translate((-displacement, 0, 0))
-            right = surf.right.translate((displacement, 0, 0))
-            surf = CortexTriSurface(left=left, right=right, mask=surf.mask)
-        if networks is not None:
-            if any([n.lh_mask is None for n in networks]):
-                left_mask = ref_coor[:, 0] < 0
-                def lh_condition(coor, _, __):
-                    return coor[:, 0] < 0
-                def rh_condition(coor, _, __):
-                    return coor[:, 0] > 0
-            else:
-                left_mask = np.concatenate([n.lh_mask for n in networks])
-                def lh_condition(_, __, lh_mask):
-                    return lh_mask
-                def rh_condition(_, __, lh_mask):
-                    return ~lh_mask
-            networks = networks.translate(
-                (-displacement, 0, 0),
-                condition=lh_condition,
-            )
-            networks = networks.translate(
-                (displacement, 0, 0),
-                condition=rh_condition,
-            )
-        if points is not None:
-            left_points = points.translate(
-                (-displacement, 0, 0),
-                condition=lambda coor, _: coor[:, 0] < 0,
-            )
-            right_points = points.translate(
-                (displacement, 0, 0),
-                condition=lambda coor, _: coor[:, 0] > 0
-            )
-            points = PointDataCollection(
-                lp + rp for lp, rp in zip(left_points, right_points)
-            )
-    elif surf is not None:
-        for hemisphere in hemispheres:
-            surf.__getattribute__(hemisphere).project(surf_projection)
-
-    scalar_bar_builders = ()
-
-    if surf is not None:
-        for hemisphere in hemispheres:
-            hemi_surf = surf.__getattribute__(hemisphere)
-            hemi_clim = hemi_params.get(hemisphere, 'surf_scalars_clim')
-            hemi_cmap = hemi_params.get(hemisphere, 'surf_scalars_cmap')
-            hemi_layers = hemi_params.get(hemisphere, 'surf_scalars_layers')
-            if hemi_layers is None:
-                hemi_layers = []
-
-            base_layer = Layer(
-                name=surf_scalars,
-                cmap=hemi_cmap,
-                clim=hemi_clim,
-                cmap_negative=None,
-                color=None,
-                alpha=surf_alpha,
-                below_color=surf_scalars_below_color,
-            )
-            hemi_layers = [base_layer] + list(hemi_layers)
-            hemi_layers = _eval_robust_clim(
-                surf=surf,
-                layers=hemi_layers,
-                hemispheres=hemispheres,
-            )
-            hemi_surf, hemi_scalars, new_builders = add_composed_rgba(
-                surf=hemi_surf,
-                layers=hemi_layers,
-                surf_alpha=surf_alpha,
-            )
-            # TODO: copying the mesh seems like it could create memory issues.
-            #       A better solution would be delayed execution.
-            p.add_mesh(
-                hemi_surf,
-                scalars=hemi_scalars,
-                rgb=True,
-                show_edges=False,
-                copy_mesh=copy_actors,
-            )
-            if (
-                surf_scalars_boundary_width > 0
-                and surf_scalars is not None
-                and surf_scalars not in hemi_surf.cell_data
-            ):
-                p.add_mesh(
-                    hemi_surf.contour(
-                        isosurfaces=range(
-                            int(max(hemi_surf.point_data[surf_scalars]))
-                        ),
-                        scalars=surf_scalars,
-                    ),
-                    color=surf_scalars_boundary_color,
-                    line_width=surf_scalars_boundary_width,
-                )
-            scalar_bar_builders = scalar_bar_builders + new_builders
-
-    if points is not None:
-        if points_scalars_layers is None:
-            points_scalars_layers = []
-        if points_scalars is not None:
-            base_layer = Layer(
-                name=points_scalars,
-                cmap=points_scalars_cmap,
-                clim=points_scalars_clim,
-                cmap_negative=None,
-                color=None,
-                alpha=points_alpha,
-                below_color=points_scalars_below_color,
-            )
-            points_scalars_layers = [base_layer] + list(points_scalars_layers)
-        p, new_builders = add_points_scalars(
-            plotter=p,
-            points=points,
-            layers=points_scalars_layers,
-            copy_actors=copy_actors,
-        )
-        scalar_bar_builders = scalar_bar_builders + new_builders
-
-    if networks is not None:
-        if network_layers is None or len(network_layers) == 0:
-            # No point in multiple datasets without overlays, so we'll use the
-            # first network's specifications to build the base layer.
-            base_network = networks[0]
-            network_name = base_network.name
-            if base_network.edges is not None:
-                base_edge_layers = [EdgeLayer(
-                    name=network_name,
-                    cmap=edge_cmap,
-                    clim=edge_clim,
-                    color=edge_color,
-                    radius=edge_radius,
-                    radius_range=edge_radius_range,
-                    alpha=edge_alpha,
-                )]
-            else:
-                base_edge_layers = []
-            if base_network.coor is not None:
-                base_layer = NodeLayer(
-                    name=network_name,
-                    cmap=node_cmap,
-                    clim=node_clim,
-                    color=node_color,
-                    radius=node_radius,
-                    radius_range=node_radius_range,
-                    alpha=node_alpha,
-                    edge_layers=base_edge_layers,
-                )
-            network_layers = [base_layer]
-        p, new_builders = add_network(
-            plotter=p,
-            networks=networks,
-            layers=network_layers,
-            num_edge_radius_bins=num_edge_radius_bins,
-            copy_actors=copy_actors,
-        )
-        scalar_bar_builders = scalar_bar_builders + new_builders
-
-    if sbprocessor is None:
-        sbprocessor = overlay_scalar_bars
-    p, scalar_bar = sbprocessor(plotter=p, builders=scalar_bar_builders)
-
-    if postprocessors is None or len(postprocessors) == 0:
-        postprocessors = [_null_postprocessor]
-    postprocessors = [
-        w if w is not None else _null_postprocessor for w in postprocessors
-    ]
-    for i, w in enumerate(postprocessors):
-        try:
-            postprocessors[i] = w.bind(**locals())
-        except AttributeError:
-            pass
-    out = tuple(w(plotter=p) for w in postprocessors)
-    return out
-
-
-def plotted_entities(
-    *,
-    entity_writers: Optional[Sequence[callable]] = None,
-    plot_index: Optional[int] = None,
-    **params,
-) -> Mapping[str, Sequence[str]]:
-    metadata = {}
-    surface = params.get('surf', None)
-    node = params.get('node_values', None)
-    edge = params.get('edge_values', None)
-    _, hemisphere_str = _cfg_hemispheres(
-        hemisphere=params.get('hemisphere', None),
-        surf_scalars=params.get('surf_scalars', None),
-        surf=params.get('surf', None),
-    )
-    metadata['hemisphere'] = [hemisphere_str]
-    if surface is not None:
-        metadata['scalars'] = [params.get('surf_scalars', None)]
-        metadata['projection'] = [params.get('surf_projection', None)]
-        layers = params.get('surf_scalars_layers', None)
-        if layers is not None:
-            if len(layers) == 2 and isinstance(layers[0], (list, tuple)):
-                layers = layers[0] if hemisphere_str != 'right' else layers[1]
-            layers = '+'.join(layer.name for layer in layers)
-            metadata['scalars'] = (
-                [f'{metadata["scalars"][0]}+{layers}']
-                if metadata['scalars'][0] is not None
-                else [layers]
-            )
-    if node is not None:
-        metadata['parcellation'] = [params.get('node_parcel_scalars', None)]
-        metadata['nodecolor'] = [params.get('node_color', None)]
-        metadata['noderadius'] = [params.get('node_radius', None)]
-        metadata['nodealpha'] = [params.get('node_alpha', None)]
-    if edge is not None:
-        metadata['edgecolor'] = [params.get('edge_color', None)]
-        metadata['edgeradius'] = [params.get('edge_radius', None)]
-        metadata['edgealpha'] = [params.get('edge_alpha', None)]
-    if metadata['hemisphere'][0] is None:
-        metadata['hemisphere'] = ['both']
-    metadata['plot_index'] = [plot_index]
-    metadata = {k: v for k, v in metadata.items() if isinstance(v[0], str)}
-    if entity_writers is None:
-        entity_writers = [_null_auxwriter]
-    entity_writers = [
-        w if w is not None else _null_auxwriter for w in entity_writers
-    ]
-    for i, w in enumerate(entity_writers):
-        try:
-            entity_writers[i] = w.bind(**{**params, **metadata})
-        except AttributeError:
-            pass
-    metadata = tuple(w(metadata=metadata) for w in entity_writers)
-    return metadata

@@ -40,7 +40,7 @@ def test_scalars():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}'
             ),
         ),
     )
@@ -69,7 +69,7 @@ def test_parcellation():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-network_mode-face'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_cmap-network_mode-face'
             ),
         ),
     )
@@ -96,7 +96,7 @@ def test_parcellation():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-network_mode-vertex'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_cmap-network_mode-vertex'
             ),
         ),
     )
@@ -129,7 +129,7 @@ def test_parcellation_modal_cmap():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-modal_mode-face'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_cmap-modal_mode-face'
             ),
         ),
     )
@@ -160,7 +160,7 @@ def test_parcellation_modal_cmap():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_cmap-modal_mode-vertex'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_cmap-modal_mode-vertex'
             ),
         ),
     )
@@ -191,7 +191,7 @@ def test_parcellation_html():
         vertex_to_face('parcellation'),
         plot_to_html(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_cmap-network'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_cmap-network'
             ),
         ),
     )
@@ -221,7 +221,7 @@ def test_parcellated_scalars():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
             ),
         ),
     )
@@ -253,7 +253,7 @@ def test_parcellated_scalars():
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
             ),
         ),
     )
