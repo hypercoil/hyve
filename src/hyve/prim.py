@@ -1365,7 +1365,7 @@ def auto_camera_aux_f(
 
 def plot_to_image_f(
     plotter: pv.Plotter,
-    views: Union[Sequence, Literal['__default__']] = '__default__',
+    views: Union[Sequence, Mapping, Literal['__default__']] = '__default__',
     window_size: Tuple[int, int] = (1920, 1080),
     hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
     plot_scalar_bar: bool = False,
@@ -1377,6 +1377,8 @@ def plot_to_image_f(
         hemisphere = 'both'
     else:
         hemisphere = hemispheres
+    if isinstance(views, Mapping):
+        views = views[hemisphere]
     if views == '__default__':
         views = set_default_views(hemisphere)
     ret = []
@@ -1541,6 +1543,7 @@ def save_figure_f(
     canvas_size: Tuple[int, int],
     layout: CellLayout,
     output_dir: str,
+    sort_by: Optional[Sequence[str]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'png',
@@ -1550,6 +1553,13 @@ def save_figure_f(
     panels_per_page = len(layout)
     try:
         n_scenes = len(snapshots)
+        if sort_by is not None:
+
+            def sort_func(snapshot):
+                _, cmeta = snapshot
+                return tuple(cmeta[cfield] for cfield in sort_by)
+
+            snapshots = sorted(snapshots, key=sort_func)
         if n_scenes > panels_per_page:
             n_panels = panels_per_page
             n_pages = ceil(n_scenes / n_panels)
@@ -1600,6 +1610,7 @@ def save_grid_f(
     n_rows: int,
     n_cols: int,
     output_dir: str,
+    sort_by: Optional[Sequence[str]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'png',
@@ -1613,6 +1624,7 @@ def save_grid_f(
         canvas_size=canvas_size,
         layout=layout,
         output_dir=output_dir,
+        sort_by=sort_by,
         fname_spec=fname_spec,
         suffix=suffix,
         extension=extension,

@@ -38,6 +38,7 @@ def test_focused_view_autoselect_hemisphere():
             n_cols=4, n_rows=5, padding=4,
             canvas_size=(1280, 1024),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-gaussiannoise_view-focused_page-{page}'
             )
@@ -76,6 +77,7 @@ def test_ortho_views_autoselect_hemisphere():
             n_cols=3, n_rows=10, padding=4,
             canvas_size=(960, 2048),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-gaussiannoise_view-ortho_page-{page}'
             )
@@ -112,6 +114,7 @@ def test_planar_sweep_autoselect_hemisphere():
             n_cols=10, n_rows=5, padding=4,
             canvas_size=(3200, 1024),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-gaussiannoise_view-planar_page-{page}'
             )
@@ -148,6 +151,7 @@ def test_auto_view_autoselect_hemisphere():
             n_cols=7, n_rows=10, padding=4,
             canvas_size=(2240, 2048),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-gaussiannoise_view-auto_page-{page}'
             )

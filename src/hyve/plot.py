@@ -1960,7 +1960,7 @@ def base_plotter(
     plot_primitives: Sequence[Primitive] = (),
     topo_transforms: Optional[Sequence[TopoTransform]] = (),
     hemisphere: Optional[str] = None,
-    key_scalars: Optional[str] = None,
+    key_scalars: Optional[str] = '__default__',
     plotter: Optional[pv.Plotter] = None,
     off_screen: bool = True,
     copy_actors: bool = False,
@@ -1992,6 +1992,12 @@ def base_plotter(
     #       would require refactoring the metadata functions to use those
     #       transforms. Maybe the real takeaway is that the metadata functions
     #       should be made part of the base plotter.
+    if key_scalars == '__default__':
+        key_scalars = params.get('surf_scalars', None)
+        if key_scalars is None:
+            key_scalars = params.get('surf_scalars_layers', None)
+            if key_scalars is not None:
+                key_scalars = key_scalars[0].name
     hemispheres, hemisphere_str = _cfg_hemispheres(
         hemisphere=hemisphere,
         key_scalars=key_scalars,
@@ -2036,11 +2042,18 @@ def base_plotmeta(
     *,
     meta_primitives: Sequence[Primitive] = (),
     hemisphere: Optional[str] = None,
-    key_scalars: Optional[str] = None,
+    key_scalars: Optional[str] = '__default__',
     entity_writers: Optional[Sequence[callable]] = None,
     **params,
 ) -> Mapping[str, Sequence[str]]:
     metadata = {}
+
+    if key_scalars == '__default__':
+        key_scalars = params.get('surf_scalars', None)
+        if key_scalars is None:
+            key_scalars = params.get('surf_scalars_layers', None)
+            if key_scalars is not None:
+                key_scalars = key_scalars[0].name
     _, hemisphere_str = _cfg_hemispheres(
         hemisphere=hemisphere,
         key_scalars=key_scalars,
