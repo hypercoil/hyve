@@ -1806,6 +1806,7 @@ def hemisphere_slack_fit_points(f: callable) -> callable:
 def hemisphere_slack_transform_surf(f: callable) -> callable:
     def _hemisphere_slack_transform_surf(
         surf: Optional[CortexTriSurface] = None,
+        surf_projection: Optional[str] = None,
         fit_params: Optional[Mapping[str, Any]] = None,
         **params,
     ) -> Mapping[str, Any]:
@@ -1822,6 +1823,7 @@ def hemisphere_slack_transform_surf(f: callable) -> callable:
                 right = surf.right.translate((displacement, 0, 0))
                 surf = CortexTriSurface(left=left, right=right, mask=surf.mask)
                 result['surf'] = surf
+                result['surf_projection'] = f'{surf_projection}_translated'
 
         return result
     return _hemisphere_slack_transform_surf

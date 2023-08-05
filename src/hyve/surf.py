@@ -276,16 +276,25 @@ class ProjectedPolyData(pv.PolyData):
         self.points = projections[projection]
         self.active_projection = projection
 
+    # TODO: Doing this "the right way" (the commented-out code below) is
+    #       prone to segfaults when PyVista makes deep copies. I'm not sure
+    #       why. For now, we just do it the wrong way (the uncommented code
+    #       below) and work around it in `hemisphere_slack_transform_surf`.
     def translate(
         self,
         xyz: Tensor,
-        transform_all_input_vectors: bool = False,
+        # transform_all_input_vectors: bool = False,
     ) -> 'ProjectedPolyData':
-        translated = super().translate(xyz, transform_all_input_vectors)
-        translated.active_projection = self.active_projection
-        proj_coor = self.get_projection(self.active_projection)
-        translated.add_projection(self.active_projection, proj_coor + xyz)
-        return translated
+        points = self.points + xyz
+        translated_proj = f'{self.active_projection}_translated'
+        self.add_projection(translated_proj, points)
+        self.project(translated_proj)
+        return self
+        # translated = super().translate(xyz, transform_all_input_vectors)
+        # translated.active_projection = self.active_projection
+        # proj_coor = self.get_projection(self.active_projection)
+        # translated.add_projection(self.active_projection, proj_coor + xyz)
+        # return translated
 
 
 @dataclass
