@@ -73,7 +73,7 @@ from .const import (
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Tensor,
 )
-from .layout import CellLayout, grid
+from .layout import AnnotatedLayout, CellLayout, grid
 from .plot import (
     EdgeLayer,
     Layer,
@@ -1411,17 +1411,20 @@ def plot_to_image_aux_f(
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
     views: Union[
         Sequence,
+        Mapping,
         Literal['__default__', '__final__'],
     ] = '__default__',
     n_scenes: int = 1,
 ) -> Mapping[str, Sequence[str]]:
+    if hemisphere is None:
+        hemisphere = 'both'
+    elif len(hemisphere) == 1:
+        hemisphere = hemisphere[0]
+    else:
+        hemisphere = 'both'
+    if isinstance(views, Mapping):
+        views = views[hemisphere]
     if views == '__default__':
-        if hemisphere is None:
-            hemisphere = 'both'
-        elif len(hemisphere) == 1:
-            hemisphere = hemisphere[0]
-        else:
-            hemisphere = 'both'
         views = set_default_views(hemisphere)
     elif views == '__final__':
         views = [f'final{i}' for i in range(n_scenes)]
@@ -1551,6 +1554,7 @@ def save_figure_f(
     canvas_color: Any = (255, 255, 255, 255),
 ) -> None: # Union[Tuple[Image.Image], Image.Image]:
     panels_per_page = len(layout)
+    cell_indices = list(range(panels_per_page))
     try:
         n_scenes = len(snapshots)
         if sort_by is not None:
@@ -1560,6 +1564,18 @@ def save_figure_f(
                 return tuple(cmeta[cfield] for cfield in sort_by)
 
             snapshots = sorted(snapshots, key=sort_func)
+        if getattr(layout, 'annotations', None) is not None:
+            # TODO: This block behaves unexpectedly if there's more than one
+            #       page of snapshots.
+            # It's an annotated layout, so we'll match the annotations
+            # to the snapshot metadata to 'semantically' assign snapshots
+            # to cells.
+            queries = [meta for (_, meta) in snapshots][:panels_per_page]
+            layout, cell_indices = layout.match_and_assign_all(
+                queries=queries,
+                force_unmatched=True,
+            )
+        snapshots = list(zip(cell_indices, snapshots))
         if n_scenes > panels_per_page:
             n_panels = panels_per_page
             n_pages = ceil(n_scenes / n_panels)
@@ -1581,7 +1597,7 @@ def save_figure_f(
 
     def writer(snapshot_group, fname):
         canvas = Image.new('RGBA', canvas_size, color=canvas_color)
-        for i, (cimg, cmeta) in enumerate(snapshot_group):
+        for i, (cimg, cmeta) in snapshot_group:
             panel = cells[i]
             cimg = Image.fromarray(cimg, mode='RGB')
             cimg = scale_image_preserve_aspect_ratio(
@@ -1611,6 +1627,7 @@ def save_grid_f(
     n_cols: int,
     output_dir: str,
     sort_by: Optional[Sequence[str]] = None,
+    annotations: Optional[Mapping[int, Mapping]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'png',
@@ -1619,6 +1636,8 @@ def save_grid_f(
     canvas_color: Any = (255, 255, 255, 255),
 ) -> None:
     layout = grid(n_rows=n_rows, n_cols=n_cols, order=order)
+    if annotations is not None:
+        layout = AnnotatedLayout(layout, annotations=annotations)
     save_figure_f(
         snapshots=snapshots,
         canvas_size=canvas_size,

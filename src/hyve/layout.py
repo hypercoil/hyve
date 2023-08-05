@@ -6,7 +6,8 @@ Layout representation
 ~~~~~~~~~~~~~~~~~~~~~
 Classes for representing layouts of data
 """
-from typing import Literal, Optional
+import dataclasses
+from typing import Literal, Mapping, Optional, Sequence, Tuple
 
 
 class CellLayout:
@@ -58,7 +59,7 @@ class CellLayout:
             candidate = candidate._next()
         return candidate
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> 'CellLayout':
         cur_idx = 0
         cur_cell = self._leftmost()
         while cur_idx < index:
@@ -66,7 +67,7 @@ class CellLayout:
             cur_idx += 1
         return cur_cell
 
-    def __next__(self):
+    def __next__(self) -> 'CellLayout':
         return self._next_leaf()
 
     def __iter__(self):
@@ -75,7 +76,7 @@ class CellLayout:
             yield cur_cell
             cur_cell = cur_cell._next_leaf()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f'CellLayout(left={self.left}, right={self.right}, '
             f'orientation={self.split_orientation}, '
@@ -83,10 +84,17 @@ class CellLayout:
             ')'
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return sum(1 for _ in self)
 
-    def partition(self, width, height, x_offset=0, y_offset=0, padding=0):
+    def partition(
+        self,
+        width: int,
+        height: int,
+        x_offset: int = 0,
+        y_offset: int = 0,
+        padding: int = 0,
+    ) -> 'CellLayout':
         """
         Partition a canvas into a grid of cells specified by the layout
         """
@@ -143,8 +151,180 @@ class Cell(CellLayout):
             split_position=None
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Cell(loc={self.cell_loc}, dim={self.cell_dim})'
+
+
+@dataclasses.dataclass
+class AnnotatedLayout(CellLayout):
+    """
+    Layout with annotations
+    """
+    layout: CellLayout
+    annotations: Mapping[int, Optional[Mapping]] = dataclasses.field(
+        default_factory=dict
+    )
+    assigned: Optional[Sequence[bool]] = None
+
+    def __post_init__(self):
+        if self.assigned is None:
+            self.assigned = [False] * len(self.layout)
+        assert len(self.layout) == len(self.assigned)
+
+    def _leftmost(self) -> CellLayout:
+        return self.layout._leftmost()
+
+    def _next(self) -> Optional[CellLayout]:
+        return self.layout._next()
+
+    def _next_leaf(self) -> Optional[CellLayout]:
+        return self.layout._next_leaf()
+
+    def __getitem__(self, index: int) -> CellLayout:
+        return self.layout[index]
+
+    def __next__(self) -> CellLayout:
+        return self.layout.__next__()
+
+    def __iter__(self):
+        return self.layout.__iter__()
+
+    def __repr__(self) -> str:
+        return (
+            f'AnnotatedLayout(layout={self.layout}, '
+            f'annotations={self.annotations})'
+        )
+
+    def __len__(self) -> int:
+        return len(self.layout)
+
+    def partition(
+        self,
+        width: int,
+        height: int,
+        x_offset: int = 0,
+        y_offset: int = 0,
+        padding: int = 0,
+    ) -> 'AnnotatedLayout':
+        layout = self.layout.partition(
+            width=width,
+            height=height,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            padding=padding,
+        )
+        return AnnotatedLayout(
+            layout=layout,
+            annotations=self.annotations,
+            assigned=self.assigned,
+        )
+
+    def annotate_cell(
+        self,
+        index: int,
+        annotation: Optional[Mapping] = None,
+        collision_policy: Literal[
+            'error', 'overwrite', 'coalesce', 'ignore'
+        ] = 'coalesce',
+    ) -> 'AnnotatedLayout':
+        if annotation is None:
+            annotation = {}
+        assert index < len(self), f'Invalid cell index: {index}'
+        current_annotation = self.annotations.get(index, None)
+        if current_annotation is not None:
+            if collision_policy == 'error':
+                raise ValueError(
+                    f'Cell {index} already has an annotation: '
+                    f'{current_annotation}'
+                )
+            elif collision_policy == 'overwrite':
+                pass
+            elif collision_policy == 'coalesce':
+                annotation = {**current_annotation, **annotation}
+            elif collision_policy == 'ignore':
+                return self
+        annotations = {**self.annotations, **{index: annotation}}
+        return AnnotatedLayout(
+            layout=self.layout,
+            annotations=annotations,
+            assigned=self.assigned,
+        )
+
+    def match_and_assign(
+        self,
+        query: Mapping,
+        match_to_unannotated: bool = False,
+    ) -> Tuple['AnnotatedLayout', int]:
+        """
+        Match annotations against a query and assign the first available cell
+        to the query
+        """
+        assigned = self.assigned.copy()
+        matched = False
+        for index, annotation in self.annotations.items():
+            if assigned[index]:
+                continue
+            if annotation is None:
+                if match_to_unannotated:
+                    assigned[index] = True
+                    matched = True
+                    break
+                else:
+                    continue
+            if all(
+                query.get(key, None) == value
+                for key, value in annotation.items()
+            ):
+                assigned[index] = True
+                matched = True
+                break
+        if not matched:
+            index = len(self)
+        return AnnotatedLayout(
+            layout=self.layout,
+            annotations=self.annotations,
+            assigned=assigned,
+        ), index
+
+    def match_and_assign_all(
+        self,
+        queries: Sequence[Mapping],
+        force_unmatched: bool = False,
+    ) -> Tuple['AnnotatedLayout', Sequence[int]]:
+        """
+        Match annotations against a sequence of queries and assign the first
+        available cell to each query
+        """
+        layout = self
+        matched = [False] * len(queries)
+        indices = [None] * len(queries)
+        for i, query in enumerate(queries):
+            layout, index = layout.match_and_assign(
+                query, match_to_unannotated=False
+            )
+            if index < len(layout):
+                indices[i] = index
+                matched[i] = True
+        for i, query in enumerate(queries):
+            if matched[i]:
+                continue
+            layout, index = layout.match_and_assign(
+                query, match_to_unannotated=True
+            )
+            if index < len(layout):
+                indices[i] = index
+                matched[i] = True
+            elif force_unmatched:
+                assigned = layout.assigned.copy()
+                indices[i] = assigned.index(False)
+                matched[i] = True
+                assigned[indices[i]] = True
+                layout = AnnotatedLayout(
+                    layout=layout.layout,
+                    annotations=layout.annotations,
+                    assigned=assigned,
+                )
+        return layout, indices
 
 
 def split(
