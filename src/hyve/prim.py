@@ -33,6 +33,7 @@ from conveyant import (
 )
 from conveyant.compositors import (
     _dict_to_seq,
+    _seq_to_dict,
     direct_compositor,
     reversed_args_compositor,
 )
@@ -81,6 +82,7 @@ from .plot import (
     _get_hemisphere_parameters,
     _null_auxwriter,
     _null_op,
+    collect_scalar_bars,
     plotted_entities,
     unified_plotter,
 )
@@ -585,6 +587,11 @@ def add_surface_overlay_f(
                 'blend_mode',
                 LAYER_BLEND_MODE_DEFAULT_VALUE,
             ),
+            (
+                f'{layer_name}_scalar_bar_style',
+                'scalar_bar_style',
+                {},
+            ),
         ),
     )
 
@@ -608,6 +615,7 @@ def add_surface_overlay_f(
         color=layer_params['color'],
         below_color=layer_params['below_color'],
         blend_mode=layer_params['blend_mode'],
+        scalar_bar_style=layer_params['scalar_bar_style'],
     )
     layer_right = Layer(
         name=layer_name,
@@ -619,6 +627,7 @@ def add_surface_overlay_f(
         color=layer_params['color'],
         below_color=layer_params['below_color'],
         blend_mode=layer_params['blend_mode'],
+        scalar_bar_style=layer_params['scalar_bar_style'],
     )
 
     surf_scalars_layers = (
@@ -1609,8 +1618,46 @@ def save_figure_f(
             canvas.paste(cimg, panel.cell_loc)
         canvas.save(fname)
 
+    actors2d_fields = list(
+        set(
+            sum(
+                [
+                    list(cmeta.get('actors2d', {}).keys())
+                    for snapshot_group in snapshots
+                    for (_, (_, cmeta)) in snapshot_group
+                ],
+                [],
+            )
+        )
+    )
+    if actors2d_fields:
+        queries = [{'actors2d': cfield for cfield in actors2d_fields}]
+        # Each assignment should not "fill" a slot since we might want to
+        # assign multiple actors2d fields to a single cell. Because layout is
+        # not mutable, this shouldn't be a problem.
+        actors2d_asgt = [layout.match_and_assign(query=q) for q in queries]
+        _, actors2d_asgt = zip(*actors2d_asgt)
+        actors2d_asgt = {
+            k: v
+            for k, v in zip(actors2d_fields, actors2d_asgt)
+            if v < len(cells)
+        }
     for i, snapshot_group in enumerate(snapshots):
         page = f'{i + 1:{len(str(n_pages))}d}'
+        actors2d = [cmeta['actors2d'] for (_, (_, cmeta)) in snapshot_group]
+        actors2d = _seq_to_dict(actors2d, merge_type='union')
+        match actors2d_asgt.get('scalar_bar', None):
+            case None:
+                pass
+            case cell_idx:
+                sbimg = collect_scalar_bars(
+                    builders=actors2d['scalar_bar'],
+                    max_dimension=cells[cell_idx].cell_dim,
+                )
+                if sbimg is not None:
+                    sbimg = sbimg[..., :3] # drop alpha channel
+                    snapshot_group.append((cell_idx, (sbimg, {})))
+
         write_f(
             writer=writer,
             argument=snapshot_group,
@@ -1673,6 +1720,10 @@ def write_f(
     return writer(argument, fname)
 
 
+# TODO: This function should really be transformed by binding plot primitives.
+#       Otherwise, why atomise the primitives in the first place? We'll do
+#       this when we want to add the next primitive -- reconstructed surfaces
+#       or contours -- to the plotter.
 def automap_unified_plotter_f(
     *,
     surf: Optional['CortexTriSurface'] = None,
@@ -1719,6 +1770,7 @@ def automap_unified_plotter_f(
     theme: Optional[Any] = None,
     window_size: Optional[Tuple[int, int]] = None,
     use_single_plotter: bool = True,
+    sbprocessor: Optional[callable] = None,
     postprocessors: Optional[
         Sequence[Mapping[str, Tuple[callable, callable]]]
     ] = None,
@@ -1747,6 +1799,8 @@ def automap_unified_plotter_f(
         plotter_param = {}
     params = {**params, **plotter_param}
 
+    sbprocessor = params.pop('sbprocessor', None)
+
     postprocessors = params.pop('postprocessors', None)
     postprocessors = postprocessors or {'plotter': (None, None)}
     postprocessor_names, postprocessors = zip(*postprocessors.items())
@@ -1768,10 +1822,13 @@ def automap_unified_plotter_f(
                 k: (v[i % len(v)] if k in repl_vars else v)
                 for k, v in params.items()
             },
+            sbprocessor=sbprocessor,
             postprocessors=postprocessors,
+            return_actors2d=True,
         )
         for i in range(n_replicates)
     ]
+    output, actors2d = zip(*output)
     output = {
         k: tuple(_flatten_to_depth(v, 1))
         for k, v in zip(postprocessor_names, zip(*output))
@@ -1786,6 +1843,10 @@ def automap_unified_plotter_f(
         )
         for i in range(n_replicates)
     ]
+    # TODO: we're sticking the actors2d into the metadata here as a hack to
+    #       access them later, but this is not really where they belong.
+    for cmeta, cactors2d in zip(metadata, actors2d):
+        cmeta[0]['actors2d'] = [cactors2d] * len(next(iter(cmeta[0].values())))
     metadata = {
         k: tuple(_flatten_to_depth([_dict_to_seq(val) for val in v], 1))
         for k, v in zip(postprocessor_names, zip(*metadata))

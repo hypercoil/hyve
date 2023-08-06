@@ -272,7 +272,10 @@ class AnnotatedLayout(CellLayout):
                 else:
                     continue
             if all(
-                query.get(key, None) == value
+                (
+                    query.get(key, None) == value
+                    or query.get(key, None) in value
+                )
                 for key, value in annotation.items()
             ):
                 assigned[index] = True

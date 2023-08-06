@@ -25,6 +25,7 @@ from pkg_resources import resource_filename as pkgrf
 
 from .const import Tensor
 from .layout import CellLayout
+from .plot import _null_sbprocessor, overlay_scalar_bars
 from .prim import (
     add_edge_variable_p,
     add_network_overlay_p,
@@ -1378,6 +1379,7 @@ def save_figure(
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
     fname_spec: Optional[str] = None,
+    scalar_bar_action: Literal['overlay', 'collect'] = 'overlay',
     suffix: Optional[str] = 'scene',
     extension: str = 'png',
 ) -> callable:
@@ -1398,9 +1400,13 @@ def save_figure(
         )
 
         def f_transformed(output_dir: str, **params):
+            if scalar_bar_action == 'collect':
+                sbprocessor = _null_sbprocessor
+            elif scalar_bar_action == 'overlay':
+                sbprocessor = overlay_scalar_bars
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
-            )(**params)
+            )(sbprocessor=sbprocessor, **params)
 
         return f_transformed
     return transform
@@ -1416,6 +1422,7 @@ def save_grid(
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
     fname_spec: Optional[str] = None,
+    scalar_bar_action: Literal['overlay', 'collect'] = 'overlay',
     suffix: Optional[str] = 'scene',
     extension: str = 'png',
 ) -> callable:
@@ -1439,9 +1446,13 @@ def save_grid(
         )
 
         def f_transformed(output_dir: str, **params):
+            if scalar_bar_action == 'collect':
+                sbprocessor = _null_sbprocessor
+            elif scalar_bar_action == 'overlay':
+                sbprocessor = overlay_scalar_bars
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
-            )(**params)
+            )(sbprocessor=sbprocessor, **params)
 
         return f_transformed
     return transform

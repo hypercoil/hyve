@@ -387,8 +387,16 @@ def build_scalar_bar(
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
     ),
 ) -> Figure:
-    name = name.upper() # TODO: change this! work into style
+    if name is not None:
+        name = name.upper() # TODO: change this! work into style
     vmin, vmax = mapper.get_clim()
+
+    # TODO: Drop this ridiculous hack after we switch to programmatically
+    #       creating SVG files instead of using matplotlib
+    aspect = length / width
+    width = 128
+    length = int(width * aspect)
+
     static_length = num_sig_figs * width // 2
     dynamic_length = length - 2 * static_length
     dynamic = mapper.to_rgba(np.linspace(vmin, vmax, dynamic_length))
@@ -456,12 +464,14 @@ def build_scalar_bar(
 
     f, ax = plt.subplots(figsize=figsize)
     ax.imshow(rgba)
-    mul = TYPICAL_DPI / f.dpi
+    # TODO: Drop this hack after we switch to programmatically creating
+    #       SVG files instead of using matplotlib
+    # mul = TYPICAL_DPI / f.dpi
     for vlim, vlim_params in zip(
         (vmin, vmax),
         (vmin_params, vmax_params),
     ):
-        fontsize = width * lim_fontsize_multiplier * mul
+        fontsize = width * lim_fontsize_multiplier # * mul
         ax.annotate(
             f'{vlim:.{num_sig_figs}g}',
             xycoords='axes fraction',
@@ -477,7 +487,7 @@ def build_scalar_bar(
             **vlim_params,
         )
     if name is not None:
-        fontsize = width * name_fontsize_multiplier * mul
+        fontsize = width * name_fontsize_multiplier # * mul
         ax.annotate(
             name,
             xycoords='axes fraction',
@@ -595,8 +605,8 @@ def collect_scalar_bars(
     ) // 2
     for i, image in enumerate(images):
         # Unfortunately matplotlib invariably adds some padding, so an aspect
-        # preserving resize is still necessary (Lanczos interpolation)
-        image = image.resize((width, height), Image.ANTIALIAS)
+        # preserving resize is still necessary
+        image = image.resize((width, height), Image.Resampling.LANCZOS)
         canvas.paste(image, tuple(int(o) for o in offset))
         # Filling this in row-major order
         if i % layout[1] == layout[1] - 1:
@@ -676,7 +686,20 @@ def overlay_scalar_bars(
                 length=length,
             )
         fig = build_scalar_bar(**builder)
-        scalar_bar = pv.ChartMPL(fig, size=bsize, loc=bloc)
+        # TODO: This is really a terrible hack to get the sizes to always be
+        #       consistent. I'm not sure why the sizes are inconsistent in the
+        #       first place. But this is all the more reason to drop
+        #       matplotlib and switch to building an SVG programmatically.
+        buffer = io.BytesIO()
+        fig.savefig(buffer, format='png', transparent=True)
+        buffer.seek(0)
+        f, ax = plt.subplots(figsize=fig.get_size_inches())
+        ax.imshow(plt.imread(buffer))
+        ax.axis('off')
+        f.subplots_adjust(0, 0, 1, 1)
+        buffer.close()
+
+        scalar_bar = pv.ChartMPL(f, size=bsize, loc=bloc)
         scalar_bar.background_color = (0, 0, 0, 0)
         scalar_bar.border_color = (0, 0, 0, 0)
 
@@ -2012,6 +2035,7 @@ def base_plotter(
     else:
         plotter.clear()
         plotter.enable_lightkit()
+        plotter.window_size = window_size
         close_plotter = False # for potential use by postprocessors at binding
 
     # TODO: hemisphere config should maybe be a topo transform, but this
