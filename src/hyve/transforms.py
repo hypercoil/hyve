@@ -10,6 +10,7 @@ visualisation functions.
 """
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
+import inspect
 import nibabel as nb
 import numpy as np
 from conveyant import (
@@ -19,7 +20,7 @@ from conveyant import (
     PartialApplication as Partial,
 )
 from conveyant import (
-    direct_compositor,
+    direct_compositor
 )
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
@@ -71,6 +72,7 @@ from .surf import CortexTriSurface
 from .util import (
     NetworkDataCollection,
     PointDataCollection,
+    sanitise,
 )
 
 
@@ -227,12 +229,13 @@ def surf_scalars_from_cifti(
             surf: CortexTriSurface,
             **params: Mapping,
         ):
+            paramstr = f'{sanitise(scalars)}_cifti'
             try:
-                cifti = params.pop(f'{scalars}_cifti')
+                cifti = params.pop(paramstr)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_cifti'
+                    f'keyword-only argument: {paramstr}'
                 )
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
@@ -313,13 +316,15 @@ def surf_scalars_from_gifti(
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            left_gifti = params.pop(f'{scalars}_gifti_left', None)
-            right_gifti = params.pop(f'{scalars}_gifti_right', None)
+            paramstr_left = f'{sanitise(scalars)}_gifti_left'
+            paramstr_right = f'{sanitise(scalars)}_gifti_right'
+            left_gifti = params.pop(paramstr_left, None)
+            right_gifti = params.pop(paramstr_right, None)
             if left_gifti is None and right_gifti is None:
                 raise TypeError(
                     'Transformed plot function missing a required '
-                    f'keyword-only argument: either {scalars}_gifti_left or '
-                    f'{scalars}_gifti_right'
+                    f'keyword-only argument: either {paramstr_left} or '
+                    f'{paramstr_right}'
                 )
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
@@ -372,14 +377,17 @@ def surf_scalars_from_array(
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            left_array = params.pop(f'{scalars}_array_left', None)
-            right_array = params.pop(f'{scalars}_array_right', None)
-            array = params.pop(f'{scalars}_array', None)
+            paramstr = f'{sanitise(scalars)}_array'
+            paramstr_left = f'{sanitise(scalars)}_array_left'
+            paramstr_right = f'{sanitise(scalars)}_array_right'
+            left_array = params.pop(paramstr_left, None)
+            right_array = params.pop(paramstr_right, None)
+            array = params.pop(paramstr, None)
             if left_array is None and right_array is None and array is None:
                 raise TypeError(
-                    'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_array or '
-                    f'{scalars}_array_left and/or {scalars}_array_right'
+                    'Transformed plot function missing one or more required '
+                    f'keyword-only argument(s): either {paramstr} or '
+                    f'{paramstr_left} and/or {paramstr_right}'
                 )
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
@@ -420,12 +428,13 @@ def points_scalars_from_nifti(
             points: Optional[PointDataCollection] = None,
             **params: Mapping,
         ):
+            paramstr = f'{sanitise(scalars)}_nifti'
             try:
-                nifti = params.pop(f'{scalars}_nifti')
+                nifti = params.pop(paramstr)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_nifti'
+                    f'keyword-only argument: {paramstr}'
                 )
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
@@ -534,6 +543,7 @@ def surf_scalars_from_nifti(
         'fsaverage': F(mni152_to_fsaverage),
     }
     f_resample = templates[template]
+    paramstr = f'{sanitise(scalars)}_nifti'
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
@@ -558,11 +568,11 @@ def surf_scalars_from_nifti(
             **params: Mapping,
         ):
             try:
-                nifti = params.pop(f'{scalars}_nifti')
+                nifti = params.pop(paramstr)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_nifti'
+                    f'keyword-only argument: {paramstr}'
                 )
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
@@ -744,12 +754,13 @@ def scatter_into_parcels(
             surf: CortexTriSurface,
             **params: Mapping,
         ):
+            paramstr = f'{sanitise(scalars)}_parcellated'
             try:
-                parcellated = params.pop(f'{scalars}_parcellated')
+                parcellated = params.pop(paramstr)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_parcellated'
+                    f'keyword-only argument: {paramstr}'
                 )
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(

@@ -7,6 +7,7 @@ Plot and report utilities
 Utilities for plotting and reporting.
 """
 import dataclasses
+import re
 from math import floor
 from typing import (
     Any,
@@ -283,6 +284,14 @@ class NetworkDataCollection:
 
     def __radd__(self, other):
         return self.__class__(other.network_datasets + self.network_datasets)
+
+
+def sanitise(string: str) -> str:
+    """
+    Sanitise a string for use as a parameter name.
+    """
+    string = string.lower()
+    return re.sub(r'\W+|^(?=\d)','_', string)
 
 
 def cortex_theme() -> Any:
