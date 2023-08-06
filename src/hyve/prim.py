@@ -444,9 +444,11 @@ def parcellate_colormap_f(
     if 'surf_scalars' in target:
         ret['surf_scalars_cmap'] = (cmap_left, cmap_right)
         ret['surf_scalars_clim'] = (clim_left, clim_right)
+        ret['surf_scalars_below_color'] = [0, 0, 0, 0]
     if 'node' in target:
         ret['node_cmap'] = cmap
         ret['node_clim'] = clim
+        ret['node_below_color'] = [0, 0, 0, 0]
     return ret
 
 

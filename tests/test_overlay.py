@@ -51,7 +51,7 @@ def create_sphere(radius=30, inner_radius=25, inmost_radius=20):
 @pytest.mark.parametrize('output', ['image', 'html'])
 @pytest.mark.parametrize('v2f', [True, False])
 def test_parcellation_modal_cmap(output, v2f):
-    fname_spec = 'scalars-{scalars}_hemisphere-{hemisphere}'
+    fname_spec = 'scalars-{surfscalars}_hemisphere-{hemisphere}'
     if v2f:
         v2f_transform_sequence = (
             [vertex_to_face('parcellation')],

@@ -2,8 +2,8 @@
 # emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 """
-Unified plotter
-~~~~~~~~~~~~~~~
+Unified plotter and plotting primitives
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Unified plotting function for surface, volume, and network data.
 """
 import dataclasses
@@ -140,7 +140,7 @@ class _LayerBase:
 class Layer(_LayerBase):
     """Container for metadata to construct a single layer of a plot."""
     name: str
-    hide_subthreshold: bool = True
+    # hide_subthreshold: bool = True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -280,6 +280,21 @@ def _cfg_hemispheres(
     return hemispheres, hemispheres_str
 
 
+def _default_key_scalars(params: Mapping[str, Any]):
+    key_scalars = params.get('surf_scalars', None)
+    if key_scalars is None:
+        key_scalars = params.get('surf_scalars_layers', None)
+        if key_scalars is not None:
+            try:
+                key_scalars = key_scalars[0].name
+            except AttributeError:
+                # Two separate lists of layers, one for each hemisphere
+                key_scalars = key_scalars[0][0].name
+    if not key_scalars:
+        key_scalars = None
+    return key_scalars
+
+
 def _normalise_to_range(values, valid_range):
     if valid_range is None:
         return values
@@ -331,6 +346,13 @@ def _eval_robust_clim(
 
 def _null_op(**params):
     return params
+
+
+def _null_sbprocessor(
+    plotter: pv.Plotter,
+    builders: Sequence[ScalarBarBuilder],
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    return plotter, builders
 
 
 def _null_postprocessor(plotter):
@@ -486,15 +508,15 @@ def _uniquify_names(builders: Sequence[ScalarBarBuilder]):
 
 
 def collect_scalar_bars(
-    plotter: pv.Plotter,
     builders: Sequence[ScalarBarBuilder],
     spacing: float = SCALAR_BAR_DEFAULT_SPACING,
     max_dimension: Optional[Tuple[int, int]] = None,
     require_unique_names: bool = True,
-) -> Tuple[pv.Plotter, Tensor]:
+) -> Optional[Tensor]:
+    builders = [b for b in builders if b is not None]
+    if len(builders) == 0:
+        return None
     # Algorithm from https://stackoverflow.com/a/28268965
-    if max_dimension is None:
-        max_dimension = plotter.window_size
     if require_unique_names:
         builders = _uniquify_names(builders)
     count = len(builders)
@@ -582,11 +604,11 @@ def collect_scalar_bars(
             offset[1] += height + spacing
         else:
             offset[0] += width + spacing
-    canvas.show()
+    #canvas.show()
 
     for buffer in buffers:
         buffer.close()
-    return plotter, np.array(canvas)
+    return np.array(canvas)
 
 
 def overlay_scalar_bars(
@@ -680,6 +702,7 @@ def _rgba_impl(
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
     mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
     rgba = mapper.to_rgba(scalars)
+    rgba[np.isnan(scalars), 3] = 0
     if below_color is not None and vmin is not None:
         rgba[scalars < vmin] = colors.to_rgba(below_color)
     elif vmin is not None and hide_subthreshold:
@@ -1968,6 +1991,7 @@ def base_plotter(
     copy_actors: bool = False,
     theme: Optional[Any] = None,
     window_size: Optional[Tuple[int, int]] = None,
+    return_actors2d: bool = False,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,
     **params,
@@ -1995,11 +2019,7 @@ def base_plotter(
     #       transforms. Maybe the real takeaway is that the metadata functions
     #       should be made part of the base plotter.
     if key_scalars == '__default__':
-        key_scalars = params.get('surf_scalars', None)
-        if key_scalars is None:
-            key_scalars = params.get('surf_scalars_layers', None)
-            if key_scalars is not None:
-                key_scalars = key_scalars[0].name
+        key_scalars = _default_key_scalars(params)
     hemispheres, hemisphere_str = _cfg_hemispheres(
         hemisphere=hemisphere,
         key_scalars=key_scalars,
@@ -2010,7 +2030,6 @@ def base_plotter(
     for transform in topo_transforms or ():
         fit_params = transform.fit(**params)
         result = transform.transform(fit_params=fit_params, **params)
-        #assert 0
         params = {**params, **result}
 
     scalar_bar_builders = ()
@@ -2025,6 +2044,7 @@ def base_plotter(
         plotter=params['plotter'],
         builders=params['scalar_bar_builders'],
     )
+    actors2d = {'scalar_bar': scalar_bar}
 
     if postprocessors is None or len(postprocessors) == 0:
         postprocessors = [_null_postprocessor]
@@ -2037,6 +2057,9 @@ def base_plotter(
         except AttributeError:
             pass
     out = tuple(w(plotter=plotter) for w in postprocessors)
+
+    if return_actors2d:
+        return out, actors2d
     return out
 
 
@@ -2051,11 +2074,7 @@ def base_plotmeta(
     metadata = {}
 
     if key_scalars == '__default__':
-        key_scalars = params.get('surf_scalars', None)
-        if key_scalars is None:
-            key_scalars = params.get('surf_scalars_layers', None)
-            if key_scalars is not None:
-                key_scalars = key_scalars[0].name
+        key_scalars = _default_key_scalars(params)
     _, hemisphere_str = _cfg_hemispheres(
         hemisphere=hemisphere,
         key_scalars=key_scalars,

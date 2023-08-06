@@ -726,6 +726,7 @@ class CortexTriSurface:
         is_masked: bool = False,
         apply_mask: bool = True,
         null_value: Optional[float] = 0.0,
+        oob_value: Optional[float] = np.nan,
         select: Optional[Sequence[int]] = None,
         exclude: Optional[Sequence[int]] = None,
         allow_multihemisphere: bool = True,
@@ -877,7 +878,7 @@ class CortexTriSurface:
                 data=left_data,
                 is_masked=is_masked,
                 apply_mask=apply_mask,
-                null_value=null_value,
+                null_value=oob_value,
                 hemisphere='left',
                 select=select,
                 exclude=exclude,
@@ -893,7 +894,7 @@ class CortexTriSurface:
                 data=right_data,
                 is_masked=is_masked,
                 apply_mask=apply_mask,
-                null_value=null_value,
+                null_value=oob_value,
                 hemisphere='right',
                 select=select,
                 exclude=exclude,
@@ -1382,7 +1383,9 @@ class CortexTriSurface:
             point_data,
             parcellation=parcellation,
         )
-        return parcellation.T @ point_data[name], denom.T
+        data = point_data[name]
+        data[np.isnan(data)] = 0
+        return parcellation.T @ data, denom.T
 
     def _hemisphere_into_parcels_impl(
         self,
@@ -1402,6 +1405,7 @@ class CortexTriSurface:
             parcellation=parcellation,
             transpose=True,
         )
+        data[np.isnan(data)] = 0
         return (parcellation / denom) @ data[: parcellation.shape[-1]]
 
     def _hemisphere_resample_v2f_impl(
