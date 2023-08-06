@@ -387,6 +387,8 @@ def auto_focus(
     if focal_point is None:
         focal_point = plotter.center
     hw = half_width(plotter, slack=slack)
+    hw = np.asarray(hw)
+    hw[hw == 0] = 1
     scalar = np.nanmin(hw / np.abs(vector))
     vector = vector * scalar + focal_point
     return vector, focal_point
@@ -414,6 +416,7 @@ def cortex_view_dict() -> Dict[str, Tuple[Sequence[float], Sequence[float]]]:
         'ventral': ((0, 0, -1), (-1, 0, 0)),
         'anterior': ((0, 1, 0), (0, 0, 1)),
         'posterior': ((0, -1, 0), (0, 0, 1)),
+        'down': ((0, 0, 1), (0, 1, 0)),
     }
     return {
         'left': {

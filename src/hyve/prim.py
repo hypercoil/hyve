@@ -124,6 +124,25 @@ def surf_from_archive_f(
     )
 
 
+def surf_from_gifti_f(
+    left_surf: Union[str, nb.gifti.gifti.GiftiImage],
+    right_surf: Union[str, nb.gifti.gifti.GiftiImage],
+    left_mask: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
+    right_mask: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
+    projection: Optional[str] = None,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    if projection is None:
+        projection = 'unknown'
+    surf = CortexTriSurface.from_gifti(
+        left={projection: left_surf},
+        right={projection: right_surf},
+        left_mask=left_mask,
+        right_mask=right_mask,
+        projection=projection,
+    )
+    return surf, (projection,)
+
+
 def surf_scalars_from_cifti_f(
     surf: CortexTriSurface,
     scalars: str,
@@ -1859,6 +1878,14 @@ def automap_unified_plotter_f(
 surf_from_archive_p = Primitive(
     surf_from_archive_f,
     'surf_from_archive',
+    output=('surf', 'surf_projection'),
+    forward_unused=True,
+)
+
+
+surf_from_gifti_p = Primitive(
+    surf_from_gifti_f,
+    'surf_from_gifti',
     output=('surf', 'surf_projection'),
     forward_unused=True,
 )

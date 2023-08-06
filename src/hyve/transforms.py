@@ -10,6 +10,7 @@ visualisation functions.
 """
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
+import nibabel as nb
 import numpy as np
 from conveyant import (
     FunctionWrapper as F,
@@ -58,6 +59,7 @@ from .prim import (
     scalar_focus_camera_p,
     scatter_into_parcels_p,
     surf_from_archive_p,
+    surf_from_gifti_p,
     surf_scalars_from_array_p,
     surf_scalars_from_cifti_p,
     surf_scalars_from_gifti_p,
@@ -123,6 +125,34 @@ def surf_from_archive(
                 template=template,
                 load_mask=load_mask,
                 projections=surf_projection,
+            )
+
+        return f_transformed
+    return transform
+
+
+def surf_from_gifti(
+    projection: str = 'very_inflated',
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(surf_from_gifti_p, projection=projection)
+
+        def f_transformed(
+            *,
+            left_surf: Union[str, nb.gifti.gifti.GiftiImage],
+            right_surf: Union[str, nb.gifti.gifti.GiftiImage],
+            left_mask: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
+            right_mask: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                left_surf=left_surf,
+                right_surf=right_surf,
+                left_mask=left_mask,
+                right_mask=right_mask,
             )
 
         return f_transformed
