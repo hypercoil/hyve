@@ -17,7 +17,17 @@ from .prim import automap_unified_plotter_p
 
 
 def plotdef(*pparams: Sequence[callable]) -> callable:
-    return ichain(*pparams)(automap_unified_plotter_p)
+    plot_f = ichain(*pparams)(automap_unified_plotter_p)
+    # drop variadic parameters
+    plot_f.__signature__ = inspect.signature(plot_f).replace(
+        parameters=tuple(
+            p for p in plot_f.__signature__.parameters.values()
+            if p.kind != p.VAR_POSITIONAL
+        )
+    )
+    plot_f = emulate_assignment()(plot_f)
+    # TODO: build docstring here when it's done
+    return plot_f
 
 
 def _get_unique_parameters_and_make_signature(
