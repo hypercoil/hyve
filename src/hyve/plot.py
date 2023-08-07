@@ -116,7 +116,7 @@ class TopoTransform(NamedTuple):
 class _LayerBase:
     """Base class for layers."""
     name: Optional[str]
-    long_name: Optional[str] = None
+    # long_name: Optional[str] = None
     cmap: Optional[Any] = DEFAULT_CMAP
     clim: Optional[Tuple[float, float]] = LAYER_CLIM_DEFAULT_VALUE
     cmap_negative: Optional[Any] = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE
@@ -127,7 +127,7 @@ class _LayerBase:
     alpha: float = LAYER_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = LAYER_BELOW_COLOR_DEFAULT_VALUE
     hide_subthreshold: bool = False
-    style: Optional[Mapping[str, Any]] = None
+    # style: Optional[Mapping[str, Any]] = None
     scalar_bar_style: Optional[Mapping[str, Any]] = dataclasses.field(
         default_factory=dict,
     )
@@ -1501,6 +1501,11 @@ def plot_points_f(
         POINTS_SCALARS_LAYERS_DEFAULT_VALUE
     ),
 ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    # Sometimes by construction points_scalars is an empty tuple or list,
+    # which causes problems later on. So we convert it to None if it's empty.
+    if points_scalars is not None:
+        points_scalars = None if len(points_scalars) == 0 else points_scalars
+
     if points is not None:
         if points_scalars_layers is None:
             points_scalars_layers = []
@@ -2035,7 +2040,7 @@ def base_plotter(
     else:
         plotter.clear()
         plotter.enable_lightkit()
-        plotter.window_size = window_size
+        plotter.window_size = window_size or (1920, 1080)
         close_plotter = False # for potential use by postprocessors at binding
 
     # TODO: hemisphere config should maybe be a topo transform, but this

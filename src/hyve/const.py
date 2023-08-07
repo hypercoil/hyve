@@ -11,7 +11,7 @@ from typing import Any, Optional
 from lytemaps.datasets import fetch_fsaverage
 from matplotlib import rcParams
 
-DEFAULT_CMAP = 'viridis'
+DEFAULT_CMAP = None
 DEFAULT_COLOR = 'white'
 TYPICAL_DPI = round(rcParams['figure.dpi'])
 
@@ -20,7 +20,7 @@ LAYER_CMAP_NEGATIVE_DEFAULT_VALUE = None
 LAYER_CLIM_NEGATIVE_DEFAULT_VALUE = None
 LAYER_COLOR_DEFAULT_VALUE = None
 LAYER_ALPHA_DEFAULT_VALUE = 1.0
-LAYER_BELOW_COLOR_DEFAULT_VALUE = (0.0, 0.0, 0.0, 0.0)
+LAYER_BELOW_COLOR_DEFAULT_VALUE = None
 LAYER_BLEND_MODE_DEFAULT_VALUE = 'source_over'
 
 NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE = None
