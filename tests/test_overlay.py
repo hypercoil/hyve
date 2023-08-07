@@ -76,15 +76,18 @@ def test_parcellation_modal_cmap(output, v2f):
     plot_f = plotdef(
         surf_from_archive(),
         add_surface_overlay(
+            'parcellation',
             surf_scalars_from_cifti('parcellation'),
             parcellate_colormap('modal', 'parcellation'),
             *v2f_transform_sequence[0],
         ),
         add_surface_overlay(
+            'pain',
             surf_scalars_from_nifti('pain', template='fsLR'),
             *v2f_transform_sequence[1],
         ),
         add_points_overlay(
+            'sphere',
             points_scalars_from_array('sphere', point_size=8),
         ),
         *out_transform_sequence,

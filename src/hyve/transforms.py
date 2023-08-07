@@ -8,24 +8,25 @@ Functions for transforming the input and output of visualisation functions.
 See also ``flows.py`` for functions that transform the control flow of
 visualisation functions.
 """
+import inspect
 from typing import (
-    Any, Literal, Mapping, Optional, Sequence, Tuple, Type, Union
+    Any,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
 )
 
-import inspect
 import nibabel as nb
 import numpy as np
 import pandas as pd
-from conveyant import (
-    FunctionWrapper as F,
-)
-from conveyant import (
-    PartialApplication as Partial,
-    splice_on as splice_on_orig,
-)
-from conveyant import (
-    direct_compositor,
-)
+from conveyant import FunctionWrapper as F
+from conveyant import PartialApplication as Partial
+from conveyant import direct_compositor
+from conveyant import splice_on as splice_on_orig
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
 
@@ -78,7 +79,6 @@ from .util import (
     PointDataCollection,
     sanitise,
 )
-
 
 NULL = inspect._empty
 

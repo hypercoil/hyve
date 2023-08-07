@@ -11,7 +11,7 @@ flows of visualisation functions.
 import inspect
 from typing import Any, Literal, Optional, Sequence
 
-from conveyant import ichain, join, emulate_assignment
+from conveyant import emulate_assignment, ichain, join
 
 from .prim import automap_unified_plotter_p
 

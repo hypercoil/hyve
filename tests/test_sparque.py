@@ -18,6 +18,7 @@ from hyve.transforms import (
     plot_to_image,
     save_snapshots,
 )
+from hyve.util import sanitise
 
 @pytest.mark.parametrize('cmap', ['network', 'modal'])
 @pytest.mark.parametrize('parcellation_name, parcellation_path', [
@@ -53,11 +54,12 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
     # )
     # print(surf_data_L.shape, surf_data_R.shape)
 
+    paramstr = sanitise(parcellation_name)
     if isinstance(parcellation_path, tuple):
         parcellation_path_L, parcellation_path_R = parcellation_path
         filearg = {
-            f'{parcellation_name}_gifti_left': parcellation_path_L,
-            f'{parcellation_name}_gifti_right': parcellation_path_R,
+            f'{paramstr}_gifti_left': parcellation_path_L,
+            f'{paramstr}_gifti_right': parcellation_path_R,
         }
         transform = surf_scalars_from_gifti(
             parcellation_name,
@@ -66,7 +68,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
             allow_multihemisphere=False,
         )
     elif parcellation_path.endswith('.nii.gz'):
-        filearg = {f'{parcellation_name}_nifti': parcellation_path}
+        filearg = {f'{paramstr}_nifti': parcellation_path}
         transform = surf_scalars_from_nifti(
             parcellation_name,
             template='fsLR',
@@ -75,9 +77,8 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
             threshold=0,
             allow_multihemisphere=False,
         )
-    elif parcellation_path.endswith('.nii'):
-        # Not always, but here yes
-        filearg = {f'{parcellation_name}_cifti': parcellation_path}
+    elif parcellation_path.endswith('.nii'):  # Not always, but here yes
+        filearg = {f'{paramstr}_cifti': parcellation_path}
         transform = surf_scalars_from_cifti(
             parcellation_name,
             plot=True,
@@ -93,7 +94,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
         plot_to_image(),
         save_snapshots(
             fname_spec=(
-                'project-sparque_scalars-{scalars}_hemisphere-{hemisphere}_view-{view}_'
+                'project-sparque_scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_'
                 f'cmap-{cmap}'
             ),
         ),
@@ -108,7 +109,8 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
         ],
         output_dir='/tmp',
         surf_scalars_boundary_color='black',
-        surf_scalars_below_color='#555555',
+        # can't do this because it's autofilled by parcellate_colormap
+        # surf_scalars_below_color='#555555',
         surf_scalars_boundary_width=3,
         **filearg,
         # We need a test for array inputs

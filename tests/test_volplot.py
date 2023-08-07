@@ -37,7 +37,6 @@ def test_vol_scalars():
         surf_alpha=0.3,
         pain_nifti=nii,
         points_scalars_cmap='magma',
-        basename='/tmp/vol',
         views=('dorsal', 'left', 'anterior'),
         output_dir='/tmp',
     )

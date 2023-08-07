@@ -43,7 +43,7 @@ rh_mask = tflow.get(
 def test_scalars():
     plot_f = plotdef(
         surf_from_gifti(projection='flat'),
-        surf_scalars_from_nifti('gmdensity', template='fsLR'),
+        surf_scalars_from_nifti('GM Density', template='fsLR'),
         # plot_to_display(),
         plot_to_image(),
         save_snapshots(
@@ -62,7 +62,7 @@ def test_scalars():
         right_surf='/Users/rastkociric/Downloads/S1200.R.flat.32k_fs_LR.surf.gii',
         left_mask=lh_mask,
         right_mask=rh_mask,
-        gmdensity_nifti=tflow.get(
+        gm_density_nifti=tflow.get(
             template='MNI152NLin2009cAsym',
             suffix='probseg',
             label='GM',

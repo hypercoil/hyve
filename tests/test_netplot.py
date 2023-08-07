@@ -101,7 +101,7 @@ def test_net_highlight():
         #build_network('vis'),
         add_network_overlay(
             'vis',
-            joindata(fill_value=0., how="left")(
+            add_network_data(
                 add_edge_variable(
                     "vis_conn",
                     absolute=True,
@@ -116,6 +116,7 @@ def test_net_highlight():
                     removed_val=0.03,
                     surviving_val=1.0,
                 ),
+                how='left',
             ),
             parcellate_colormap('modal', 'parcellation', target='node'),
             node_coor_from_parcels('parcellation'),
