@@ -6,6 +6,7 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
+import inspect
 from io import StringIO
 from math import ceil
 from typing import (
@@ -542,367 +543,456 @@ def _move_params_to_dict(
 ) -> Mapping[str, Any]:
     ret = {}
     for src, dst, default in src_dst_default:
-        ret[dst] = params.pop(src, default)
+        candidate = params.pop(src, default)
+        # TODO: This is bad! Sometimes we might want to overwrite an assigned
+        #       default value with None, but this will prevent that.
+        #       Unfortunately, the most reasonable solution is accepting an
+        #       additional condition when using overlays: if None is a valid
+        #       value, then the default must be None. We might get away with
+        #       breaking this rule if we can guarantee that the arguments are
+        #       not slated for assignment to an overlay using the below
+        if default is None or candidate is not None:
+            ret[dst] = candidate
+        else:
+            ret[dst] = default
     return ret, params
 
 
+def _get_inner_signature(
+    paramstr: str,
+    inner_f: callable,
+    basefunc: callable = Layer.__init__,
+    infix: str = '',
+) -> inspect.Signature:
+    parameters = {
+        f'{paramstr}_{k}': v.replace(
+            name=f'{paramstr}{infix}_{k}',
+            kind=inspect.Parameter.KEYWORD_ONLY,
+        )
+        for k, v in inspect.signature(basefunc).parameters.items()
+        if str(k) not in {'self', 'name', 'hide_subthreshold'}
+    }
+    inner_signature = inspect.signature(inner_f)
+    inner_signature = inner_signature.replace(
+        parameters=tuple(
+            [
+                p for p in inner_signature.parameters.values()
+                if p.kind != p.VAR_KEYWORD
+            ]
+            + list(parameters.values())
+        ),
+    )
+    return inner_signature
+
+
 def add_surface_overlay_f(
+    layer_name: str,
     chains: Sequence[callable],
-    params: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    surf_scalars_layers = params.pop('surf_scalars_layers', ([], []))
-    store, params = _copy_dict_from_params(
-        params,
-        (
-            ('surf_scalars', SURF_SCALARS_DEFAULT_VALUE),
-            ('surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
-            ('surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE),
+) -> Tuple[Primitive, inspect.Signature]:
+    inner_f = ichain(*chains)(_null_op)
+    paramstr = sanitise(layer_name)
+
+    def _add_surface_overlay(
+        params: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        surf_scalars_layers = params.pop('surf_scalars_layers', None)
+        if surf_scalars_layers is None:
+            surf_scalars_layers = ([], [])
+        store, params = _copy_dict_from_params(
+            params,
+            (
+                ('surf_scalars', SURF_SCALARS_DEFAULT_VALUE),
+                ('surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+                ('surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE),
+                (
+                    'surf_scalars_below_color',
+                    SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+                ),
+            ),
+        )
+
+        params = inner_f(**params)
+
+        layer_params, params = _move_params_to_dict(params, (
+            ('surf_scalars_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+            ('surf_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
             (
                 'surf_scalars_below_color',
-                SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-            ),
-        ),
-    )
-
-    inner_f = ichain(*chains)(_null_op)
-    params = inner_f(**params)
-    layer_name = params.pop('surf_scalars')
-    if not isinstance(layer_name, str): # It's a list or tuple
-        layer_name = layer_name[0]
-
-    layer_params, params = _move_params_to_dict(params, (
-        ('surf_scalars_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
-        ('surf_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
-        (
-            'surf_scalars_below_color',
-            'below_color',
-            LAYER_BELOW_COLOR_DEFAULT_VALUE,
-        ),
-    ))
-
-    paramstr = sanitise(layer_name)
-    layer_params, params = _move_params_to_dict(
-        params,
-        (
-            (f'{paramstr}_cmap', 'cmap', layer_params['cmap']),
-            (f'{paramstr}_clim', 'clim', layer_params['clim']),
-            (
-                f'{paramstr}_cmap_negative',
-                'cmap_negative',
-                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (
-                f'{paramstr}_clim_negative',
-                'clim_negative',
-                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
-            (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
-            (
-                f'{paramstr}_below_color',
                 'below_color',
-                layer_params['below_color'],
+                LAYER_BELOW_COLOR_DEFAULT_VALUE,
             ),
+        ))
+
+        layer_params, params = _move_params_to_dict(
+            params,
             (
-                f'{paramstr}_blend_mode',
-                'blend_mode',
-                LAYER_BLEND_MODE_DEFAULT_VALUE,
+                (f'{paramstr}_cmap', 'cmap', layer_params['cmap']),
+                (f'{paramstr}_clim', 'clim', layer_params['clim']),
+                (
+                    f'{paramstr}_cmap_negative',
+                    'cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_clim_negative',
+                    'clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_below_color',
+                    'below_color',
+                    layer_params['below_color'],
+                ),
+                (
+                    f'{paramstr}_blend_mode',
+                    'blend_mode',
+                    LAYER_BLEND_MODE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_scalar_bar_style',
+                    'scalar_bar_style',
+                    {},
+                ),
             ),
-            (
-                f'{paramstr}_scalar_bar_style',
-                'scalar_bar_style',
-                {},
-            ),
-        ),
-    )
+        )
 
-    hemi_params_p = _get_hemisphere_parameters(
-        surf_scalars_cmap=layer_params['cmap'],
-        surf_scalars_clim=layer_params['clim'],
-        surf_scalars_layers=None,
-    )
-    hemi_params_n = _get_hemisphere_parameters(
-        surf_scalars_cmap=layer_params['cmap_negative'],
-        surf_scalars_clim=layer_params['clim_negative'],
-        surf_scalars_layers=None,
-    )
-    layer_left = Layer(
-        name=layer_name,
-        cmap=hemi_params_p.get('left', 'surf_scalars_cmap'),
-        clim=hemi_params_p.get('left', 'surf_scalars_clim'),
-        cmap_negative=hemi_params_n.get('left', 'surf_scalars_cmap'),
-        clim_negative=hemi_params_n.get('left', 'surf_scalars_clim'),
-        alpha=layer_params['alpha'],
-        color=layer_params['color'],
-        below_color=layer_params['below_color'],
-        blend_mode=layer_params['blend_mode'],
-        scalar_bar_style=layer_params['scalar_bar_style'],
-    )
-    layer_right = Layer(
-        name=layer_name,
-        cmap=hemi_params_p.get('right', 'surf_scalars_cmap'),
-        clim=hemi_params_p.get('right', 'surf_scalars_clim'),
-        cmap_negative=hemi_params_n.get('right', 'surf_scalars_cmap'),
-        clim_negative=hemi_params_n.get('right', 'surf_scalars_clim'),
-        alpha=layer_params['alpha'],
-        color=layer_params['color'],
-        below_color=layer_params['below_color'],
-        blend_mode=layer_params['blend_mode'],
-        scalar_bar_style=layer_params['scalar_bar_style'],
-    )
+        hemi_params_p = _get_hemisphere_parameters(
+            surf_scalars_cmap=layer_params['cmap'],
+            surf_scalars_clim=layer_params['clim'],
+            surf_scalars_layers=None,
+        )
+        hemi_params_n = _get_hemisphere_parameters(
+            surf_scalars_cmap=layer_params['cmap_negative'],
+            surf_scalars_clim=layer_params['clim_negative'],
+            surf_scalars_layers=None,
+        )
+        layer_left = Layer(
+            name=layer_name,
+            cmap=hemi_params_p.get('left', 'surf_scalars_cmap'),
+            clim=hemi_params_p.get('left', 'surf_scalars_clim'),
+            cmap_negative=hemi_params_n.get('left', 'surf_scalars_cmap'),
+            clim_negative=hemi_params_n.get('left', 'surf_scalars_clim'),
+            alpha=layer_params['alpha'],
+            color=layer_params['color'],
+            below_color=layer_params['below_color'],
+            blend_mode=layer_params['blend_mode'],
+            scalar_bar_style=layer_params['scalar_bar_style'],
+        )
+        layer_right = Layer(
+            name=layer_name,
+            cmap=hemi_params_p.get('right', 'surf_scalars_cmap'),
+            clim=hemi_params_p.get('right', 'surf_scalars_clim'),
+            cmap_negative=hemi_params_n.get('right', 'surf_scalars_cmap'),
+            clim_negative=hemi_params_n.get('right', 'surf_scalars_clim'),
+            alpha=layer_params['alpha'],
+            color=layer_params['color'],
+            below_color=layer_params['below_color'],
+            blend_mode=layer_params['blend_mode'],
+            scalar_bar_style=layer_params['scalar_bar_style'],
+        )
 
-    surf_scalars_layers = (
-        list(surf_scalars_layers[0]) + [layer_left],
-        list(surf_scalars_layers[1]) + [layer_right],
-    )
+        surf_scalars_layers = (
+            list(surf_scalars_layers[0]) + [layer_left],
+            list(surf_scalars_layers[1]) + [layer_right],
+        )
 
-    return {
-        **params,
-        **{
-            'surf_scalars_layers': surf_scalars_layers,
-            **store,
-        },
-    }
+        return {
+            **params,
+            **{
+                'surf_scalars_layers': surf_scalars_layers,
+                **store,
+            },
+        }
+
+    _add_surface_overlay_p = Primitive(
+        name='add_surface_overlay',
+        f=_add_surface_overlay,
+        output=None,
+        forward_unused=True,
+    )
+    inner_signature = _get_inner_signature(paramstr=paramstr, inner_f=inner_f)
+    return _add_surface_overlay_p, inner_signature
 
 
 def add_points_overlay_f(
+    layer_name: str,
     chains: Sequence[callable],
-    params: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    points_scalars_layers = params.pop('points_scalars_layers', [])
-    store, params = _copy_dict_from_params(
-        params,
-        (
-            ('points_scalars', POINTS_SCALARS_DEFAULT_VALUE),
-            ('points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
-            ('points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE),
+) -> Tuple[Primitive, inspect.Signature]:
+    inner_f = ichain(*chains)(_null_op)
+    paramstr = sanitise(layer_name)
+
+    def _add_points_overlay(
+        params: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        points_scalars_layers = params.pop('points_scalars_layers', None)
+        if points_scalars_layers is None:
+            points_scalars_layers = []
+        store, params = _copy_dict_from_params(
+            params,
+            (
+                ('points_scalars', POINTS_SCALARS_DEFAULT_VALUE),
+                ('points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+                ('points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE),
+                (
+                    'points_scalars_below_color',
+                    POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+                ),
+            ),
+        )
+
+        params = inner_f(**params)
+
+        layer_params, params = _move_params_to_dict(params, (
+            ('points_scalars_cmap', 'cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+            ('points_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
             (
                 'points_scalars_below_color',
-                POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-            ),
-        ),
-    )
-
-    inner_f = ichain(*chains)(_null_op)
-    params = inner_f(**params)
-    layer_name = params.pop('points_scalars')
-    if not isinstance(layer_name, str): # It's a list or tuple
-        layer_name = layer_name[0]
-
-    layer_params, params = _move_params_to_dict(params, (
-        ('points_scalars_cmap', 'cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
-        ('points_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
-        (
-            'points_scalars_below_color',
-            'below_color',
-            LAYER_BELOW_COLOR_DEFAULT_VALUE,
-        ),
-    ))
-
-    paramstr = sanitise(layer_name)
-    layer_params, params = _move_params_to_dict(
-        params,
-        (
-            (f'{paramstr}_cmap', 'cmap', layer_params['cmap']),
-            (f'{paramstr}_clim', 'clim', layer_params['clim']),
-            (
-                f'{paramstr}_cmap_negative',
-                'cmap_negative',
-                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (
-                f'{paramstr}_clim_negative',
-                'clim_negative',
-                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
-            (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
-            (
-                f'{paramstr}_below_color',
                 'below_color',
-                layer_params['below_color'],
+                LAYER_BELOW_COLOR_DEFAULT_VALUE,
             ),
+        ))
+
+        paramstr = sanitise(layer_name)
+        layer_params, params = _move_params_to_dict(
+            params,
             (
-                f'{paramstr}_blend_mode',
-                'blend_mode',
-                LAYER_BLEND_MODE_DEFAULT_VALUE,
+                (f'{paramstr}_cmap', 'cmap', layer_params['cmap']),
+                (f'{paramstr}_clim', 'clim', layer_params['clim']),
+                (
+                    f'{paramstr}_cmap_negative',
+                    'cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_clim_negative',
+                    'clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_below_color',
+                    'below_color',
+                    layer_params['below_color'],
+                ),
+                (
+                    f'{paramstr}_blend_mode',
+                    'blend_mode',
+                    LAYER_BLEND_MODE_DEFAULT_VALUE,
+                ),
             ),
-        ),
+        )
+
+        layer = Layer(
+            name=layer_name,
+            cmap=layer_params['cmap'],
+            clim=layer_params['clim'],
+            cmap_negative=layer_params['cmap_negative'],
+            clim_negative=layer_params['clim_negative'],
+            alpha=layer_params['alpha'],
+            color=layer_params['color'],
+            below_color=layer_params['below_color'],
+            blend_mode=layer_params['blend_mode'],
+        )
+
+        points_scalars_layers = list(points_scalars_layers) + [layer]
+
+        return {
+            **params,
+            **{
+                'points_scalars_layers': points_scalars_layers,
+                **store,
+            },
+        }
+
+    _add_points_overlay_p = Primitive(
+        name='add_points_overlay',
+        f=_add_points_overlay,
+        output=None,
+        forward_unused=True,
     )
-
-    layer = Layer(
-        name=layer_name,
-        cmap=layer_params['cmap'],
-        clim=layer_params['clim'],
-        cmap_negative=layer_params['cmap_negative'],
-        clim_negative=layer_params['clim_negative'],
-        alpha=layer_params['alpha'],
-        color=layer_params['color'],
-        below_color=layer_params['below_color'],
-        blend_mode=layer_params['blend_mode'],
-    )
-
-    points_scalars_layers = list(points_scalars_layers) + [layer]
-
-    return {
-        **params,
-        **{
-            'points_scalars_layers': points_scalars_layers,
-            **store,
-        },
-    }
+    inner_signature = _get_inner_signature(paramstr=paramstr, inner_f=inner_f)
+    return _add_points_overlay_p, inner_signature
 
 
 def add_network_overlay_f(
     layer_name: str,
     chains: Sequence[callable],
-    params: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    network_layers = params.pop('network_layers', [])
-    store, params = _copy_dict_from_params(
-        params,
-        (
-            ('node_cmap', NODE_CMAP_DEFAULT_VALUE),
-            ('node_clim', NODE_CLIM_DEFAULT_VALUE),
-            ('node_color', NODE_COLOR_DEFAULT_VALUE),
-            ('node_radius', NODE_RADIUS_DEFAULT_VALUE),
-            ('node_radius_range', NODE_RLIM_DEFAULT_VALUE),
-            ('node_alpha', NODE_ALPHA_DEFAULT_VALUE),
-            ('edge_cmap', EDGE_CMAP_DEFAULT_VALUE),
-            ('edge_clim', EDGE_CLIM_DEFAULT_VALUE),
-            ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
-            ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
-            ('edge_radius', EDGE_RADIUS_DEFAULT_VALUE),
-            ('edge_radius_range', EDGE_RLIM_DEFAULT_VALUE),
-        )
-    )
-
+) -> Tuple[Primitive, inspect.Signature]:
     inner_f = ichain(*chains)(_null_op)
-    params = inner_f(**params)
-
-    node_params, params = _move_params_to_dict(params, (
-        ('node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
-        ('node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
-        ('node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
-        ('node_radius', 'radius', NODE_RADIUS_DEFAULT_VALUE),
-        ('node_radius_range', 'radius_range', NODE_RLIM_DEFAULT_VALUE),
-        ('node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
-    ))
-    edge_params, params = _move_params_to_dict(params, (
-        ('edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
-        ('edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
-        ('edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
-        ('edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
-        ('edge_radius', 'radius', EDGE_RADIUS_DEFAULT_VALUE),
-        ('edge_radius_range', 'radius_range', EDGE_RLIM_DEFAULT_VALUE),
-    ))
-
     paramstr = sanitise(layer_name)
-    node_params, params = _move_params_to_dict(
-        params,
-        (
-            (f'{paramstr}_node_cmap', 'cmap', node_params['cmap']),
-            (f'{paramstr}_node_clim', 'clim', node_params['clim']),
-            (f'{paramstr}_node_color', 'color', node_params['color']),
-            (f'{paramstr}_node_alpha', 'alpha', node_params['alpha']),
-            (f'{paramstr}_node_radius', 'radius', node_params['radius']),
-            (
-                f'{paramstr}_node_radius_range',
-                'radius_range',
-                node_params['radius_range'],
-            ),
-            (
-                f'{paramstr}_node_cmap_negative',
-                'cmap_negative',
-                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (
-                f'{paramstr}_node_clim_negative',
-                'clim_negative',
-                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (
-                f'{paramstr}_node_below_color',
-                'below_color',
-                NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
-            ),
-        ),
-    )
-    edge_params, params = _move_params_to_dict(
-        params,
-        (
-            (f'{paramstr}_edge_cmap', 'cmap', edge_params['cmap']),
-            (f'{paramstr}_edge_clim', 'clim', edge_params['clim']),
-            (f'{paramstr}_edge_color', 'color', edge_params['color']),
-            (f'{paramstr}_edge_alpha', 'alpha', edge_params['alpha']),
-            (f'{paramstr}_edge_radius', 'radius', edge_params['radius']),
-            (
-                f'{paramstr}_edge_radius_range',
-                'radius_range',
-                edge_params['radius_range'],
-            ),
-            (
-                f'{paramstr}_edge_cmap_negative',
-                'cmap_negative',
-                LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (
-                f'{paramstr}_edge_clim_negative',
-                'clim_negative',
-                LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
-            ),
-            (
-                f'{paramstr}_edge_below_color',
-                'below_color',
-                NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
-            ),
-        ),
-    )
 
-    edge_layer = EdgeLayer(
-        name=layer_name,
-        cmap=edge_params['cmap'],
-        clim=edge_params['clim'],
-        cmap_negative=edge_params['cmap_negative'],
-        clim_negative=edge_params['clim_negative'],
-        color=edge_params['color'],
-        alpha=edge_params['alpha'],
-        below_color=edge_params['below_color'],
-        radius=edge_params['radius'],
-        radius_range=edge_params['radius_range'],
-    )
-    node_layer = NodeLayer(
-        name=layer_name,
-        cmap=node_params['cmap'],
-        clim=node_params['clim'],
-        cmap_negative=node_params['cmap_negative'],
-        clim_negative=node_params['clim_negative'],
-        color=node_params['color'],
-        alpha=node_params['alpha'],
-        below_color=node_params['below_color'],
-        radius=node_params['radius'],
-        radius_range=node_params['radius_range'],
-        edge_layers=[edge_layer],
-    )
+    def _add_network_overlay(
+        params: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        network_layers = params.pop('network_layers', None)
+        if network_layers is None:
+            network_layers = []
+        store, params = _copy_dict_from_params(
+            params,
+            (
+                ('node_cmap', NODE_CMAP_DEFAULT_VALUE),
+                ('node_clim', NODE_CLIM_DEFAULT_VALUE),
+                ('node_color', NODE_COLOR_DEFAULT_VALUE),
+                ('node_radius', NODE_RADIUS_DEFAULT_VALUE),
+                ('node_radius_range', NODE_RLIM_DEFAULT_VALUE),
+                ('node_alpha', NODE_ALPHA_DEFAULT_VALUE),
+                ('edge_cmap', EDGE_CMAP_DEFAULT_VALUE),
+                ('edge_clim', EDGE_CLIM_DEFAULT_VALUE),
+                ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
+                ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                ('edge_radius', EDGE_RADIUS_DEFAULT_VALUE),
+                ('edge_radius_range', EDGE_RLIM_DEFAULT_VALUE),
+            )
+        )
 
-    network_layers = list(network_layers) + [node_layer]
-    networks = build_network_f(
-        name=layer_name,
-        node_coor=params['node_coor'],
-        node_values=params.get('node_values', None),
-        edge_values=params.get('edge_values', None),
-        lh_mask=params.get('lh_mask', None),
-        networks=params.get('networks', None),
-    )
+        params = inner_f(**params)
 
-    return {
-        **params,
-        **{
-            'network_layers': network_layers,
-            'networks': networks,
-            **store,
-        },
-    }
+        node_params, params = _move_params_to_dict(params, (
+            ('node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
+            ('node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
+            ('node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
+            ('node_radius', 'radius', NODE_RADIUS_DEFAULT_VALUE),
+            ('node_radius_range', 'radius_range', NODE_RLIM_DEFAULT_VALUE),
+            ('node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
+        ))
+        edge_params, params = _move_params_to_dict(params, (
+            ('edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
+            ('edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
+            ('edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
+            ('edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
+            ('edge_radius', 'radius', EDGE_RADIUS_DEFAULT_VALUE),
+            ('edge_radius_range', 'radius_range', EDGE_RLIM_DEFAULT_VALUE),
+        ))
+
+        node_params, params = _move_params_to_dict(
+            params,
+            (
+                (f'{paramstr}_node_cmap', 'cmap', node_params['cmap']),
+                (f'{paramstr}_node_clim', 'clim', node_params['clim']),
+                (f'{paramstr}_node_color', 'color', node_params['color']),
+                (f'{paramstr}_node_alpha', 'alpha', node_params['alpha']),
+                (f'{paramstr}_node_radius', 'radius', node_params['radius']),
+                (
+                    f'{paramstr}_node_radius_range',
+                    'radius_range',
+                    node_params['radius_range'],
+                ),
+                (
+                    f'{paramstr}_node_cmap_negative',
+                    'cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_node_clim_negative',
+                    'clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_node_below_color',
+                    'below_color',
+                    NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+                ),
+            ),
+        )
+        edge_params, params = _move_params_to_dict(
+            params,
+            (
+                (f'{paramstr}_edge_cmap', 'cmap', edge_params['cmap']),
+                (f'{paramstr}_edge_clim', 'clim', edge_params['clim']),
+                (f'{paramstr}_edge_color', 'color', edge_params['color']),
+                (f'{paramstr}_edge_alpha', 'alpha', edge_params['alpha']),
+                (f'{paramstr}_edge_radius', 'radius', edge_params['radius']),
+                (
+                    f'{paramstr}_edge_radius_range',
+                    'radius_range',
+                    edge_params['radius_range'],
+                ),
+                (
+                    f'{paramstr}_edge_cmap_negative',
+                    'cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_edge_clim_negative',
+                    'clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_edge_below_color',
+                    'below_color',
+                    NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+                ),
+            ),
+        )
+
+        edge_layer = EdgeLayer(
+            name=layer_name,
+            cmap=edge_params['cmap'],
+            clim=edge_params['clim'],
+            cmap_negative=edge_params['cmap_negative'],
+            clim_negative=edge_params['clim_negative'],
+            color=edge_params['color'],
+            alpha=edge_params['alpha'],
+            below_color=edge_params['below_color'],
+            radius=edge_params['radius'],
+            radius_range=edge_params['radius_range'],
+        )
+        node_layer = NodeLayer(
+            name=layer_name,
+            cmap=node_params['cmap'],
+            clim=node_params['clim'],
+            cmap_negative=node_params['cmap_negative'],
+            clim_negative=node_params['clim_negative'],
+            color=node_params['color'],
+            alpha=node_params['alpha'],
+            below_color=node_params['below_color'],
+            radius=node_params['radius'],
+            radius_range=node_params['radius_range'],
+            edge_layers=[edge_layer],
+        )
+
+        network_layers = list(network_layers) + [node_layer]
+        networks = build_network_f(
+            name=layer_name,
+            node_coor=params['node_coor'],
+            node_values=params.get('node_values', None),
+            edge_values=params.get('edge_values', None),
+            lh_mask=params.get('lh_mask', None),
+            networks=params.get('networks', None),
+        )
+
+        return {
+            **params,
+            **{
+                'network_layers': network_layers,
+                'networks': networks,
+                **store,
+            },
+        }
+
+    _add_network_overlay_p = Primitive(
+        name='add_network_overlay',
+        f=_add_network_overlay,
+        output=None,
+        forward_unused=True,
+    )
+    inner_signature = _get_inner_signature(
+        paramstr=paramstr,
+        inner_f=inner_f,
+        basefunc=NodeLayer.__init__,
+        infix='_node',
+    )
+    inner_f.__signature__ = inner_signature
+    inner_signature = _get_inner_signature(
+        paramstr=paramstr,
+        inner_f=inner_f,
+        basefunc=EdgeLayer.__init__,
+        infix='_edge',
+    )
+    return _add_network_overlay_p, inner_signature
 
 
 def build_network_f(
@@ -942,12 +1032,12 @@ def node_coor_from_parcels_f(
     parcel_ids = np.unique(np.concatenate((lh_data, rh_data)))
     parcel_ids = parcel_ids[parcel_ids != null_value]
     lh_mask = np.isin(parcel_ids, lh_data)
-    return coor, lh_mask
+    return coor, lh_mask, surf, surf_projection
 
 
 def add_node_variable_f(
     name: str = "node",
-    val: Union[Tensor, str] = None,
+    val: Union[pd.DataFrame, str] = None,
     threshold: Union[float, int] = 0.0,
     percent_threshold: bool = False,
     topk_threshold: bool = False,
@@ -1978,7 +2068,7 @@ vertex_to_face_p = Primitive(
 add_surface_overlay_p = Primitive(
     add_surface_overlay_f,
     'add_surface_overlay',
-    output=None,
+    output=('prim', 'signature'),
     forward_unused=True,
 )
 
@@ -1986,7 +2076,7 @@ add_surface_overlay_p = Primitive(
 add_points_overlay_p = Primitive(
     add_points_overlay_f,
     'add_points_overlay',
-    output=None,
+    output=('prim', 'signature'),
     forward_unused=True,
 )
 
@@ -1994,7 +2084,7 @@ add_points_overlay_p = Primitive(
 add_network_overlay_p = Primitive(
     add_network_overlay_f,
     'add_network_overlay',
-    output=None,
+    output=('prim', 'signature'),
     forward_unused=True,
 )
 
@@ -2010,7 +2100,7 @@ build_network_p = Primitive(
 node_coor_from_parcels_p = Primitive(
     node_coor_from_parcels_f,
     'node_coor_from_parcels',
-    output=('node_coor', 'lh_mask'),
+    output=('node_coor', 'lh_mask', 'surf', 'surf_projection'),
     forward_unused=True,
 )
 
