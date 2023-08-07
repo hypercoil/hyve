@@ -8,19 +8,23 @@ Functions for transforming the input and output of visualisation functions.
 See also ``flows.py`` for functions that transform the control flow of
 visualisation functions.
 """
-from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
+from typing import (
+    Any, Literal, Mapping, Optional, Sequence, Tuple, Type, Union
+)
 
 import inspect
 import nibabel as nb
 import numpy as np
+import pandas as pd
 from conveyant import (
     FunctionWrapper as F,
 )
 from conveyant import (
     PartialApplication as Partial,
+    splice_on as splice_on_orig,
 )
 from conveyant import (
-    direct_compositor
+    direct_compositor,
 )
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
@@ -76,6 +80,28 @@ from .util import (
 )
 
 
+NULL = inspect._empty
+
+
+def splice_on(
+    g: callable,
+    occlusion: Sequence[str] = (),
+    expansion: Optional[Mapping[str, Tuple[Type, Any]]] = None,
+    allow_variadic: bool = True,
+    strict_emulation: bool = True,
+) -> callable:
+    """
+    Patch ``splice_on`` to allow for variadic functions by default.
+    """
+    return splice_on_orig(
+        g,
+        occlusion=occlusion,
+        expansion=expansion,
+        allow_variadic=allow_variadic,
+        strict_emulation=strict_emulation,
+    )
+
+
 def surf_from_archive(
     allowed: Sequence[str] = ('templateflow', 'neuromaps')
 ) -> callable:
@@ -116,6 +142,7 @@ def surf_from_archive(
     ) -> callable:
         transformer_f = Partial(surf_from_archive_p, archives=archives)
 
+        @splice_on(f, occlusion=surf_from_archive_p.output)
         def f_transformed(
             *,
             template: str = 'fsLR',
@@ -142,6 +169,7 @@ def surf_from_gifti(
     ) -> callable:
         transformer_f = Partial(surf_from_gifti_p, projection=projection)
 
+        @splice_on(f, occlusion=surf_from_gifti_p.output)
         def f_transformed(
             *,
             left_surf: Union[str, nb.gifti.gifti.GiftiImage],
@@ -211,6 +239,7 @@ def surf_scalars_from_cifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{sanitise(scalars)}_cifti'
         transformer_f = Partial(
             surf_scalars_from_cifti_p,
             scalars=scalars,
@@ -224,12 +253,16 @@ def surf_scalars_from_cifti(
             plot=plot,
         )
 
+        @splice_on(
+            f,
+            occlusion=surf_scalars_from_cifti_p.output,
+            expansion={paramstr: (Union[nb.Cifti2Image, str], NULL)},
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            paramstr = f'{sanitise(scalars)}_cifti'
             try:
                 cifti = params.pop(paramstr)
             except KeyError:
@@ -298,6 +331,8 @@ def surf_scalars_from_gifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr_left = f'{sanitise(scalars)}_gifti_left'
+        paramstr_right = f'{sanitise(scalars)}_gifti_right'
         transformer_f = Partial(
             surf_scalars_from_gifti_p,
             scalars=scalars,
@@ -311,13 +346,19 @@ def surf_scalars_from_gifti(
             plot=plot,
         )
 
+        @splice_on(
+            f,
+            occlusion=surf_scalars_from_gifti_p.output,
+            expansion={
+                paramstr_left: (Union[nb.GiftiImage, str], NULL),
+                paramstr_right: (Union[nb.GiftiImage, str], NULL),
+            },
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            paramstr_left = f'{sanitise(scalars)}_gifti_left'
-            paramstr_right = f'{sanitise(scalars)}_gifti_right'
             left_gifti = params.pop(paramstr_left, None)
             right_gifti = params.pop(paramstr_right, None)
             if left_gifti is None and right_gifti is None:
@@ -356,6 +397,9 @@ def surf_scalars_from_array(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{sanitise(scalars)}_array'
+        paramstr_left = f'{sanitise(scalars)}_array_left'
+        paramstr_right = f'{sanitise(scalars)}_array_right'
         transformer_f = Partial(
             surf_scalars_from_array_p,
             scalars=scalars,
@@ -372,14 +416,20 @@ def surf_scalars_from_array(
             plot=plot,
         )
 
+        @splice_on(
+            f,
+            occlusion=surf_scalars_from_array_p.output,
+            expansion={
+                paramstr: (Tensor, NULL),
+                paramstr_left: (Tensor, NULL),
+                paramstr_right: (Tensor, NULL),
+            },
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
             **params: Mapping,
         ):
-            paramstr = f'{sanitise(scalars)}_array'
-            paramstr_left = f'{sanitise(scalars)}_array_left'
-            paramstr_right = f'{sanitise(scalars)}_array_right'
             left_array = params.pop(paramstr_left, None)
             right_array = params.pop(paramstr_right, None)
             array = params.pop(paramstr, None)
@@ -414,6 +464,7 @@ def points_scalars_from_nifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{sanitise(scalars)}_nifti'
         transformer_f = Partial(
             points_scalars_from_nifti_p,
             scalars=scalars,
@@ -422,13 +473,17 @@ def points_scalars_from_nifti(
             plot=plot,
         )
 
+        @splice_on(
+            f,
+            occlusion=points_scalars_from_nifti_p.output,
+            expansion={paramstr: (Union[nb.Nifti1Image, str], NULL)},
+        )
         def f_transformed(
             *,
             points_scalars: Sequence[str] = (),
             points: Optional[PointDataCollection] = None,
             **params: Mapping,
         ):
-            paramstr = f'{sanitise(scalars)}_nifti'
             try:
                 nifti = params.pop(paramstr)
             except KeyError:
@@ -455,6 +510,8 @@ def points_scalars_from_array(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr_coor = f'{sanitise(scalars)}_coor'
+        paramstr_values = f'{sanitise(scalars)}_values'
         transformer_f = Partial(
             points_scalars_from_array_p,
             scalars=scalars,
@@ -462,22 +519,33 @@ def points_scalars_from_array(
             plot=plot,
         )
 
-        def f_transformed(**params: Mapping):
-            points_scalars = params.pop('points_scalars', ())
-            points = params.pop('points', None)
+        @splice_on(
+            f,
+            occlusion=points_scalars_from_array_p.output,
+            expansion={
+                paramstr_coor: (Tensor, NULL),
+                paramstr_values: (Tensor, NULL),
+            },
+        )
+        def f_transformed(
+            *,
+            points: Optional[PointDataCollection] = None,
+            points_scalars: Sequence[str] = (),
+            **params: Mapping,
+        ):
             try:
-                coor = params.pop(f'{scalars}_coor')
+                coor = params.pop(paramstr_coor)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_coor'
+                    f'keyword-only argument: {paramstr_coor}'
                 )
             try:
-                values = params.pop(f'{scalars}_values')
+                values = params.pop(paramstr_values)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {scalars}_values'
+                    f'keyword-only argument: {paramstr_values}'
                 )
             return compositor(f, transformer_f)(**params)(
                 coor=coor,
@@ -543,11 +611,11 @@ def surf_scalars_from_nifti(
         'fsaverage': F(mni152_to_fsaverage),
     }
     f_resample = templates[template]
-    paramstr = f'{sanitise(scalars)}_nifti'
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{sanitise(scalars)}_nifti'
         transformer_f = Partial(
             surf_scalars_from_nifti_p,
             scalars=scalars,
@@ -562,9 +630,15 @@ def surf_scalars_from_nifti(
             plot=plot,
         )
 
+        @splice_on(
+            f,
+            occlusion=surf_scalars_from_nifti_p.output,
+            expansion={paramstr: (Union[nb.Nifti1Image, str], NULL)},
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
+            surf_scalars: Sequence[str] = (),
             **params: Mapping,
         ):
             try:
@@ -574,7 +648,6 @@ def surf_scalars_from_nifti(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {paramstr}'
                 )
-            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
                 surf=surf,
@@ -636,6 +709,14 @@ def parcellate_colormap(
             target=target,
         )
 
+        @splice_on(
+            f,
+            occlusion=(
+                'surf_scalars_cmap',
+                'surf_scalars_clim',
+                'surf_scalars_below_color',
+            ),
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
@@ -689,12 +770,13 @@ def parcellate_surf_scalars(
             plot=plot,
         )
 
+        @splice_on(f, occlusion=parcellate_surf_scalars_p.output)
         def f_transformed(
             *,
             surf: CortexTriSurface,
+            surf_scalars: Sequence[str] = (),
             **params: Mapping,
         ):
-            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 surf_scalars=surf_scalars,
@@ -742,6 +824,7 @@ def scatter_into_parcels(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{sanitise(scalars)}_parcellated'
         transformer_f = Partial(
             scatter_into_parcels_p,
             scalars=scalars,
@@ -749,12 +832,17 @@ def scatter_into_parcels(
             plot=plot,
         )
 
+        @splice_on(
+            f,
+            occlusion=scatter_into_parcels_p.output,
+            expansion={paramstr: (Tensor, NULL)},
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
+            surf_scalars: Sequence[str] = (),
             **params: Mapping,
         ):
-            paramstr = f'{sanitise(scalars)}_parcellated'
             try:
                 parcellated = params.pop(paramstr)
             except KeyError:
@@ -762,7 +850,6 @@ def scatter_into_parcels(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {paramstr}'
                 )
-            surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 parcellated=parcellated,
@@ -811,6 +898,7 @@ def vertex_to_face(
             interpolation=interpolation,
         )
 
+        @splice_on(f, occlusion=vertex_to_face_p.output)
         def f_transformed(
             *,
             surf: CortexTriSurface,
@@ -827,38 +915,50 @@ def vertex_to_face(
 
 
 def add_surface_overlay(
+    layer_name: str,
     *chains: Sequence[callable],
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
-        transformer_f = add_surface_overlay_p
+        result = add_surface_overlay_p(layer_name=layer_name, chains=chains)
+        transformer_f, signature = result['prim'], result['signature']
 
+        @splice_on(
+            f,
+            expansion={
+                k: (v.annotation, v.default)
+                for k, v in signature.parameters.items()
+            },
+        )
         def f_transformed(**params: Mapping):
-            return compositor(f, transformer_f)()(
-                chains=chains,
-                params=params,
-            )
+            return compositor(f, transformer_f)()(params=params)
 
         return f_transformed
     return transform
 
 
 def add_points_overlay(
+    layer_name: str,
     *chains: Sequence[callable],
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
-        transformer_f = add_points_overlay_p
+        result = add_points_overlay_p(layer_name=layer_name, chains=chains)
+        transformer_f, signature = result['prim'], result['signature']
 
+        @splice_on(
+            f,
+            expansion={
+                k: (v.annotation, v.default)
+                for k, v in signature.parameters.items()
+            },
+        )
         def f_transformed(**params: Mapping):
-            return compositor(f, transformer_f)()(
-                chains=chains,
-                params=params,
-            )
+            return compositor(f, transformer_f)()(params=params)
 
         return f_transformed
     return transform
@@ -872,14 +972,18 @@ def add_network_overlay(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
-        transformer_f = add_network_overlay_p
+        result = add_network_overlay_p(layer_name=layer_name, chains=chains)
+        transformer_f, signature = result['prim'], result['signature']
 
+        @splice_on(
+            f,
+            expansion={
+                k: (v.annotation, v.default)
+                for k, v in signature.parameters.items()
+            },
+        )
         def f_transformed(**params: Mapping):
-            return compositor(f, transformer_f)()(
-                layer_name=layer_name,
-                chains=chains,
-                params=params,
-            )
+            return compositor(f, transformer_f)()(params=params)
 
         return f_transformed
     return transform
@@ -895,11 +999,12 @@ def build_network(name: str = 'network') -> callable:
             name=name,
         )
 
+        @splice_on(f, occlusion=build_network_p.output)
         def f_transformed(
             *,
             node_coor: Tensor,
-            node_values: Optional[Tensor] = None,
-            edge_values: Optional[Tensor] = None,
+            node_values: Optional[pd.DataFrame] = None,
+            edge_values: Optional[pd.DataFrame] = None,
             networks: Optional[NetworkDataCollection] = None,
             lh_mask: Optional[Tensor] = None,
             **params: Mapping,
@@ -926,9 +1031,13 @@ def node_coor_from_parcels(parcellation: str) -> callable:
             parcellation=parcellation,
         )
 
-        def f_transformed(**params: Mapping):
-            surf = params.get('surf')
-            surf_projection = params.get('surf_projection')
+        @splice_on(f, occlusion=node_coor_from_parcels_p.output)
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            surf_projection: str,
+            **params: Mapping,
+        ):
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 surf_projection=surf_projection,
@@ -953,6 +1062,7 @@ def add_node_variable(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{name}_nodal'
         transformer_f = Partial(
             add_node_variable_p,
             name=name,
@@ -966,18 +1076,19 @@ def add_node_variable(
             surviving_val=surviving_val,
         )
 
+        @splice_on(
+            f,
+            occlusion=add_node_variable_p.output,
+            expansion={paramstr: (Union[pd.DataFrame, str], NULL)},
+        )
         def f_transformed(**params: Mapping):
             try:
-                val = params[f"{name}_nodal"]
+                val = params.pop(paramstr)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {name}_nodal'
                 )
-            params = {
-                k: v for k, v in params.items()
-                if k != f"{name}_nodal"
-            }
             return compositor(f, transformer_f)(**params)(val=val)
 
         return f_transformed
@@ -1002,6 +1113,7 @@ def add_edge_variable(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = f'{name}_adjacency'
         transformer_f = Partial(
             add_edge_variable_p,
             name=name,
@@ -1018,18 +1130,19 @@ def add_edge_variable(
             emit_incident_nodes=emit_incident_nodes,
         )
 
+        @splice_on(
+            f,
+            occlusion=add_node_variable_p.output,
+            expansion={paramstr: (Union[pd.DataFrame, str], NULL)},
+        )
         def f_transformed(**params: Mapping):
             try:
-                adj = params[f"{name}_adjacency"]
+                adj = params.pop(paramstr)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {name}_adjacency'
                 )
-            params = {
-                k: v for k, v in params.items()
-                if k != f"{name}_adjacency"
-            }
             return compositor(f, transformer_f)(**params)(adj=adj)
 
         return f_transformed
@@ -1066,6 +1179,7 @@ def scalar_focus_camera(
             ),
         )
 
+        @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
             **params: Mapping,
@@ -1108,6 +1222,7 @@ def closest_ortho_camera(
             ),
         )
 
+        @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
             **params: Mapping,
@@ -1154,6 +1269,7 @@ def planar_sweep_camera(
             ),
         )
 
+        @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
             **params: Mapping,
@@ -1206,6 +1322,7 @@ def auto_camera(
             ),
         )
 
+        @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
             **params: Mapping,
@@ -1227,6 +1344,7 @@ def plot_to_image() -> callable:
         _postprocessor = F(plot_to_image_f)
         _auxwriter = plot_to_image_aux_p
 
+        @splice_on(f, occlusion=('window_size',))
         def f_transformed(
             *,
             views: Union[Sequence, Literal['__default__']] = '__default__',
@@ -1282,6 +1400,7 @@ def plot_final_image(
                 'support multiple scenes.'
             )
 
+        @splice_on(f, occlusion=('off_screen', 'window_size'))
         def f_transformed(
             *,
             window_size: Tuple[int, int] = (1920, 1080),
@@ -1336,6 +1455,7 @@ def plot_to_html(
         )
         _postprocessor = F(plot_to_html_buffer_f)
 
+        @splice_on(f, occlusion=('window_size',))
         def f_transformed(
             *,
             output_dir: str,
@@ -1376,6 +1496,7 @@ def plot_to_display(
             window_size=window_size,
         )
 
+        @splice_on(f, occlusion=('off_screen',))
         def f_transformed(**params):
             _ = params.pop('off_screen', False)
             return compositor(transformer_f, f)()(
@@ -1404,6 +1525,7 @@ def save_snapshots(
             extension=extension,
         )
 
+        @splice_on(f)
         def f_transformed(output_dir: str, **params):
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
@@ -1440,6 +1562,7 @@ def save_figure(
             extension=extension,
         )
 
+        @splice_on(f, occlusion=('sbprocessor',))
         def f_transformed(output_dir: str, **params):
             if scalar_bar_action == 'collect':
                 sbprocessor = _null_sbprocessor
@@ -1486,6 +1609,7 @@ def save_grid(
             extension=extension,
         )
 
+        @splice_on(f, occlusion=('sbprocessor',))
         def f_transformed(output_dir: str, **params):
             if scalar_bar_action == 'collect':
                 sbprocessor = _null_sbprocessor
