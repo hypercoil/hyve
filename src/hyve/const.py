@@ -6,6 +6,7 @@ Constants
 ~~~~~~~~~
 Plotting constants
 """
+import inspect
 from typing import Any, Optional
 
 from lytemaps.datasets import fetch_fsaverage
@@ -75,6 +76,8 @@ SCALAR_BAR_DEFAULT_SIZE = None
 SCALAR_BAR_DEFAULT_SPACING = 0.02
 
 Tensor = Any
+
+REQUIRED = inspect._empty
 
 
 def neuromaps_fetch_fn(

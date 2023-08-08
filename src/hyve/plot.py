@@ -9,6 +9,7 @@ Unified plotting function for surface, volume, and network data.
 import dataclasses
 import inspect
 import io
+from abc import abstractmethod
 from collections.abc import Mapping as MappingABC
 from functools import WRAPPER_ASSIGNMENTS, wraps
 from typing import (
@@ -169,7 +170,47 @@ class NodeLayer(_LayerBase):
 
 
 @dataclasses.dataclass(frozen=True)
-class ScalarBarBuilder(MappingABC):
+class Actors2DBuilder(MappingABC):
+    """Addressable container for 2D actors."""
+
+    def __getitem__(self, key):
+        return self.__getattribute__(key)
+
+    def __iter__(self):
+        return iter(dataclasses.asdict(self))
+
+    def __len__(self):
+        return len(dataclasses.asdict(self))
+
+    @abstractmethod
+    def __eq__(self, other):
+        pass
+
+    @abstractmethod
+    def __hash__(self):
+        pass
+
+    @abstractmethod
+    def __call__(self):
+        pass
+
+    @property
+    @abstractmethod
+    def canvas_height(self):
+        pass
+
+    @property
+    @abstractmethod
+    def canvas_width(self):
+        pass
+
+    @abstractmethod
+    def set_canvas_size(self, height, width):
+        pass
+
+
+@dataclasses.dataclass(frozen=True)
+class ScalarBarBuilder(Actors2DBuilder):
     """Addressable container for scalar bar parameters."""
     mapper: Optional[cm.ScalarMappable]
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME
@@ -193,14 +234,52 @@ class ScalarBarBuilder(MappingABC):
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
     )
 
-    def __getitem__(self, key):
-        return self.__getattribute__(key)
+    def __eq__(self, other):
+        mapper = self.mapper
+        if mapper is None or mapper.norm is None:
+            return self.name == other.name
+        other_mapper = other.mapper
+        if other_mapper is None or other_mapper.norm is None:
+            return self.name == other.name
+        return (
+            self.name == other.name
+            and np.isclose(mapper.norm.vmin, other.mapper.norm.vmin)
+            and np.isclose(mapper.norm.vmax, other_mapper.norm.vmax)
+        )
 
-    def __iter__(self):
-        return iter(dataclasses.asdict(self))
+    def __hash__(self):
+        mapper = self.mapper
+        if mapper is None or mapper.norm is None:
+            return hash((self.name, 'ScalarBarBuilder'))
+        return hash((
+            self.name,
+            mapper.norm.vmin,
+            mapper.norm.vmax,
+            'ScalarBarBuilder'
+        ))
 
-    def __len__(self):
-        return len(dataclasses.asdict(self))
+    def __call__(self):
+        return build_scalar_bar(**dataclasses.asdict(self))
+
+    @property
+    def canvas_height(self):
+        if self.orientation == 'h':
+            return self.width
+        else:
+            return self.length
+
+    @property
+    def canvas_width(self):
+        if self.orientation == 'h':
+            return self.length
+        else:
+            return self.width
+
+    def set_canvas_size(self, height, width):
+        if self.orientation == 'h':
+            return dataclasses.replace(self, width=height, length=width)
+        else:
+            return dataclasses.replace(self, width=width, length=height)
 
 
 @dataclasses.dataclass
@@ -508,11 +587,11 @@ def build_scalar_bar(
 
 
 def _uniquify_names(builders: Sequence[ScalarBarBuilder]):
-    unique_names = set()
+    unique_builders = set()
     retained_builders = []
     for builder in builders:
-        if builder.name not in unique_names:
-            unique_names.add(builder.name)
+        if builder not in unique_builders:
+            unique_builders.add(builder)
             retained_builders.append(builder)
     return retained_builders
 
@@ -535,15 +614,11 @@ def collect_scalar_bars(
         spacing = spacing * min(max_width, max_height)
     spacing = int(spacing)
     width = max([
-        builder.length
-        if builder.orientation == 'h'
-        else builder.width
+        builder.canvas_width
         for builder in builders
     ])
     height = max([
-        builder.width
-        if builder.orientation == 'h'
-        else builder.length
+        builder.canvas_height
         for builder in builders
     ])
     candidates = np.concatenate((
@@ -568,14 +643,8 @@ def collect_scalar_bars(
     images = []
     buffers = []
     for builder in builders:
-        builder_length = height if builder.orientation == 'v' else width
-        builder_width = width if builder.orientation == 'v' else height
-        builder = dataclasses.replace(
-            builder,
-            length=builder_length,
-            width=builder_width,
-        )
-        fig = build_scalar_bar(**builder)
+        builder = builder.set_canvas_size(height=height, width=width)
+        fig = builder()
         # From https://stackoverflow.com/a/8598881
         buffer = io.BytesIO()
         fig.savefig(buffer, format='png', transparent=True)

@@ -8,7 +8,6 @@ Functions for transforming the input and output of visualisation functions.
 See also ``flows.py`` for functions that transform the control flow of
 visualisation functions.
 """
-import inspect
 from typing import (
     Any,
     Literal,
@@ -30,7 +29,7 @@ from conveyant import splice_on as splice_on_orig
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
 
-from .const import Tensor
+from .const import REQUIRED, Tensor
 from .layout import CellLayout
 from .plot import _null_sbprocessor, overlay_scalar_bars
 from .prim import (
@@ -79,8 +78,6 @@ from .util import (
     PointDataCollection,
     sanitise,
 )
-
-NULL = inspect._empty
 
 
 def splice_on(
@@ -256,7 +253,7 @@ def surf_scalars_from_cifti(
         @splice_on(
             f,
             occlusion=surf_scalars_from_cifti_p.output,
-            expansion={paramstr: (Union[nb.Cifti2Image, str], NULL)},
+            expansion={paramstr: (Union[nb.Cifti2Image, str], REQUIRED)},
         )
         def f_transformed(
             *,
@@ -350,8 +347,8 @@ def surf_scalars_from_gifti(
             f,
             occlusion=surf_scalars_from_gifti_p.output,
             expansion={
-                paramstr_left: (Union[nb.GiftiImage, str], NULL),
-                paramstr_right: (Union[nb.GiftiImage, str], NULL),
+                paramstr_left: (Union[nb.GiftiImage, str], REQUIRED),
+                paramstr_right: (Union[nb.GiftiImage, str], REQUIRED),
             },
         )
         def f_transformed(
@@ -420,9 +417,9 @@ def surf_scalars_from_array(
             f,
             occlusion=surf_scalars_from_array_p.output,
             expansion={
-                paramstr: (Tensor, NULL),
-                paramstr_left: (Tensor, NULL),
-                paramstr_right: (Tensor, NULL),
+                paramstr: (Tensor, None),
+                paramstr_left: (Tensor, None),
+                paramstr_right: (Tensor, None),
             },
         )
         def f_transformed(
@@ -476,7 +473,7 @@ def points_scalars_from_nifti(
         @splice_on(
             f,
             occlusion=points_scalars_from_nifti_p.output,
-            expansion={paramstr: (Union[nb.Nifti1Image, str], NULL)},
+            expansion={paramstr: (Union[nb.Nifti1Image, str], REQUIRED)},
         )
         def f_transformed(
             *,
@@ -523,8 +520,8 @@ def points_scalars_from_array(
             f,
             occlusion=points_scalars_from_array_p.output,
             expansion={
-                paramstr_coor: (Tensor, NULL),
-                paramstr_values: (Tensor, NULL),
+                paramstr_coor: (Tensor, REQUIRED),
+                paramstr_values: (Tensor, REQUIRED),
             },
         )
         def f_transformed(
@@ -633,7 +630,7 @@ def surf_scalars_from_nifti(
         @splice_on(
             f,
             occlusion=surf_scalars_from_nifti_p.output,
-            expansion={paramstr: (Union[nb.Nifti1Image, str], NULL)},
+            expansion={paramstr: (Union[nb.Nifti1Image, str], REQUIRED)},
         )
         def f_transformed(
             *,
@@ -835,7 +832,7 @@ def scatter_into_parcels(
         @splice_on(
             f,
             occlusion=scatter_into_parcels_p.output,
-            expansion={paramstr: (Tensor, NULL)},
+            expansion={paramstr: (Tensor, REQUIRED)},
         )
         def f_transformed(
             *,
@@ -1079,7 +1076,7 @@ def add_node_variable(
         @splice_on(
             f,
             occlusion=add_node_variable_p.output,
-            expansion={paramstr: (Union[pd.DataFrame, str], NULL)},
+            expansion={paramstr: (Union[pd.DataFrame, str], REQUIRED)},
         )
         def f_transformed(**params: Mapping):
             try:
@@ -1133,7 +1130,7 @@ def add_edge_variable(
         @splice_on(
             f,
             occlusion=add_node_variable_p.output,
-            expansion={paramstr: (Union[pd.DataFrame, str], NULL)},
+            expansion={paramstr: (Union[pd.DataFrame, str], REQUIRED)},
         )
         def f_transformed(**params: Mapping):
             try:

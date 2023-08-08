@@ -1688,6 +1688,7 @@ def save_figure_f(
                 return tuple(cmeta[cfield] for cfield in sort_by)
 
             snapshots = sorted(snapshots, key=sort_func)
+
         if getattr(layout, 'annotations', None) is not None:
             # TODO: This block behaves unexpectedly if there's more than one
             #       page of snapshots.
@@ -1699,7 +1700,6 @@ def save_figure_f(
                 queries=queries,
                 force_unmatched=True,
             )
-        snapshots = list(zip(cell_indices, snapshots))
         if n_scenes > panels_per_page:
             n_panels = panels_per_page
             n_pages = ceil(n_scenes / n_panels)
@@ -1711,6 +1711,10 @@ def save_figure_f(
             n_pages = 1
             n_panels = n_scenes
             snapshots = (snapshots,)
+        snapshots = tuple(
+            list(zip(cell_indices, snapshot_group))
+            for snapshot_group in snapshots
+        )
     except TypeError:
         # snapshots is a single snapshot
         snapshots = ((snapshots,),)
@@ -1743,7 +1747,7 @@ def save_figure_f(
             )
         )
     )
-    if actors2d_fields:
+    if actors2d_fields and getattr(layout, 'annotations', None) is not None:
         queries = [{'actors2d': cfield for cfield in actors2d_fields}]
         # Each assignment should not "fill" a slot since we might want to
         # assign multiple actors2d fields to a single cell. Because layout is
@@ -1755,10 +1759,15 @@ def save_figure_f(
             for k, v in zip(actors2d_fields, actors2d_asgt)
             if v < len(cells)
         }
+    else:
+        actors2d_asgt = {}
     for i, snapshot_group in enumerate(snapshots):
         page = f'{i + 1:{len(str(n_pages))}d}'
-        actors2d = [cmeta['actors2d'] for (_, (_, cmeta)) in snapshot_group]
-        actors2d = _seq_to_dict(actors2d, merge_type='union')
+        if actors2d_asgt:
+            actors2d = [
+                cmeta['actors2d'] for (_, (_, cmeta)) in snapshot_group
+            ]
+            actors2d = _seq_to_dict(actors2d, merge_type='union')
         match actors2d_asgt.get('scalar_bar', None):
             case None:
                 pass
