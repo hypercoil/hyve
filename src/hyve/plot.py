@@ -9,8 +9,6 @@ Unified plotting function for surface, volume, and network data.
 import dataclasses
 import inspect
 import io
-from abc import abstractmethod
-from collections.abc import Mapping as MappingABC
 from functools import WRAPPER_ASSIGNMENTS, wraps
 from typing import (
     Any,
@@ -28,10 +26,9 @@ import numpy as np
 import pandas as pd
 import pyvista as pv
 from conveyant import Primitive, emulate_assignment
-from matplotlib import cm, colors, patheffects
-from matplotlib.figure import Figure
-from PIL import Image
+from matplotlib import cm, colors
 
+from .actors2d import ScalarBarBuilder, _uniquify_names
 from .const import (
     DEFAULT_CMAP,
     DEFAULT_COLOR,
@@ -60,27 +57,14 @@ from .const import (
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
     POINTS_SCALARS_DEFAULT_VALUE,
     POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
-    SCALAR_BAR_DEFAULT_BELOW_COLOR,
-    SCALAR_BAR_DEFAULT_FONT,
-    SCALAR_BAR_DEFAULT_FONT_COLOR,
-    SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR,
-    SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER,
-    SCALAR_BAR_DEFAULT_LENGTH,
-    SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_LOC,
-    SCALAR_BAR_DEFAULT_NAME,
-    SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER,
-    SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
-    SCALAR_BAR_DEFAULT_ORIENTATION,
     SCALAR_BAR_DEFAULT_SIZE,
     SCALAR_BAR_DEFAULT_SPACING,
-    SCALAR_BAR_DEFAULT_WIDTH,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
-    TYPICAL_DPI,
     Tensor,
 )
 from .surf import (
@@ -167,119 +151,6 @@ class NodeLayer(_LayerBase):
     alpha: float = NODE_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
     edge_layers: Sequence[EdgeLayer] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass(frozen=True)
-class Actors2DBuilder(MappingABC):
-    """Addressable container for 2D actors."""
-
-    def __getitem__(self, key):
-        return self.__getattribute__(key)
-
-    def __iter__(self):
-        return iter(dataclasses.asdict(self))
-
-    def __len__(self):
-        return len(dataclasses.asdict(self))
-
-    @abstractmethod
-    def __eq__(self, other):
-        pass
-
-    @abstractmethod
-    def __hash__(self):
-        pass
-
-    @abstractmethod
-    def __call__(self):
-        pass
-
-    @property
-    @abstractmethod
-    def canvas_height(self):
-        pass
-
-    @property
-    @abstractmethod
-    def canvas_width(self):
-        pass
-
-    @abstractmethod
-    def set_canvas_size(self, height, width):
-        pass
-
-
-@dataclasses.dataclass(frozen=True)
-class ScalarBarBuilder(Actors2DBuilder):
-    """Addressable container for scalar bar parameters."""
-    mapper: Optional[cm.ScalarMappable]
-    name: Optional[str] = SCALAR_BAR_DEFAULT_NAME
-    below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR
-    length: int = SCALAR_BAR_DEFAULT_LENGTH
-    width: int = SCALAR_BAR_DEFAULT_WIDTH
-    orientation: Literal['h', 'v'] = SCALAR_BAR_DEFAULT_ORIENTATION
-    num_sig_figs: int = SCALAR_BAR_DEFAULT_NUM_SIG_FIGS
-    font: str = SCALAR_BAR_DEFAULT_FONT
-    name_fontsize_multiplier: float = (
-        SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER
-    )
-    lim_fontsize_multiplier: float = (
-        SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER
-    )
-    font_color: Any = SCALAR_BAR_DEFAULT_FONT_COLOR
-    font_outline_color: Any = (
-        SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
-    )
-    font_outline_multiplier: float = (
-        SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
-    )
-
-    def __eq__(self, other):
-        mapper = self.mapper
-        if mapper is None or mapper.norm is None:
-            return self.name == other.name
-        other_mapper = other.mapper
-        if other_mapper is None or other_mapper.norm is None:
-            return self.name == other.name
-        return (
-            self.name == other.name
-            and np.isclose(mapper.norm.vmin, other.mapper.norm.vmin)
-            and np.isclose(mapper.norm.vmax, other_mapper.norm.vmax)
-        )
-
-    def __hash__(self):
-        mapper = self.mapper
-        if mapper is None or mapper.norm is None:
-            return hash((self.name, 'ScalarBarBuilder'))
-        return hash((
-            self.name,
-            mapper.norm.vmin,
-            mapper.norm.vmax,
-            'ScalarBarBuilder'
-        ))
-
-    def __call__(self):
-        return build_scalar_bar(**dataclasses.asdict(self))
-
-    @property
-    def canvas_height(self):
-        if self.orientation == 'h':
-            return self.width
-        else:
-            return self.length
-
-    @property
-    def canvas_width(self):
-        if self.orientation == 'h':
-            return self.length
-        else:
-            return self.width
-
-    def set_canvas_size(self, height, width):
-        if self.orientation == 'h':
-            return dataclasses.replace(self, width=height, length=width)
-        else:
-            return dataclasses.replace(self, width=width, length=height)
 
 
 @dataclasses.dataclass
@@ -442,254 +313,6 @@ def _null_auxwriter(metadata):
     return metadata
 
 
-def build_scalar_bar(
-    *,
-    mapper: cm.ScalarMappable,
-    name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
-    below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
-    length: int = SCALAR_BAR_DEFAULT_LENGTH,
-    width: int = SCALAR_BAR_DEFAULT_WIDTH,
-    orientation: Literal['h', 'v'] = SCALAR_BAR_DEFAULT_ORIENTATION,
-    num_sig_figs: int = SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
-    font: str = SCALAR_BAR_DEFAULT_FONT,
-    name_fontsize_multiplier: float = (
-        SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER
-    ),
-    lim_fontsize_multiplier: float = (
-        SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER
-    ),
-    font_color: Any = SCALAR_BAR_DEFAULT_FONT_COLOR,
-    font_outline_color: Any = (
-        SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
-    ),
-    font_outline_multiplier: float = (
-        SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
-    ),
-) -> Figure:
-    if name is not None:
-        name = name.upper() # TODO: change this! work into style
-    vmin, vmax = mapper.get_clim()
-
-    # TODO: Drop this ridiculous hack after we switch to programmatically
-    #       creating SVG files instead of using matplotlib
-    aspect = length / width
-    width = 128
-    length = int(width * aspect)
-
-    static_length = num_sig_figs * width // 2
-    dynamic_length = length - 2 * static_length
-    dynamic = mapper.to_rgba(np.linspace(vmin, vmax, dynamic_length))
-    above = np.tile(mapper.to_rgba(vmax), (static_length, 1))
-    if below_color is not None:
-        if len(below_color) == 4 and below_color[-1] == 0:
-            # Not ideal, but looks better than transparent and too many
-            # color bars actually end in black
-            below_color = '#444444'
-        below = np.tile(colors.to_rgba(below_color), (static_length, 1))
-    else:
-        below = np.tile(mapper.to_rgba(vmin), (static_length, 1))
-    rgba = np.stack(width * [np.concatenate([below, dynamic, above])])
-
-    match orientation:
-        case 'h':
-            figsize = (length / TYPICAL_DPI, width / TYPICAL_DPI)
-            vmin_params = {
-                'xy': (0, 0),
-                'xytext': (0.02, 0.5),
-                'rotation': 0,
-                'ha': 'left',
-                'va': 'center',
-            }
-            vmax_params = {
-                'xy': (1, 0),
-                'xytext': (0.98, 0.5),
-                'rotation': 0,
-                'ha': 'right',
-                'va': 'center',
-            }
-            name_params = {
-                'xy': (0.5, 0),
-                'xytext': (0.5, 0.5),
-                'rotation': 0,
-                'ha': 'center',
-                'va': 'center',
-            }
-        case 'v':
-            figsize = (width / TYPICAL_DPI, length / TYPICAL_DPI)
-            rgba = rgba.swapaxes(0, 1)[::-1]
-            vmin_params = {
-                'xy': (0, 0),
-                'xytext': (0.5, 0.02),
-                'rotation': 90,
-                'ha': 'center',
-                'va': 'bottom',
-            }
-            vmax_params = {
-                'xy': (0, 1),
-                'xytext': (0.5, 0.98),
-                'rotation': 90,
-                'ha': 'center',
-                'va': 'top',
-            }
-            name_params = {
-                'xy': (0, .5),
-                'xytext': (0.5, 0.5),
-                'rotation': 90,
-                'ha': 'center',
-                'va': 'center',
-            }
-        case _:
-            raise ValueError(f'Invalid orientation: {orientation}')
-
-    f, ax = plt.subplots(figsize=figsize)
-    ax.imshow(rgba)
-    # TODO: Drop this hack after we switch to programmatically creating
-    #       SVG files instead of using matplotlib
-    # mul = TYPICAL_DPI / f.dpi
-    for vlim, vlim_params in zip(
-        (vmin, vmax),
-        (vmin_params, vmax_params),
-    ):
-        fontsize = width * lim_fontsize_multiplier # * mul
-        ax.annotate(
-            f'{vlim:.{num_sig_figs}g}',
-            xycoords='axes fraction',
-            fontsize=fontsize,
-            fontfamily=font,
-            color=font_color,
-            path_effects=[
-                patheffects.withStroke(
-                    linewidth=font_outline_multiplier * fontsize,
-                    foreground=font_outline_color,
-                )
-            ],
-            **vlim_params,
-        )
-    if name is not None:
-        fontsize = width * name_fontsize_multiplier # * mul
-        ax.annotate(
-            name,
-            xycoords='axes fraction',
-            fontsize=fontsize,
-            fontfamily=font,
-            color=font_color,
-            path_effects=[
-                patheffects.withStroke(
-                    linewidth=font_outline_multiplier * fontsize,
-                    foreground=font_outline_color,
-                )
-            ],
-            **name_params,
-        )
-    ax.axis('off')
-    f.subplots_adjust(0, 0, 1, 1)
-    return f
-
-
-def _uniquify_names(builders: Sequence[ScalarBarBuilder]):
-    unique_builders = set()
-    retained_builders = []
-    for builder in builders:
-        if builder not in unique_builders:
-            unique_builders.add(builder)
-            retained_builders.append(builder)
-    return retained_builders
-
-
-def collect_scalar_bars(
-    builders: Sequence[ScalarBarBuilder],
-    spacing: float = SCALAR_BAR_DEFAULT_SPACING,
-    max_dimension: Optional[Tuple[int, int]] = None,
-    require_unique_names: bool = True,
-) -> Optional[Tensor]:
-    builders = [b for b in builders if b is not None]
-    if len(builders) == 0:
-        return None
-    # Algorithm from https://stackoverflow.com/a/28268965
-    if require_unique_names:
-        builders = _uniquify_names(builders)
-    count = len(builders)
-    max_width, max_height = max_dimension
-    if spacing < 1:
-        spacing = spacing * min(max_width, max_height)
-    spacing = int(spacing)
-    width = max([
-        builder.canvas_width
-        for builder in builders
-    ])
-    height = max([
-        builder.canvas_height
-        for builder in builders
-    ])
-    candidates = np.concatenate((
-        (max_width - np.arange(count) * spacing) /
-        (np.arange(1, count + 1) * width),
-        (max_height - np.arange(count) * spacing) /
-        (np.arange(1, count + 1) * height),
-    ))
-    candidates = np.sort(candidates[candidates > 0])
-    # Vectorising is probably faster than a binary search, so that's what
-    # we're doing here
-    n_col = np.floor((max_width + spacing) / (width * candidates + spacing))
-    n_row = np.floor((max_height + spacing) / (height * candidates + spacing))
-    feasible = (n_row * n_col) >= count
-    layout_idx = np.max(np.where(feasible))
-    layout = np.array([n_row[layout_idx], n_col[layout_idx]], dtype=int)
-    scalar = candidates[layout_idx]
-    width = int(scalar * width)
-    height = int(scalar * height)
-    # End algorithm from https://stackoverflow.com/a/28268965
-
-    images = []
-    buffers = []
-    for builder in builders:
-        builder = builder.set_canvas_size(height=height, width=width)
-        fig = builder()
-        # From https://stackoverflow.com/a/8598881
-        buffer = io.BytesIO()
-        fig.savefig(buffer, format='png', transparent=True)
-        buffer.seek(0)
-        images += [Image.open(buffer)]
-        buffers += [buffer]
-
-    #tight = {0: 'row', 1: 'col'}[np.argmin(layout)]
-    argtight = np.argmin(layout)
-    argslack = 1 - argtight
-    counttight = layout[argtight]
-    countslack = np.ceil(count / counttight).astype(int)
-    layout = [None, None]
-    layout[argtight] = counttight
-    layout[argslack] = countslack
-
-    # Things are about to get confusing because we're switching back and forth
-    # between array convention and Cartesian convention. Sorry.
-    canvas = Image.new('RGBA', (max_width, max_height), (0, 0, 0, 1))
-    active_canvas_size = (
-        layout[1] * width + (layout[1] - 1) * spacing,
-        layout[0] * height + (layout[0] - 1) * spacing,
-    )
-    offset = [0, 0]
-    offset[1 - argslack] = (
-        canvas.size[1 - argslack] - active_canvas_size[1 - argslack]
-    ) // 2
-    for i, image in enumerate(images):
-        # Unfortunately matplotlib invariably adds some padding, so an aspect
-        # preserving resize is still necessary
-        image = image.resize((width, height), Image.Resampling.LANCZOS)
-        canvas.paste(image, tuple(int(o) for o in offset))
-        # Filling this in row-major order
-        if i % layout[1] == layout[1] - 1:
-            offset[0] = 0
-            offset[1] += height + spacing
-        else:
-            offset[0] += width + spacing
-    #canvas.show()
-
-    for buffer in buffers:
-        buffer.close()
-    return np.array(canvas)
-
-
 def overlay_scalar_bars(
     plotter: pv.Plotter,
     builders: Sequence[ScalarBarBuilder],
@@ -754,7 +377,7 @@ def overlay_scalar_bars(
                 width=width,
                 length=length,
             )
-        fig = build_scalar_bar(**builder)
+        fig = builder()
         # TODO: This is really a terrible hack to get the sizes to always be
         #       consistent. I'm not sure why the sizes are inconsistent in the
         #       first place. But this is all the more reason to drop

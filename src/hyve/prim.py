@@ -8,6 +8,7 @@ Atomic functional primitives for building more complex functions.
 """
 import inspect
 from io import StringIO
+from itertools import chain
 from math import ceil
 from typing import (
     Any,
@@ -42,6 +43,7 @@ from conveyant.replicate import _flatten, _flatten_to_depth, replicate
 from matplotlib.colors import ListedColormap
 from PIL import Image
 
+from .actors2d import tile_actors2d
 from .const import (
     EDGE_ALPHA_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
@@ -83,7 +85,6 @@ from .plot import (
     _get_hemisphere_parameters,
     _null_auxwriter,
     _null_op,
-    collect_scalar_bars,
     plotted_entities,
     unified_plotter,
 )
@@ -1748,7 +1749,7 @@ def save_figure_f(
         )
     )
     if actors2d_fields and getattr(layout, 'annotations', None) is not None:
-        queries = [{'actors2d': cfield for cfield in actors2d_fields}]
+        queries = [{'actors2d': cfield} for cfield in actors2d_fields]
         # Each assignment should not "fill" a slot since we might want to
         # assign multiple actors2d fields to a single cell. Because layout is
         # not mutable, this shouldn't be a problem.
@@ -1768,17 +1769,40 @@ def save_figure_f(
                 cmeta['actors2d'] for (_, (_, cmeta)) in snapshot_group
             ]
             actors2d = _seq_to_dict(actors2d, merge_type='union')
-        match actors2d_asgt.get('scalar_bar', None):
-            case None:
-                pass
-            case cell_idx:
-                sbimg = collect_scalar_bars(
-                    builders=actors2d['scalar_bar'],
-                    max_dimension=cells[cell_idx].cell_dim,
+        for cell_idx in set(actors2d_asgt.values()):
+            if cell_idx >= len(cells):
+                continue
+            actors2d_cell = [
+                k for k, v in actors2d_asgt.items() if v == cell_idx
+            ]
+            builders_cell = list(chain(*[
+                actors2d[k] for k in actors2d_cell
+            ]))
+            cellimg = tile_actors2d(
+                builders=builders_cell,
+                max_dimension=cells[cell_idx].cell_dim,
+                background_color=canvas_color,
+            )
+            if cellimg is not None:
+                # We have to stupidly and wastefully alpha composite the 2D
+                # actors onto the cell background because matplotlib
+                # (predictably) doesn't do what it's supposed to do. We should
+                # fix this by using a different backend to build a SVG image
+                # programmatically.
+                from .util import premultiply_alpha, source_over
+                cellbg = np.array(Image.new(
+                    'RGBA',
+                    cells[cell_idx].cell_dim,
+                    color=canvas_color,
+                ))
+                #cellimg = cellimg
+                cellbg = premultiply_alpha(cellbg / 255)
+                cellimg = premultiply_alpha(cellimg / 255)
+                # drop alpha channel
+                cellimg = (255 * source_over(cellimg, cellbg)[..., :3]).astype(
+                    np.uint8
                 )
-                if sbimg is not None:
-                    sbimg = sbimg[..., :3] # drop alpha channel
-                    snapshot_group.append((cell_idx, (sbimg, {})))
+                snapshot_group.append((cell_idx, (cellimg, {})))
 
         write_f(
             writer=writer,
@@ -1896,6 +1920,7 @@ def automap_unified_plotter_f(
     postprocessors: Optional[
         Sequence[Mapping[str, Tuple[callable, callable]]]
     ] = None,
+    actors2d: Optional[Sequence] = None,
     map_spec: Optional[Sequence] = None,
 ) -> Optional[pv.Plotter]:
     params = locals()
@@ -1927,6 +1952,10 @@ def automap_unified_plotter_f(
     postprocessors = postprocessors or {'plotter': (None, None)}
     postprocessor_names, postprocessors = zip(*postprocessors.items())
     postprocessors, auxwriters = zip(*postprocessors)
+
+    builders = params.pop('actors2d', None)
+    if builders is None:
+        builders = {}
 
     repl_params = mapper(**params)
     repl_vars = set(_flatten(map_spec))
@@ -1968,7 +1997,23 @@ def automap_unified_plotter_f(
     # TODO: we're sticking the actors2d into the metadata here as a hack to
     #       access them later, but this is not really where they belong.
     for cmeta, cactors2d in zip(metadata, actors2d):
-        cmeta[0]['actors2d'] = [cactors2d] * len(next(iter(cmeta[0].values())))
+        len_cmeta = len(next(iter(cmeta[0].values())))
+        meta_asgts = [
+            {k: v[i] for k, v in cmeta[0].items()} for i in range(len_cmeta)
+        ]
+        cactors2d = {**builders, **cactors2d}
+        cactors2d = {k: v for k, v in cactors2d.items() if v is not None}
+        cactors2d = [
+            {
+                k: tuple(
+                    c.eval_spec(asgt)
+                    for c in v
+                )
+                for k, v in cactors2d.items()
+            }
+            for asgt in meta_asgts
+        ]
+        cmeta[0]['actors2d'] = cactors2d
     metadata = {
         k: tuple(_flatten_to_depth([_dict_to_seq(val) for val in v], 1))
         for k, v in zip(postprocessor_names, zip(*metadata))
