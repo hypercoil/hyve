@@ -2,10 +2,11 @@
 # emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 """
-2-dimensional plot actors
-~~~~~~~~~~~~~~~~~~~~~~~~~
-Operations for creating and tiling 2-dimensional plots.
+2-dimensional plot elements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Operations for creating and tiling 2-dimensional plots and plot elements.
 """
+import base64
 import dataclasses
 import io
 from abc import abstractmethod
@@ -14,11 +15,15 @@ from typing import Any, Literal, Mapping, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import svg
 from matplotlib import cm, colors, patheffects
 from matplotlib.figure import Figure
 from PIL import Image
 
 from .const import (
+    RASTER_DEFAULT_BOUNDING_BOX_HEIGHT,
+    RASTER_DEFAULT_BOUNDING_BOX_WIDTH,
+    RASTER_DEFAULT_FORMAT,
     SCALAR_BAR_DEFAULT_BELOW_COLOR,
     SCALAR_BAR_DEFAULT_FONT,
     SCALAR_BAR_DEFAULT_FONT_COLOR,
@@ -47,8 +52,8 @@ from .const import (
 
 
 @dataclasses.dataclass(frozen=True)
-class Actors2DBuilder(MappingABC):
-    """Addressable container for 2D actors."""
+class ElementBuilder(MappingABC):
+    """Addressable container for 2D plot elements."""
 
     def __getitem__(self, key: str):
         return self.__getattribute__(key)
@@ -68,7 +73,7 @@ class Actors2DBuilder(MappingABC):
         pass
 
     @abstractmethod
-    def __call__(self) -> Any:
+    def __call__(self, backend: Optional[str] = None) -> Any:
         pass
 
     @property
@@ -82,15 +87,15 @@ class Actors2DBuilder(MappingABC):
         pass
 
     @abstractmethod
-    def set_canvas_size(self, height: int, width: int) -> 'Actors2DBuilder':
+    def set_canvas_size(self, height: int, width: int) -> 'ElementBuilder':
         pass
 
-    def eval_spec(self, metadata: Mapping[str, str]) -> 'Actors2DBuilder':
+    def eval_spec(self, metadata: Mapping[str, str]) -> 'ElementBuilder':
         return self
 
 
 @dataclasses.dataclass(frozen=True)
-class ScalarBarBuilder(Actors2DBuilder):
+class ScalarBarBuilder(ElementBuilder):
     """Addressable container for scalar bar parameters."""
     mapper: Optional[cm.ScalarMappable]
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME
@@ -140,8 +145,13 @@ class ScalarBarBuilder(Actors2DBuilder):
             'ScalarBarBuilder'
         ))
 
-    def __call__(self) -> Any:
-        return build_scalar_bar(**dataclasses.asdict(self))
+    def __call__(self, backend: Optional[str] = None) -> Any:
+        if backend is None:
+            backend = get_default_backend()
+        return build_scalar_bar(
+            **dataclasses.asdict(self),
+            backend=backend,
+        )
 
     @property
     def canvas_height(self) -> int:
@@ -170,7 +180,7 @@ class ScalarBarBuilder(Actors2DBuilder):
 
 
 @dataclasses.dataclass(frozen=True)
-class TextBuilder(Actors2DBuilder):
+class TextBuilder(ElementBuilder):
     """Addressable container for text parameters."""
     content: str = TEXT_DEFAULT_CONTENT
     font: str = TEXT_DEFAULT_FONT
@@ -195,7 +205,9 @@ class TextBuilder(Actors2DBuilder):
             tuple(dataclasses.asdict(self).values())
         )
 
-    def __call__(self):
+    def __call__(self, backend: Optional[str] = None):
+        if backend is None:
+            backend = get_default_backend()
         return build_text_box(**dataclasses.asdict(self))
 
     @property
@@ -220,18 +232,111 @@ class TextBuilder(Actors2DBuilder):
         )
 
 
+@dataclasses.dataclass(frozen=True)
+class RasterBuilder(ElementBuilder):
+    """Addressable container for raster parameters."""
+    content: Tensor
+    bounding_box_height: int = RASTER_DEFAULT_BOUNDING_BOX_HEIGHT
+    bounding_box_width: int = RASTER_DEFAULT_BOUNDING_BOX_WIDTH
+    fmt: str = RASTER_DEFAULT_FORMAT
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, RasterBuilder):
+            return False
+        return np.all(self.content == other.content) and (
+            all(
+                self[key] == other[key]
+                for key in dataclasses.asdict(self)
+                if key != 'content'
+            )
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (self.content.data.tobytes(),) + tuple(
+                v for k, v in dataclasses.asdict(self).items()
+                if k != 'content'
+            )
+        )
+
+    def __call__(self, backend: Optional[str] = None):
+        if backend is None:
+            backend = get_default_backend()
+        return build_raster(**dataclasses.asdict(self))
+
+    @property
+    def canvas_height(self) -> int:
+        return self.height
+
+    @property
+    def canvas_width(self) -> int:
+        return self.width
+
+    def set_canvas_size(self, height, width) -> 'RasterBuilder':
+        return dataclasses.replace(
+            self,
+            height=height,
+            width=width,
+        )
+
+    def eval_spec(self, metadata: Mapping[str, str]) -> 'RasterBuilder':
+        return self
+
+
+def get_default_backend() -> str:
+    return 'svg'
+
+
 def build_text_box(
     *,
-    content: str,
-    font: str,
-    font_size_multiplier: int,
-    font_color: Any,
-    font_outline_color: Any,
-    font_outline_multiplier: float,
-    bounding_box_width: int,
-    bounding_box_height: int,
-    angle: int,
+    content: str = TEXT_DEFAULT_CONTENT,
+    font: str = TEXT_DEFAULT_FONT,
+    font_size_multiplier: int = TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
+    font_color: Any = TEXT_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = TEXT_DEFAULT_FONT_OUTLINE_COLOR,
+    font_outline_multiplier: float = TEXT_DEFAULT_FONT_OUTLINE_MULTIPLIER,
+    bounding_box_width: int = TEXT_DEFAULT_BOUNDING_BOX_WIDTH,
+    bounding_box_height: int = TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
+    angle: int = TEXT_DEFAULT_ANGLE,
+    backend: Optional[str] = None,
 ):
+    if backend is None:
+        backend = get_default_backend()
+    params = {
+        'content': content,
+        'font': font,
+        'font_size_multiplier': font_size_multiplier,
+        'font_color': font_color,
+        'font_outline_color': font_outline_color,
+        'font_outline_multiplier': font_outline_multiplier,
+        'bounding_box_width': bounding_box_width,
+        'bounding_box_height': bounding_box_height,
+        'angle': angle,
+    }
+    if backend == 'matplotlib':
+        return build_text_box_matplotlib(**params)
+    elif backend == 'svg':
+        return build_text_box_svg(**params)
+    raise ValueError(f'Unknown backend {backend}')
+
+
+def build_text_box_matplotlib(
+    *,
+    content: str = TEXT_DEFAULT_CONTENT,
+    font: str = TEXT_DEFAULT_FONT,
+    font_size_multiplier: int = TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
+    font_color: Any = TEXT_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = TEXT_DEFAULT_FONT_OUTLINE_COLOR,
+    font_outline_multiplier: float = TEXT_DEFAULT_FONT_OUTLINE_MULTIPLIER,
+    bounding_box_width: int = TEXT_DEFAULT_BOUNDING_BOX_WIDTH,
+    bounding_box_height: int = TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
+    angle: int = TEXT_DEFAULT_ANGLE,
+):
+    """
+    Build a text box using matplotlib.
+
+    It is strongly advised to use the SVG backend instead.
+    """
     figsize = (
         bounding_box_width / TYPICAL_DPI,
         bounding_box_height / TYPICAL_DPI,
@@ -274,7 +379,192 @@ def build_text_box(
     return f
 
 
+def build_text_box_svg(
+    *,
+    content: str,
+    font: str,
+    font_size_multiplier: int,
+    font_color: Any,
+    font_outline_color: Any,
+    font_outline_multiplier: float,
+    bounding_box_width: int,
+    bounding_box_height: int,
+    angle: int,
+):
+    font_size = bounding_box_height * font_size_multiplier
+    transform = []
+    if angle != 0:
+        transform = [
+            svg.Rotate(angle, bounding_box_width / 2, bounding_box_height / 2)
+        ]
+    text_params = dict(
+        x=bounding_box_width / 2,
+        y=bounding_box_height / 2,
+        text=content,
+        font_family=font,
+        font_size=font_size,
+        fill=font_color,
+        text_anchor='middle',
+        dominant_baseline='middle',
+    )
+    text_stroke = None
+    if font_outline_color is not None:
+        text_stroke = svg.Text(
+            **text_params,
+            stroke=font_outline_color,
+            stroke_width=font_size * font_outline_multiplier,
+            stroke_linejoin='round',
+        )
+    text = svg.Text(**text_params)
+    elements = [text_stroke, text]
+    textgroup = svg.G(
+        elements=[e for e in elements if e is not None],
+        transform=transform,
+    )
+    graphics = svg.SVG(
+        width=bounding_box_width,
+        height=bounding_box_height,
+        elements=[textgroup],
+    )
+    # Rescale the text to fit the bounding box
+    # TODO: Well, we tried. This doesn't work. In particular, svgelements is
+    #       useless for this purpose. So instead, our prescription for adding
+    #       text is to just use a font size that's big enough to fill the
+    #       specified bounding box. The figure builder will take care of then
+    #       scaling the bounding box and text to the desired size.
+    # buffer = io.StringIO()
+    # buffer.write(img.__str__())
+    # buffer.seek(0)
+    # start_w = font_size_multiplier * bounding_box_width / 2
+    # start_h = font_size_multiplier * bounding_box_height / 2
+    # max_bbox = (
+    #     start_w,
+    #     start_h,
+    #     bounding_box_width - start_w,
+    #     bounding_box_height - start_h,
+    # )
+    # bbox = (float('inf'), float('inf'), float('-inf'), float('-inf'))
+    # for e in svgelements.SVG.parse(buffer).elements():
+    #     if isinstance(e, svgelements.SVGText):
+    #         try:
+    #             e_bbox = e.bbox()
+    #             bbox = (
+    #                 min(bbox[0], e_bbox[0]),
+    #                 min(bbox[1], e_bbox[1]),
+    #                 max(bbox[2], e_bbox[2]),
+    #                 max(bbox[3], e_bbox[3]),
+    #             )
+    #         except AttributeError:
+    #             continue
+    # scale = min(
+    #     (max_bbox[2] - max_bbox[0]) / (bbox[2] - bbox[0]),
+    #     (max_bbox[3] - max_bbox[1]) / (bbox[3] - bbox[1]),
+    # )
+    # transform += [
+    #     svg.Scale(scale, scale),
+    # ]
+    # textgroup = svg.G(
+    #     elements=[e for e in elements if e is not None],
+    #     transform=transform,
+    # )
+    # graphics = svg.SVG(
+    #     width=bounding_box_width,
+    #     height=bounding_box_height,
+    #     elements=[textgroup],
+    #     viewBox=f'0 0 {bounding_box_width} {bounding_box_height}',
+    # )
+    return graphics
+
+
 def build_scalar_bar(
+    *,
+    mapper: cm.ScalarMappable,
+    name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
+    below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
+    length: int = SCALAR_BAR_DEFAULT_LENGTH,
+    width: int = SCALAR_BAR_DEFAULT_WIDTH,
+    orientation: Literal['h', 'v'] = SCALAR_BAR_DEFAULT_ORIENTATION,
+    num_sig_figs: int = SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
+    font: str = SCALAR_BAR_DEFAULT_FONT,
+    name_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER
+    ),
+    lim_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER
+    ),
+    font_color: Any = SCALAR_BAR_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
+    ),
+    font_outline_multiplier: float = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
+    ),
+    backend: Optional[str] = None,
+) -> Figure:
+    """
+    Build a scalar bar.
+
+    Parameters
+    ----------
+    mapper : cm.ScalarMappable
+        The mapper to use for the scalar bar.
+    name : str, optional
+        The name of the scalar bar.
+    below_color : str, optional
+        The color to use for values below the range.
+    length : int, optional
+        The length of the scalar bar.
+    width : int, optional
+        The width of the scalar bar.
+    orientation : {'h', 'v'}, optional
+        The orientation of the scalar bar.
+    num_sig_figs : int, optional
+        The number of significant figures to use for the scalar bar.
+    font : str, optional
+        The font to use for the scalar bar.
+    name_fontsize_multiplier : float, optional
+        The font size multiplier to use for the name.
+    lim_fontsize_multiplier : float, optional
+        The font size multiplier to use for the limits.
+    font_color : Any, optional
+        The font color to use.
+    font_outline_color : Any, optional
+        The font outline color to use.
+    font_outline_multiplier : float, optional
+        The font outline multiplier to use.
+    backend : str, optional
+        The backend to use for the scalar bar.
+
+    Returns
+    -------
+    Figure
+        The figure containing the scalar bar.
+    """
+    if backend is None:
+        backend = get_default_backend()
+    params = {
+        'mapper': mapper,
+        'name': name,
+        'below_color': below_color,
+        'length': length,
+        'width': width,
+        'orientation': orientation,
+        'num_sig_figs': num_sig_figs,
+        'font': font,
+        'name_fontsize_multiplier': name_fontsize_multiplier,
+        'lim_fontsize_multiplier': lim_fontsize_multiplier,
+        'font_color': font_color,
+        'font_outline_color': font_outline_color,
+        'font_outline_multiplier': font_outline_multiplier,
+    }
+    if backend == 'matplotlib':
+        return build_scalar_bar_matplotlib(**params)
+    elif backend == 'svg':
+        return build_scalar_bar_svg(**params)
+    raise ValueError(f'Unknown backend: {backend}')
+
+
+def build_scalar_bar_matplotlib(
     *,
     mapper: cm.ScalarMappable,
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
@@ -418,7 +708,253 @@ def build_scalar_bar(
     return f
 
 
-def _uniquify_names(builders: Sequence[ScalarBarBuilder]):
+def build_scalar_bar_svg(
+    *,
+    mapper: cm.ScalarMappable,
+    name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
+    below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
+    length: int = SCALAR_BAR_DEFAULT_LENGTH,
+    width: int = SCALAR_BAR_DEFAULT_WIDTH,
+    orientation: Literal['h', 'v'] = SCALAR_BAR_DEFAULT_ORIENTATION,
+    num_sig_figs: int = SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
+    font: str = SCALAR_BAR_DEFAULT_FONT,
+    name_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER
+    ),
+    lim_fontsize_multiplier: float = (
+        SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER
+    ),
+    font_color: Any = SCALAR_BAR_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_COLOR
+    ),
+    font_outline_multiplier: float = (
+        SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
+    ),
+) -> Figure:
+    if name is not None:
+        name = name.upper() # TODO: change this! work into style
+    vmin, vmax = mapper.get_clim()
+
+    static_length = num_sig_figs * width // 2
+    dynamic_length = length - 2 * static_length
+    dynamic = mapper.to_rgba(np.linspace(vmin, vmax, dynamic_length))
+
+    dynamic_grad = svg.LinearGradient(
+        id=f'{name}-gradient',
+        elements=[
+            svg.Stop(
+                offset=i / len(dynamic),
+                stop_color=colors.to_hex(dynamic[i]),
+            )
+            for i in range(len(dynamic))
+        ]
+    )
+    dynamic = svg.Rect(
+        x=static_length,
+        y=0,
+        width=dynamic_length,
+        height=width,
+        fill=f'url(#{name}-gradient)',
+    )
+    above = svg.Rect(
+        x=length / 2,
+        y=0,
+        width=length / 2,
+        height=width,
+        fill=colors.to_hex(mapper.to_rgba(vmax)),
+    )
+    if below_color is not None:
+        if len(below_color) == 4 and below_color[-1] == 0:
+            # Not ideal, but looks better than transparent and too many
+            # color bars actually end in black
+            below_color = '#444444'
+        else:
+            below_color = colors.to_hex(below_color)
+    else:
+        below_color = colors.to_hex(mapper.to_rgba(vmin))
+    below = svg.Rect(
+        x=0,
+        y=0,
+        width=length / 2,
+        height=width,
+        fill=below_color,
+    )
+
+    font_color = colors.to_hex(font_color)
+    font_outline_color = colors.to_hex(font_outline_color)
+
+    common_params = {
+        'y': 0.5 * width,
+        'font_family': font,
+        'fill': font_color,
+        'dominant_baseline': 'middle',
+    }
+    vlim_params = {
+        **common_params,
+        'font_size': width * lim_fontsize_multiplier,
+    }
+    vmin_params = {
+        'x': 0.02 * length,
+        'text': f'{vmin:.{num_sig_figs}g}',
+        'text_anchor': 'start',
+        **vlim_params,
+    }
+    vmax_params = {
+        'x': 0.98 * length,
+        'text': f'{vmax:.{num_sig_figs}g}',
+        'text_anchor': 'end',
+        **vlim_params,
+    }
+    name_params = {
+        'x': 0.5 * length,
+        'text': name,
+        'font_size': width * name_fontsize_multiplier,
+        'text_anchor': 'middle',
+        **common_params,
+    }
+
+    vmin_label_stroke = svg.Text(
+        **vmin_params,
+        stroke=font_outline_color,
+        stroke_width=(
+            font_outline_multiplier * width * lim_fontsize_multiplier
+        ),
+        stroke_linejoin='round',
+    )
+    vmin_label = svg.Text(**vmin_params)
+    vmax_label_stroke = svg.Text(
+        **vmax_params,
+        stroke=font_outline_color,
+        stroke_width=(
+            font_outline_multiplier * width * lim_fontsize_multiplier
+        ),
+        stroke_linejoin='round',
+    )
+    vmax_label = svg.Text(**vmax_params)
+    if name is not None:
+        name_label_stroke = svg.Text(
+            **name_params,
+            stroke=font_outline_color,
+            stroke_width=(
+                font_outline_multiplier * width * name_fontsize_multiplier
+            ),
+            stroke_linejoin='round',
+        )
+        name_label = svg.Text(**name_params)
+    else:
+        name_label_stroke = None
+        name_label = None
+    elements = [
+        dynamic_grad,
+        above,
+        below,
+        dynamic,
+        vmin_label_stroke,
+        vmax_label_stroke,
+        name_label_stroke,
+        vmin_label,
+        vmax_label,
+        name_label,
+    ]
+    elements = [e for e in elements if e is not None]
+    match orientation:
+        case 'h':
+            transform =[]
+        case 'v':
+            transform = [svg.Rotate(-90, 0, 0), svg.Translate(-length, 0)]
+            # We nest the elements doubly so that future transforms applied
+            # over these will use the canvas coordinate system instead of the
+            # rotated coordinate system
+            elements = [
+                svg.G(
+                    elements=elements,
+                    transform=transform,
+                )
+            ]
+    group = svg.G(
+        id=f'scalarbar-{name}',
+        elements=elements,
+        transform=[],
+    )
+    return svg.SVG(
+        width=length if orientation == 'h' else width,
+        height=width if orientation == 'h' else length,
+        elements=[group],
+        viewBox=f'0 0 {length} {width}',
+    )
+
+
+def build_raster(
+    *,
+    content: Tensor,
+    bounding_box_height: int = RASTER_DEFAULT_BOUNDING_BOX_HEIGHT,
+    bounding_box_width: int = RASTER_DEFAULT_BOUNDING_BOX_WIDTH,
+    fmt: str = RASTER_DEFAULT_FORMAT,
+    backend: Optional[str] = None,
+) -> Any:
+    if backend is None:
+        backend = get_default_backend()
+    params = {
+        'type': 'raster',
+        'content': content,
+        'bounding_box_height': bounding_box_height,
+        'bounding_box_width': bounding_box_width,
+        'fmt': fmt,
+        'backend': backend,
+    }
+    if backend == 'svg':
+        return build_raster_svg(**params)
+    raise ValueError(f'Unknown backend {backend}')
+
+
+def build_raster_svg(
+    *,
+    content: Tensor,
+    bounding_box_height: int = RASTER_DEFAULT_BOUNDING_BOX_HEIGHT,
+    bounding_box_width: int = RASTER_DEFAULT_BOUNDING_BOX_WIDTH,
+    fmt: str = RASTER_DEFAULT_FORMAT,
+) -> svg.SVG:
+    content = Image.fromarray(content)
+    if fmt == 'png':
+        content = content.convert('RGBA')
+    else:
+        raise ValueError(
+            f'Unsupported format {fmt}. Only png is supported at the '
+            'moment.'
+        )
+    buffer = io.BytesIO()
+    content.save(buffer, format=fmt)
+    buffer.seek(0)
+
+    image_width, image_height = content.size
+    scale = min(
+        bounding_box_width / image_width, bounding_box_height / image_height
+    )
+    image_width = int(image_width * scale)
+    image_height = int(image_height * scale)
+    shift_x = (bounding_box_width - image_width) // 2
+    shift_y = (bounding_box_height - image_height) // 2
+    transform = [svg.Scale(scale, scale), svg.Translate(shift_x, shift_y)]
+
+    # By convention, we wrap it in a singleton group before returning
+    img = svg.Image(
+        href='data:image/png;base64,' + base64.b64encode(
+            buffer.read()
+        ).decode('ascii'),
+        width=image_width,
+        height=image_height,
+        transform=transform,
+    )
+    return svg.SVG(
+        width=bounding_box_width,
+        height=bounding_box_height,
+        elements=[svg.G(elements=[img])],
+        viewBox=f'0 0 {bounding_box_width} {bounding_box_height}',
+    )
+
+
+def _uniquify_names(builders: Sequence[ElementBuilder]):
     unique_builders = set()
     retained_builders = []
     for builder in builders:
@@ -428,8 +964,8 @@ def _uniquify_names(builders: Sequence[ScalarBarBuilder]):
     return retained_builders
 
 
-def tile_actors2d(
-    builders: Sequence[ScalarBarBuilder],
+def tile_plot_elements(
+    builders: Sequence[ElementBuilder],
     spacing: float = SCALAR_BAR_DEFAULT_SPACING,
     max_dimension: Optional[Tuple[int, int]] = None,
     require_unique_names: bool = True,
@@ -473,26 +1009,19 @@ def tile_actors2d(
     height = int(scalar * height)
     # End algorithm from https://stackoverflow.com/a/28268965
 
-    images = []
-    buffers = []
-    figs = []
+    elements = []
     for builder in builders:
-        builder = builder.set_canvas_size(height=height, width=width)
+        builder_width = builder.canvas_width
+        builder_height = builder.canvas_height
+        scale = min(width / builder_width, height / builder_height)
+        builder = builder.set_canvas_size(
+            height=int(scale * builder_height),
+            width=int(scale * builder_width),
+        )
         fig = builder()
-        # TODO: The below should work, but in typical matplotlib fashion, it
-        # doesn't. One more compelling reason to switch to programmatically
-        # creating SVG files instead of using matplotlib, because now we
-        # instead have to do an expensive alpha compositing operation to get
-        # the background colour right.
-        # ax = fig.axes[0]
-        # ax.set_facecolor(background_color)
-        # From https://stackoverflow.com/a/8598881
-        buffer = io.BytesIO()
-        fig.savefig(buffer, format='png', transparent=True)
-        buffer.seek(0)
-        images += [Image.open(buffer)]
-        buffers += [buffer]
-        figs += [fig]
+        # The first element should always be a group containing the actual
+        # plot elements
+        elements += [fig.elements[0]]
 
     #tight = {0: 'row', 1: 'col'}[np.argmin(layout)]
     argtight = np.argmin(layout)
@@ -505,28 +1034,39 @@ def tile_actors2d(
 
     # Things are about to get confusing because we're switching back and forth
     # between array convention and Cartesian convention. Sorry.
-    canvas = Image.new('RGBA', (max_width, max_height), background_color)
     active_canvas_size = (
         layout[1] * width + (layout[1] - 1) * spacing,
         layout[0] * height + (layout[0] - 1) * spacing,
     )
     offset = [0, 0]
     offset[1 - argslack] = (
-        canvas.size[1 - argslack] - active_canvas_size[1 - argslack]
+        max_dimension[1 - argslack] - active_canvas_size[1 - argslack]
     ) // 2
-    for i, image in enumerate(images):
-        # Unfortunately matplotlib invariably adds some padding, so an aspect
-        # preserving resize is still necessary
-        image = image.resize((width, height), Image.Resampling.LANCZOS)
-        canvas.paste(image, tuple(int(o) for o in offset))
+    canvas_elements = []
+    for i, element in enumerate(elements):
+        transform = element.transform + [
+            svg.Translate(*tuple(int(o) for o in offset))
+        ]
+        element.transform = transform
+        canvas_elements.append(element)
         # Filling this in row-major order
+        #print(offset)
         if i % layout[1] == layout[1] - 1:
             offset[0] = 0
             offset[1] += height + spacing
         else:
             offset[0] += width + spacing
-    #canvas.show()
+        #assert 0
 
-    for buffer in buffers:
-        buffer.close()
-    return np.array(canvas)
+    collection = svg.G(
+        id='elements2d-collection',
+        elements=canvas_elements,
+    )
+    canvas = svg.SVG(
+        width=max_width,
+        height=max_height,
+        viewBox=f'0 0 {max_width} {max_height}',
+        elements=[collection],
+    )
+
+    return canvas

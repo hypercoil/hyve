@@ -377,7 +377,7 @@ def overlay_scalar_bars(
                 width=width,
                 length=length,
             )
-        fig = builder()
+        fig = builder(backend='matplotlib')
         # TODO: This is really a terrible hack to get the sizes to always be
         #       consistent. I'm not sure why the sizes are inconsistent in the
         #       first place. But this is all the more reason to drop
