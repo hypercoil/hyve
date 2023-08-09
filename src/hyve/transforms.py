@@ -1541,7 +1541,7 @@ def save_figure(
     fname_spec: Optional[str] = None,
     scalar_bar_action: Literal['overlay', 'collect'] = 'overlay',
     suffix: Optional[str] = 'scene',
-    extension: str = 'png',
+    extension: str = 'svg',
 ) -> callable:
     def transform(
         f: callable,
@@ -1585,7 +1585,7 @@ def save_grid(
     fname_spec: Optional[str] = None,
     scalar_bar_action: Literal['overlay', 'collect'] = 'overlay',
     suffix: Optional[str] = 'scene',
-    extension: str = 'png',
+    extension: str = 'svg',
 ) -> callable:
     def transform(
         f: callable,

@@ -28,7 +28,6 @@ import pyvista as pv
 from conveyant import Primitive, emulate_assignment
 from matplotlib import cm, colors
 
-from .actors2d import ScalarBarBuilder, _uniquify_names
 from .const import (
     DEFAULT_CMAP,
     DEFAULT_COLOR,
@@ -67,6 +66,7 @@ from .const import (
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Tensor,
 )
+from .elements import ScalarBarBuilder, _uniquify_names
 from .surf import (
     CortexTriSurface,
 )
@@ -1711,7 +1711,7 @@ def base_plotter(
     copy_actors: bool = False,
     theme: Optional[Any] = None,
     window_size: Optional[Tuple[int, int]] = None,
-    return_actors2d: bool = False,
+    return_builders: bool = False,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,
     **params,
@@ -1765,7 +1765,7 @@ def base_plotter(
         plotter=params['plotter'],
         builders=params['scalar_bar_builders'],
     )
-    actors2d = {'scalar_bar': scalar_bar}
+    builders = {'scalar_bar': scalar_bar}
 
     if postprocessors is None or len(postprocessors) == 0:
         postprocessors = [_null_postprocessor]
@@ -1779,8 +1779,8 @@ def base_plotter(
             pass
     out = tuple(w(plotter=plotter) for w in postprocessors)
 
-    if return_actors2d:
-        return out, actors2d
+    if return_builders:
+        return out, builders
     return out
 
 

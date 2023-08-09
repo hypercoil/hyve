@@ -25,6 +25,7 @@ import nibabel as nb
 import numpy as np
 import pandas as pd
 import pyvista as pv
+import svg
 from conveyant import (
     Composition,
     Primitive,
@@ -40,10 +41,9 @@ from conveyant.compositors import (
     reversed_args_compositor,
 )
 from conveyant.replicate import _flatten, _flatten_to_depth, replicate
-from matplotlib.colors import ListedColormap
+from matplotlib import colors
 from PIL import Image
 
-from .actors2d import tile_actors2d
 from .const import (
     EDGE_ALPHA_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
@@ -77,6 +77,7 @@ from .const import (
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Tensor,
 )
+from .elements import RasterBuilder, build_raster_svg, tile_plot_elements
 from .layout import AnnotatedLayout, CellLayout, grid
 from .plot import (
     EdgeLayer,
@@ -100,7 +101,6 @@ from .util import (
     filter_node_data,
     format_position_as_string,
     sanitise,
-    scale_image_preserve_aspect_ratio,
     set_default_views,
 )
 
@@ -355,7 +355,7 @@ def _cmap_impl_hemisphere(
     parcellation = surf.point_data[hemisphere][parcellation]
     start = int(np.min(parcellation[parcellation != null_value])) - 1
     stop = int(np.max(parcellation))
-    cmap = ListedColormap(colours[start:stop, :3])
+    cmap = colors.ListedColormap(colours[start:stop, :3])
     clim = (start + 0.1, stop + 0.9)
     return cmap, clim
 
@@ -430,7 +430,7 @@ def make_cmap_f(
         #       above.
         cmin = min(clim_left[0], clim_right[0])
         cmax = max(clim_left[1], clim_right[1])
-        cmap = ListedColormap(colours[:, :3])
+        cmap = colors.ListedColormap(colours[:, :3])
         clim = (cmin, cmax)
         ret += [(cmap, clim)]
     if len(ret) == 1:
@@ -1674,7 +1674,7 @@ def save_figure_f(
     sort_by: Optional[Sequence[str]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
-    extension: str = 'png',
+    extension: str = 'svg',
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
 ) -> None: # Union[Tuple[Image.Image], Image.Image]:
@@ -1725,22 +1725,54 @@ def save_figure_f(
     cells = list(layout.partition(*canvas_size, padding=padding))
 
     def writer(snapshot_group, fname):
-        canvas = Image.new('RGBA', canvas_size, color=canvas_color)
+        _canvas_color = colors.to_hex(canvas_color)
+        bg = svg.Rect(
+            id='background',
+            height=canvas_size[1],
+            width=canvas_size[0],
+            fill=_canvas_color,
+        )
+        groups = [
+            svg.G(
+                id='background',
+                elements=[bg],
+                transform=[],
+            )
+        ]
         for i, (cimg, cmeta) in snapshot_group:
             panel = cells[i]
-            cimg = Image.fromarray(cimg, mode='RGB')
-            cimg = scale_image_preserve_aspect_ratio(
-                cimg,
-                target_size=panel.cell_dim,
+            if not isinstance(cimg, svg.SVG):
+                builder = RasterBuilder(
+                    content=cimg,
+                    bounding_box_height=panel.cell_dim[1],
+                    bounding_box_width=panel.cell_dim[0],
+                    fmt='png',
+                )
+                cgroup = build_raster_svg(**builder).elements[0]
+            else:
+                cgroup = cimg.elements[0]
+            ctransform = cgroup.transform or []
+            transform = [svg.Translate(*panel.cell_loc)]
+            cgroup = svg.G(
+                id=cgroup.id,
+                elements=cgroup.elements,
+                transform=ctransform + transform,
             )
-            canvas.paste(cimg, panel.cell_loc)
-        canvas.save(fname)
+            groups.append(cgroup)
+        canvas = svg.SVG(
+            id='canvas',
+            elements=groups,
+            height=canvas_size[1],
+            width=canvas_size[0],
+        )
+        with open(fname, 'w') as f:
+            f.write(canvas.__str__())
 
-    actors2d_fields = list(
+    elements_fields = list(
         set(
             sum(
                 [
-                    list(cmeta.get('actors2d', {}).keys())
+                    list(cmeta.get('elements', {}).keys())
                     for snapshot_group in snapshots
                     for (_, (_, cmeta)) in snapshot_group
                 ],
@@ -1748,61 +1780,42 @@ def save_figure_f(
             )
         )
     )
-    if actors2d_fields and getattr(layout, 'annotations', None) is not None:
-        queries = [{'actors2d': cfield} for cfield in actors2d_fields]
+    if elements_fields and getattr(layout, 'annotations', None) is not None:
+        queries = [{'elements': cfield} for cfield in elements_fields]
         # Each assignment should not "fill" a slot since we might want to
-        # assign multiple actors2d fields to a single cell. Because layout is
+        # assign multiple elements fields to a single cell. Because layout is
         # not mutable, this shouldn't be a problem.
-        actors2d_asgt = [layout.match_and_assign(query=q) for q in queries]
-        _, actors2d_asgt = zip(*actors2d_asgt)
-        actors2d_asgt = {
+        elements_asgt = [layout.match_and_assign(query=q) for q in queries]
+        _, elements_asgt = zip(*elements_asgt)
+        elements_asgt = {
             k: v
-            for k, v in zip(actors2d_fields, actors2d_asgt)
+            for k, v in zip(elements_fields, elements_asgt)
             if v < len(cells)
         }
     else:
-        actors2d_asgt = {}
+        elements_asgt = {}
     for i, snapshot_group in enumerate(snapshots):
         page = f'{i + 1:{len(str(n_pages))}d}'
-        if actors2d_asgt:
-            actors2d = [
-                cmeta['actors2d'] for (_, (_, cmeta)) in snapshot_group
+        if elements_asgt:
+            elements = [
+                cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
             ]
-            actors2d = _seq_to_dict(actors2d, merge_type='union')
-        for cell_idx in set(actors2d_asgt.values()):
+            elements = _seq_to_dict(elements, merge_type='union')
+        for cell_idx in set(elements_asgt.values()):
             if cell_idx >= len(cells):
                 continue
-            actors2d_cell = [
-                k for k, v in actors2d_asgt.items() if v == cell_idx
+            elements_cell = [
+                k for k, v in elements_asgt.items() if v == cell_idx
             ]
             builders_cell = list(chain(*[
-                actors2d[k] for k in actors2d_cell
+                elements[k] for k in elements_cell
             ]))
-            cellimg = tile_actors2d(
+            cellimg = tile_plot_elements(
                 builders=builders_cell,
                 max_dimension=cells[cell_idx].cell_dim,
                 background_color=canvas_color,
             )
-            if cellimg is not None:
-                # We have to stupidly and wastefully alpha composite the 2D
-                # actors onto the cell background because matplotlib
-                # (predictably) doesn't do what it's supposed to do. We should
-                # fix this by using a different backend to build a SVG image
-                # programmatically.
-                from .util import premultiply_alpha, source_over
-                cellbg = np.array(Image.new(
-                    'RGBA',
-                    cells[cell_idx].cell_dim,
-                    color=canvas_color,
-                ))
-                #cellimg = cellimg
-                cellbg = premultiply_alpha(cellbg / 255)
-                cellimg = premultiply_alpha(cellimg / 255)
-                # drop alpha channel
-                cellimg = (255 * source_over(cellimg, cellbg)[..., :3]).astype(
-                    np.uint8
-                )
-                snapshot_group.append((cell_idx, (cellimg, {})))
+            snapshot_group.append((cell_idx, (cellimg, {})))
 
         write_f(
             writer=writer,
@@ -1825,7 +1838,7 @@ def save_grid_f(
     annotations: Optional[Mapping[int, Mapping]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
-    extension: str = 'png',
+    extension: str = 'svg',
     order: Literal['row', 'column'] = 'row',
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
@@ -1920,7 +1933,7 @@ def automap_unified_plotter_f(
     postprocessors: Optional[
         Sequence[Mapping[str, Tuple[callable, callable]]]
     ] = None,
-    actors2d: Optional[Sequence] = None,
+    elements: Optional[Sequence] = None,
     map_spec: Optional[Sequence] = None,
 ) -> Optional[pv.Plotter]:
     params = locals()
@@ -1953,7 +1966,7 @@ def automap_unified_plotter_f(
     postprocessor_names, postprocessors = zip(*postprocessors.items())
     postprocessors, auxwriters = zip(*postprocessors)
 
-    builders = params.pop('actors2d', None)
+    builders = params.pop('elements', None)
     if builders is None:
         builders = {}
 
@@ -1975,11 +1988,11 @@ def automap_unified_plotter_f(
             },
             sbprocessor=sbprocessor,
             postprocessors=postprocessors,
-            return_actors2d=True,
+            return_builders=True,
         )
         for i in range(n_replicates)
     ]
-    output, actors2d = zip(*output)
+    output, elements = zip(*output)
     output = {
         k: tuple(_flatten_to_depth(v, 1))
         for k, v in zip(postprocessor_names, zip(*output))
@@ -1994,26 +2007,27 @@ def automap_unified_plotter_f(
         )
         for i in range(n_replicates)
     ]
-    # TODO: we're sticking the actors2d into the metadata here as a hack to
-    #       access them later, but this is not really where they belong.
-    for cmeta, cactors2d in zip(metadata, actors2d):
+    # TODO: we're sticking the 2D plot elements into the metadata here as a
+    #       hack to access them later, but this is not really where they
+    #       belong.
+    for cmeta, celements in zip(metadata, elements):
         len_cmeta = len(next(iter(cmeta[0].values())))
         meta_asgts = [
             {k: v[i] for k, v in cmeta[0].items()} for i in range(len_cmeta)
         ]
-        cactors2d = {**builders, **cactors2d}
-        cactors2d = {k: v for k, v in cactors2d.items() if v is not None}
-        cactors2d = [
+        celements = {**builders, **celements}
+        celements = {k: v for k, v in celements.items() if v is not None}
+        celements = [
             {
                 k: tuple(
                     c.eval_spec(asgt)
                     for c in v
                 )
-                for k, v in cactors2d.items()
+                for k, v in celements.items()
             }
             for asgt in meta_asgts
         ]
-        cmeta[0]['actors2d'] = cactors2d
+        cmeta[0]['elements'] = celements
     metadata = {
         k: tuple(_flatten_to_depth([_dict_to_seq(val) for val in v], 1))
         for k, v in zip(postprocessor_names, zip(*metadata))
