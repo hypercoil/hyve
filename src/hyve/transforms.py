@@ -1491,7 +1491,6 @@ def plot_to_display(
 
         @splice_on(f, occlusion=('off_screen',))
         def f_transformed(**params):
-            _ = params.pop('off_screen', False)
             _window_size = params.pop('window_size', window_size)
             if _window_size == DEFAULT_WINDOW_SIZE:
                 _window_size = window_size

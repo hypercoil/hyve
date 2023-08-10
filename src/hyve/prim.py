@@ -34,6 +34,7 @@ from conveyant import (
 from conveyant import (
     FunctionWrapper as F,
 )
+from conveyant import splice_on as splice_on_orig
 from conveyant.compositors import (
     _dict_to_seq,
     _seq_to_dict,
@@ -70,12 +71,10 @@ from .const import (
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
     POINTS_SCALARS_DEFAULT_VALUE,
-    POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
-    SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Tensor,
 )
 from .elements import RasterBuilder, build_raster, tile_plot_elements
@@ -87,6 +86,10 @@ from .plot import (
     _get_hemisphere_parameters,
     _null_auxwriter,
     _null_op,
+    hemisphere_slack_fit,
+    plot_network_f,
+    plot_points_f,
+    plot_surf_f,
     plotted_entities,
     unified_plotter,
 )
@@ -1863,51 +1866,19 @@ def write_f(
     return writer(argument, fname)
 
 
-# TODO: This function should really be transformed by binding plot primitives.
-#       Otherwise, why atomise the primitives in the first place? We'll do
-#       this when we want to add the next primitive -- reconstructed surfaces
-#       or contours -- to the plotter.
+def splice_on(f):
+    return splice_on_orig(
+        f, kwonly_only=True, strict_emulation=False, allow_variadic=True
+    )
+
+
+@splice_on(plot_surf_f)
+@splice_on(plot_points_f)
+@splice_on(plot_network_f)
+@splice_on(hemisphere_slack_fit)
 def automap_unified_plotter_f(
     *,
-    surf: Optional['CortexTriSurface'] = None,
-    surf_projection: str = 'pial',
-    surf_alpha: float = 1.0,
-    surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
-    surf_scalars_boundary_color: str = 'black',
-    surf_scalars_boundary_width: int = 0,
-    surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
-    surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
-    surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-    surf_scalars_layers = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
-    points: Optional[PointDataCollection] = None,
-    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
-    points_alpha: float = 1.0,
-    points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
-    points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
-    points_scalars_below_color: str = POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-    points_scalars_layers: Union[
-        Optional[Sequence[Layer]],
-        Tuple[Optional[Sequence[Layer]]]
-    ] = POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
-    networks: Optional[NetworkDataCollection] = None,
-    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
-    node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
-    node_radius_range: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
-    node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
-    node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
-    node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
-    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
-    edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
-    edge_radius_range: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
-    edge_cmap: Any = EDGE_CMAP_DEFAULT_VALUE,
-    edge_clim: Tuple[float, float] = EDGE_CLIM_DEFAULT_VALUE,
-    edge_alpha: Union[float, str] = EDGE_ALPHA_DEFAULT_VALUE,
-    network_layers: Union[
-        Optional[Sequence[NodeLayer]],
-        Tuple[Optional[Sequence[NodeLayer]]]
-    ] = None,
     hemisphere: Optional[Literal['left', 'right']] = None,
-    hemisphere_slack: Optional[Union[float, Literal['default']]] = 'default',
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
@@ -1919,8 +1890,10 @@ def automap_unified_plotter_f(
     ] = None,
     elements: Optional[Sequence] = None,
     map_spec: Optional[Sequence] = None,
+    **params,
 ) -> Optional[pv.Plotter]:
-    params = locals()
+    params = {**params, **locals()}
+    _ = params.pop('params')
     map_spec = map_spec or [
         'surf_projection',
         'surf_scalars',
