@@ -1346,14 +1346,12 @@ def plot_to_image() -> callable:
             *,
             views: Union[Sequence, Literal['__default__']] = '__default__',
             window_size: Tuple[int, int] = (1300, 1000),
-            plot_scalar_bar: bool = False,
             **params,
         ):
             postprocessor = Partial(
                 _postprocessor,
                 views=views,
                 window_size=window_size,
-                plot_scalar_bar=plot_scalar_bar,
                 __allowed__=('hemispheres', 'close_plotter'),
             )
             # The inconsistent naming of the `hemisphere` parameter is
@@ -1401,14 +1399,12 @@ def plot_final_image(
         def f_transformed(
             *,
             window_size: Tuple[int, int] = (1920, 1080),
-            plot_scalar_bar: bool = False,
             **params,
         ):
             postprocessor = Partial(
                 _postprocessor,
                 n_scenes=n_scenes,
                 window_size=window_size,
-                plot_scalar_bar=plot_scalar_bar,
                 __allowed__=('close_plotter',),
             )
             auxwriter = Partial(

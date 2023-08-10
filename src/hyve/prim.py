@@ -77,7 +77,7 @@ from .const import (
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     Tensor,
 )
-from .elements import RasterBuilder, build_raster_svg, tile_plot_elements
+from .elements import RasterBuilder, build_raster, tile_plot_elements
 from .layout import AnnotatedLayout, CellLayout, grid
 from .plot import (
     EdgeLayer,
@@ -1493,7 +1493,6 @@ def plot_to_image_f(
     views: Union[Sequence, Mapping, Literal['__default__']] = '__default__',
     window_size: Tuple[int, int] = (1920, 1080),
     hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
-    plot_scalar_bar: bool = False,
     close_plotter: bool = True,
 ) -> Tuple[Tensor]:
     if len(hemispheres) == 1:
@@ -1507,13 +1506,6 @@ def plot_to_image_f(
     if views == '__default__':
         views = set_default_views(hemisphere)
     ret = []
-    if not plot_scalar_bar:
-        # TODO: This breaks if there's more than one scalar bar. We'll
-        #       overhaul the bar plotter system when we add overlays.
-        try:
-            plotter.remove_scalar_bar()
-        except (IndexError, ValueError):
-            pass
     for cpos in views:
         plotter.camera.zoom('tight')
         plotter.show(
@@ -1563,16 +1555,8 @@ def plot_final_view_f(
     plotter: pv.Plotter,
     window_size: Tuple[int, int] = (1920, 1080),
     n_scenes: int = 1,
-    plot_scalar_bar: bool = False,
     close_plotter: bool = True,
 ) -> Tuple[Tensor]:
-    if not plot_scalar_bar:
-        # TODO: This breaks if there's more than one scalar bar. We'll
-        #       overhaul the bar plotter system when we add overlays.
-        try:
-            plotter.remove_scalar_bar()
-        except (IndexError, ValueError):
-            pass
     snapshots = [
         plotter.show(
             window_size=window_size,
@@ -1748,7 +1732,7 @@ def save_figure_f(
                     bounding_box_width=panel.cell_dim[0],
                     fmt='png',
                 )
-                cgroup = build_raster_svg(**builder).elements[0]
+                cgroup = build_raster(**builder).elements[0]
             else:
                 cgroup = cimg.elements[0]
             ctransform = cgroup.transform or []
@@ -1813,7 +1797,6 @@ def save_figure_f(
             cellimg = tile_plot_elements(
                 builders=builders_cell,
                 max_dimension=cells[cell_idx].cell_dim,
-                background_color=canvas_color,
             )
             snapshot_group.append((cell_idx, (cellimg, {})))
 

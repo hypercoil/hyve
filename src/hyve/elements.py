@@ -11,6 +11,7 @@ import dataclasses
 import io
 from abc import abstractmethod
 from collections.abc import Mapping as MappingABC
+from statistics import median
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
@@ -118,6 +119,7 @@ class ScalarBarBuilder(ElementBuilder):
     font_outline_multiplier: float = (
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
     )
+    priority: int = 0
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, ScalarBarBuilder):
@@ -191,6 +193,7 @@ class TextBuilder(ElementBuilder):
     bounding_box_width: Optional[int] = TEXT_DEFAULT_BOUNDING_BOX_WIDTH
     bounding_box_height: Optional[int] = TEXT_DEFAULT_BOUNDING_BOX_HEIGHT
     angle: int = TEXT_DEFAULT_ANGLE
+    priority: int = 0
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, TextBuilder):
@@ -239,6 +242,7 @@ class RasterBuilder(ElementBuilder):
     bounding_box_height: int = RASTER_DEFAULT_BOUNDING_BOX_HEIGHT
     bounding_box_width: int = RASTER_DEFAULT_BOUNDING_BOX_WIDTH
     fmt: str = RASTER_DEFAULT_FORMAT
+    priority: int = 0
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, RasterBuilder):
@@ -299,6 +303,7 @@ def build_text_box(
     bounding_box_height: int = TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
     angle: int = TEXT_DEFAULT_ANGLE,
     backend: Optional[str] = None,
+    **params: Any,
 ):
     if backend is None:
         backend = get_default_backend()
@@ -500,6 +505,7 @@ def build_scalar_bar(
         SCALAR_BAR_DEFAULT_FONT_OUTLINE_MULTIPLIER
     ),
     backend: Optional[str] = None,
+    **params: Any,
 ) -> Figure:
     """
     Build a scalar bar.
@@ -892,16 +898,15 @@ def build_raster(
     bounding_box_width: int = RASTER_DEFAULT_BOUNDING_BOX_WIDTH,
     fmt: str = RASTER_DEFAULT_FORMAT,
     backend: Optional[str] = None,
+    **params: Any,
 ) -> Any:
     if backend is None:
         backend = get_default_backend()
     params = {
-        'type': 'raster',
         'content': content,
         'bounding_box_height': bounding_box_height,
         'bounding_box_width': bounding_box_width,
         'fmt': fmt,
-        'backend': backend,
     }
     if backend == 'svg':
         return build_raster_svg(**params)
@@ -935,7 +940,7 @@ def build_raster_svg(
     image_height = int(image_height * scale)
     shift_x = (bounding_box_width - image_width) // 2
     shift_y = (bounding_box_height - image_height) // 2
-    transform = [svg.Scale(scale, scale), svg.Translate(shift_x, shift_y)]
+    transform = [svg.Translate(shift_x, shift_y)]
 
     # By convention, we wrap it in a singleton group before returning
     img = svg.Image(
@@ -944,12 +949,11 @@ def build_raster_svg(
         ).decode('ascii'),
         width=image_width,
         height=image_height,
-        transform=transform,
     )
     return svg.SVG(
         width=bounding_box_width,
         height=bounding_box_height,
-        elements=[svg.G(elements=[img])],
+        elements=[svg.G(elements=[img], transform=transform)],
         viewBox=f'0 0 {bounding_box_width} {bounding_box_height}',
     )
 
@@ -969,7 +973,6 @@ def tile_plot_elements(
     spacing: float = SCALAR_BAR_DEFAULT_SPACING,
     max_dimension: Optional[Tuple[int, int]] = None,
     require_unique_names: bool = True,
-    background_color: Any = (0, 0, 0, 255),
 ) -> Optional[Tensor]:
     builders = [b for b in builders if b is not None]
     if len(builders) == 0:
@@ -977,16 +980,17 @@ def tile_plot_elements(
     # Algorithm from https://stackoverflow.com/a/28268965
     if require_unique_names:
         builders = _uniquify_names(builders)
+    builders = sorted(builders, key=lambda b: b.priority)
     count = len(builders)
     max_width, max_height = max_dimension
     if spacing < 1:
         spacing = spacing * min(max_width, max_height)
     spacing = int(spacing)
-    width = max([
+    width = median([
         builder.canvas_width
         for builder in builders
     ])
-    height = max([
+    height = median([
         builder.canvas_height
         for builder in builders
     ])
@@ -1009,7 +1013,7 @@ def tile_plot_elements(
     height = int(scalar * height)
     # End algorithm from https://stackoverflow.com/a/28268965
 
-    elements = []
+    builders_scaled = []
     for builder in builders:
         builder_width = builder.canvas_width
         builder_height = builder.canvas_height
@@ -1018,13 +1022,22 @@ def tile_plot_elements(
             height=int(scale * builder_height),
             width=int(scale * builder_width),
         )
-        fig = builder()
-        # The first element should always be a group containing the actual
-        # plot elements
-        elements += [fig.elements[0]]
+        builders_scaled.append(builder)
 
+    # layout is in array convention, i.e. (nrow, ncol)
+    # max_dimension, active_canvas_size, and offset are in Cartesian
+    # convention, i.e. (width, height)
+    # Things are about to get confusing because we're switching back and forth
+    # between these conventions. Sorry.
     #tight = {0: 'row', 1: 'col'}[np.argmin(layout)]
-    argtight = np.argmin(layout)
+    active_canvas_size_guess = (
+        layout[1] * width + (layout[1] - 1) * spacing,
+        layout[0] * height + (layout[0] - 1) * spacing,
+    )
+    argtight = 1 - np.argmin([
+        i - j
+        for i, j in zip(max_dimension, active_canvas_size_guess)
+    ])
     argslack = 1 - argtight
     counttight = layout[argtight]
     countslack = np.ceil(count / counttight).astype(int)
@@ -1032,8 +1045,6 @@ def tile_plot_elements(
     layout[argtight] = counttight
     layout[argslack] = countslack
 
-    # Things are about to get confusing because we're switching back and forth
-    # between array convention and Cartesian convention. Sorry.
     active_canvas_size = (
         layout[1] * width + (layout[1] - 1) * spacing,
         layout[0] * height + (layout[0] - 1) * spacing,
@@ -1042,21 +1053,28 @@ def tile_plot_elements(
     offset[1 - argslack] = (
         max_dimension[1 - argslack] - active_canvas_size[1 - argslack]
     ) // 2
+    base_offset = [o for o in offset]
     canvas_elements = []
-    for i, element in enumerate(elements):
+    for i, builder in enumerate(builders_scaled):
+        element = builder().elements[0]
+        internal_displacement = [
+            (width - builder.canvas_width) // 2,
+            (height - builder.canvas_height) // 2,
+        ]
         transform = element.transform + [
-            svg.Translate(*tuple(int(o) for o in offset))
+            svg.Translate(
+                offset[0] + internal_displacement[0],
+                offset[1] + internal_displacement[1],
+            )
         ]
         element.transform = transform
         canvas_elements.append(element)
         # Filling this in row-major order
-        #print(offset)
         if i % layout[1] == layout[1] - 1:
-            offset[0] = 0
+            offset[0] = base_offset[0]
             offset[1] += height + spacing
         else:
             offset[0] += width + spacing
-        #assert 0
 
     collection = svg.G(
         id='elements2d-collection',
