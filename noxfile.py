@@ -32,7 +32,7 @@ def report(session):
     session.install('coverage[toml]')
     session.run(
         'coverage',
-        'report', '--fail-under=80',
+        'report', '--fail-under=85',
         "--omit='*test*,*__init__*'",
     )
     session.run(

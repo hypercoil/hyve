@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hyve"
-version = "0.0.1"
+version = "0.0.2.dev1"
 description = "Interactive and static 3D visualisation for functional brain mapping"
 authors = [
   { name = "Rastko Ciric", email = "rastko@stanford.edu" },
@@ -28,7 +28,6 @@ dependencies = [
     "nibabel",
     "numpy",
     "pandas",
-    "pkg_resources",
     "pyvista",
     "scipy",
     "svg.py",
