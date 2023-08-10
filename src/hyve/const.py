@@ -14,6 +14,7 @@ from matplotlib import rcParams
 
 DEFAULT_CMAP = None
 DEFAULT_COLOR = 'white'
+DEFAULT_WINDOW_SIZE = (1920, 1080)
 TYPICAL_DPI = round(rcParams['figure.dpi'])
 
 LAYER_CLIM_DEFAULT_VALUE = None

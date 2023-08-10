@@ -31,6 +31,7 @@ from matplotlib import cm, colors
 from .const import (
     DEFAULT_CMAP,
     DEFAULT_COLOR,
+    DEFAULT_WINDOW_SIZE,
     EDGE_ALPHA_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
     EDGE_CMAP_DEFAULT_VALUE,
@@ -1710,7 +1711,7 @@ def base_plotter(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
-    window_size: Optional[Tuple[int, int]] = None,
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     return_builders: bool = False,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[Sequence[callable]] = None,

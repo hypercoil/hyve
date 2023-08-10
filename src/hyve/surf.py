@@ -1115,6 +1115,7 @@ class CortexTriSurface:
                 f'Invalid hemisphere: {hemisphere}. '
                 'Must be "left" or "right".'
             )
+        scalars_data[np.isnan(scalars_data)] = -np.inf
         return proj_data[np.argmax(scalars_data)]
 
     def poles(self, hemisphere: str) -> Tensor:

@@ -45,6 +45,7 @@ from matplotlib import colors
 from PIL import Image
 
 from .const import (
+    DEFAULT_WINDOW_SIZE,
     EDGE_ALPHA_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
     EDGE_CMAP_DEFAULT_VALUE,
@@ -1491,7 +1492,7 @@ def auto_camera_aux_f(
 def plot_to_image_f(
     plotter: pv.Plotter,
     views: Union[Sequence, Mapping, Literal['__default__']] = '__default__',
-    window_size: Tuple[int, int] = (1920, 1080),
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     hemispheres: Sequence[Literal['left', 'right', 'both']] = None,
     close_plotter: bool = True,
 ) -> Tuple[Tensor]:
@@ -1553,7 +1554,7 @@ def plot_to_image_aux_f(
 
 def plot_final_view_f(
     plotter: pv.Plotter,
-    window_size: Tuple[int, int] = (1920, 1080),
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     n_scenes: int = 1,
     close_plotter: bool = True,
 ) -> Tuple[Tensor]:
@@ -1572,7 +1573,7 @@ def plot_final_view_f(
 
 def plot_to_html_buffer_f(
     plotter: pv.Plotter,
-    window_size: Tuple[int, int] = (1920, 1080),
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     close_plotter: bool = True,
 ) -> StringIO:
     plotter.window_size = window_size
@@ -1630,7 +1631,7 @@ def save_html_f(
 
 def plot_to_display_f(
     plotter: Sequence[Tuple[pv.Plotter, Mapping[str, str]]],
-    window_size: Tuple[int, int] = (1920, 1080),
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
 ) -> None:
     def writer(plotter, fname=None):
         # TODO: window_size apparently does not work. Perhaps it's inheriting
@@ -1910,7 +1911,7 @@ def automap_unified_plotter_f(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
-    window_size: Optional[Tuple[int, int]] = None,
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     use_single_plotter: bool = True,
     sbprocessor: Optional[callable] = None,
     postprocessors: Optional[

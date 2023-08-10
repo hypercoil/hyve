@@ -29,7 +29,7 @@ from conveyant import splice_on as splice_on_orig
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
 
-from .const import REQUIRED, Tensor
+from .const import DEFAULT_WINDOW_SIZE, REQUIRED, Tensor
 from .layout import CellLayout
 from .plot import _null_sbprocessor, overlay_scalar_bars
 from .prim import (
@@ -1345,7 +1345,7 @@ def plot_to_image() -> callable:
         def f_transformed(
             *,
             views: Union[Sequence, Literal['__default__']] = '__default__',
-            window_size: Tuple[int, int] = (1300, 1000),
+            window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
             **params,
         ):
             postprocessor = Partial(
@@ -1398,7 +1398,7 @@ def plot_final_image(
         @splice_on(f, occlusion=('off_screen', 'window_size'))
         def f_transformed(
             *,
-            window_size: Tuple[int, int] = (1920, 1080),
+            window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
             **params,
         ):
             postprocessor = Partial(
@@ -1452,7 +1452,7 @@ def plot_to_html(
         def f_transformed(
             *,
             output_dir: str,
-            window_size: Tuple[int, int] = (1920, 1080),
+            window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
             **params,
         ):
             postprocessor = Partial(
@@ -1478,7 +1478,7 @@ def plot_to_html(
 
 
 def plot_to_display(
-    window_size: Tuple[int, int] = (1300, 1000),
+    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
 ) -> callable:
     def transform(
         f: callable,
@@ -1492,9 +1492,12 @@ def plot_to_display(
         @splice_on(f, occlusion=('off_screen',))
         def f_transformed(**params):
             _ = params.pop('off_screen', False)
+            _window_size = params.pop('window_size', window_size)
+            if _window_size == DEFAULT_WINDOW_SIZE:
+                _window_size = window_size
             return compositor(transformer_f, f)()(
                 off_screen=False,
-                window_size=window_size,
+                window_size=_window_size,
                 **params,
             )
 
