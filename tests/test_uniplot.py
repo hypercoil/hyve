@@ -64,6 +64,7 @@ def test_unified_plotter():
         name='data',
         cmap='hot',
         cmap_negative='cool',
+        below_color='white',
         clim=(1.5, 3.0),
         alpha=0.8,
     )
@@ -133,6 +134,7 @@ def test_unified_plotter():
         name='sphere',
         cmap='Reds',
         cmap_negative='Blues',
+        below_color=(0, 0, 0, 0),
         clim=(1.0, 2.0),
         alpha=0.8,
     )

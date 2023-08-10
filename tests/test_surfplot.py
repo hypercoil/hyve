@@ -221,7 +221,8 @@ def test_parcellated_scalars():
             resolution=2
         ),
         surf_projection=['inflated'],
-        surf_scalars_clim=(0.2, 0.9),
+        surf_scalars_clim=(0.1, 0.9),
+        surf_scalars_below_color=(0, 0, 0, 0),
         hemisphere=['left', 'right'],
         output_dir='/tmp',
     )
@@ -247,6 +248,7 @@ def test_parcellated_scalars():
         surf_projection=['inflated'],
         surf_scalars_clim=(0, 1),
         surf_scalars_cmap='inferno',
+        surf_scalars_below_color=(0, 0, 0, 0),
         hemisphere=['left', 'right'],
         output_dir='/tmp',
     )
