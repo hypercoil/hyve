@@ -4,12 +4,7 @@
 """
 Unit tests for elementary brain volume visualisations
 """
-import pytest
-
-from pkg_resources import resource_filename as pkgrf
-
-import nibabel as nb
-
+from hyve_examples import get_pain_thresh_nifti
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
@@ -20,7 +15,7 @@ from hyve.transforms import (
 
 
 def test_vol_scalars():
-    nii = nb.load('/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz')
+    nii = get_pain_thresh_nifti()
     plot_f = plotdef(
         surf_from_archive(),
         points_scalars_from_nifti('pain'),

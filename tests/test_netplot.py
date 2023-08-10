@@ -4,13 +4,16 @@
 """
 Unit tests for elementary brain network visualisations
 """
-from pkg_resources import resource_filename as pkgrf
 
 import numpy as np
 import pandas as pd
 
+from hyve_examples import (
+    get_schaefer400_synthetic_conmat,
+    get_schaefer400_cifti,
+)
 from hyve.flows import plotdef
-from hyve.flows import add_network_data, joindata
+from hyve.flows import add_network_data
 from hyve.transforms import (
     surf_from_archive,
     surf_scalars_from_cifti,
@@ -26,12 +29,10 @@ from hyve.transforms import (
 
 
 def test_net():
-    parcellation = '/Users/rastkociric/Downloads/desc-schaefer_res-0400_atlas.nii'
-    cov = pd.read_csv(pkgrf(
-        'hypercoil',
-        'examples/synthetic/data/synth-regts/'
-        f'atlas-schaefer400_desc-synth_cov.tsv'
-    ), sep='\t', header=None).values
+    parcellation = get_schaefer400_cifti()
+    cov = pd.read_csv(
+        get_schaefer400_synthetic_conmat(), sep='\t', header=None
+    ).values
 
     vis_nodes_edge_selection = np.zeros(400, dtype=bool)
     vis_nodes_edge_selection[0:5] = True
@@ -84,12 +85,10 @@ def test_net():
 
 
 def test_net_highlight():
-    parcellation = '/Users/rastkociric/Downloads/desc-schaefer_res-0400_atlas.nii'
-    cov = pd.read_csv(pkgrf(
-        'hypercoil',
-        'examples/synthetic/data/synth-regts/'
-        f'atlas-schaefer400_desc-synth_cov.tsv'
-    ), sep='\t', header=None).values
+    parcellation = get_schaefer400_cifti()
+    cov = pd.read_csv(
+        get_schaefer400_synthetic_conmat(), sep='\t', header=None
+    ).values
 
     vis_nodes_edge_selection = np.zeros(400, dtype=bool)
     vis_nodes_edge_selection[0:2] = True

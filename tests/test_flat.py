@@ -6,11 +6,12 @@ Unit tests for flat map visualisations loaded from a GIfTI file
 """
 import pytest
 
-from pkg_resources import resource_filename as pkgrf
-
-import numpy as np
 import templateflow.api as tflow
 
+from hyve_examples import (
+    get_null400_cifti,
+    get_fsLR_flatmap_gifti,
+)
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_gifti,
@@ -19,8 +20,6 @@ from hyve.transforms import (
     parcellate_colormap,
     vertex_to_face,
     plot_to_image,
-    plot_to_display,
-    plot_to_html,
     save_snapshots,
 )
 
@@ -37,6 +36,7 @@ rh_mask = tflow.get(
     desc='nomedialwall',
     density='32k',
 )
+surf = get_fsLR_flatmap_gifti()
 
 
 @pytest.mark.ci_unsupported
@@ -44,22 +44,16 @@ def test_scalars():
     plot_f = plotdef(
         surf_from_gifti(projection='flat'),
         surf_scalars_from_nifti('GM Density', template='fsLR'),
-        # plot_to_display(),
         plot_to_image(),
         save_snapshots(
             fname_spec=(
                 'scalars-{surfscalars}_hemisphere-{hemisphere}_projection-flat'
             ),
         ),
-        # plot_to_html(
-        #     fname_spec=(
-        #         'scalars-{surfscalars}_hemisphere-{hemisphere}_projection-flat'
-        #     ),
-        # ),
     )
     plot_f(
-        left_surf='/Users/rastkociric/Downloads/S1200.L.flat.32k_fs_LR.surf.gii',
-        right_surf='/Users/rastkociric/Downloads/S1200.R.flat.32k_fs_LR.surf.gii',
+        left_surf=surf['left'],
+        right_surf=surf['right'],
         left_mask=lh_mask,
         right_mask=rh_mask,
         gm_density_nifti=tflow.get(
@@ -90,14 +84,11 @@ def test_parcellation(cmap):
         ),
     )
     plot_f(
-        left_surf='/Users/rastkociric/Downloads/S1200.L.flat.32k_fs_LR.surf.gii',
-        right_surf='/Users/rastkociric/Downloads/S1200.R.flat.32k_fs_LR.surf.gii',
+        left_surf=surf['left'],
+        right_surf=surf['right'],
         left_mask=lh_mask,
         right_mask=rh_mask,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
+        parcellation_cifti=get_null400_cifti(),
         hemisphere=['left', 'right'],
         views=['down'],
         output_dir='/tmp',

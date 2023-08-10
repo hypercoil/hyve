@@ -4,13 +4,9 @@
 """
 Unit tests for all views on a brain surface
 """
-import pytest
-
-from pkg_resources import resource_filename as pkgrf
-
-import numpy as np
 import templateflow.api as tflow
 
+from hyve_examples import get_null400_cifti
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
@@ -137,10 +133,7 @@ def test_allviews_parcellation():
     )
     plot_f(
         template='fsLR',
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
+        parcellation_cifti=get_null400_cifti(),
         surf_projection=('veryinflated',),
         elements={
             'title': (

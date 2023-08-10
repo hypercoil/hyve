@@ -6,6 +6,13 @@ Unit tests using the parcellations in the OHBM ``sparque`` poster
 """
 import pytest
 
+from hyve_examples import (
+    get_schaefer400_cifti,
+    get_myconnectomeWard400_nifti,
+    get_mscWard400_nifti,
+    get_glasser360_gifti,
+    get_gordon333_gifti,
+)
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
@@ -14,7 +21,6 @@ from hyve.transforms import (
     surf_scalars_from_array,
     surf_scalars_from_nifti,
     parcellate_colormap,
-    vertex_to_face,
     plot_to_image,
     save_snapshots,
 )
@@ -22,17 +28,11 @@ from hyve.util import sanitise
 
 @pytest.mark.parametrize('cmap', ['network', 'modal'])
 @pytest.mark.parametrize('parcellation_name, parcellation_path', [
-    ('Schaefer400', '/Users/rastkociric/Downloads/desc-schaefer_res-0400_atlas.nii'),
-    ('MyConnectomeWard400', '/Users/rastkociric/Downloads/myconnectome_ward400_parcellation.nii.gz'),
-    ('MSCWard400', '/Users/rastkociric/Downloads/MSC_ward400_parcellation.nii.gz'),
-    ('Glasser360', (
-        '/Users/rastkociric/Downloads/Glasser_2016.32k.L.label.gii',
-        '/Users/rastkociric/Downloads/Glasser_2016.32k.R.label.gii',
-    ),),
-    ('Gordon333', (
-        '/Users/rastkociric/Downloads/Gordon.32k.L.label.gii',
-        '/Users/rastkociric/Downloads/Gordon.32k.R.label.gii',
-    )),
+    ('Schaefer400', get_schaefer400_cifti()),
+    ('MyConnectomeWard400', get_myconnectomeWard400_nifti()),
+    ('MSCWard400', get_mscWard400_nifti()),
+    ('Glasser360', get_glasser360_gifti()),
+    ('Gordon333', get_gordon333_gifti()),
 ])
 def test_sparque(parcellation_name, parcellation_path, cmap):
 
@@ -55,8 +55,10 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
     # print(surf_data_L.shape, surf_data_R.shape)
 
     paramstr = sanitise(parcellation_name)
-    if isinstance(parcellation_path, tuple):
-        parcellation_path_L, parcellation_path_R = parcellation_path
+    if isinstance(parcellation_path, dict):
+        parcellation_path_L, parcellation_path_R = (
+            parcellation_path['left'], parcellation_path['right']
+        )
         filearg = {
             f'{paramstr}_gifti_left': parcellation_path_L,
             f'{paramstr}_gifti_right': parcellation_path_R,

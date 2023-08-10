@@ -6,6 +6,7 @@ Tests that require an interactive plotter display window
 """
 import pytest
 import templateflow.api as tflow
+from hyve_examples import get_pain_thresh_nifti
 from hyve.flows import plotdef
 from hyve.transforms import (
     plot_to_display,
@@ -34,7 +35,7 @@ def test_plotter_flow_syntax():
             label='GM',
             resolution=2
         ),
-        pain_nifti='/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz',
+        pain_nifti=get_pain_thresh_nifti(),
         surf_projection=('pial',),
         surf_alpha=0.5,
     )
@@ -49,7 +50,7 @@ def test_plotter_final_capture():
         plot_final_image(n_scenes=1), # n_scenes > 1 is not supported yet
         save_snapshots(
             fname_spec=(
-                'scalars-{scalars}_hemisphere-{hemisphere}_view-{view}'
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}'
             ),
         ),
     )
@@ -62,7 +63,7 @@ def test_plotter_final_capture():
             label='GM',
             resolution=2
         ),
-        pain_nifti='/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz',
+        pain_nifti=get_pain_thresh_nifti(),
         surf_projection=('pial',),
         surf_alpha=0.5,
         output_dir='/tmp',

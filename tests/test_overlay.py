@@ -5,11 +5,14 @@
 Unit tests for plots that contain multiple overlays
 """
 import pytest
-from pkg_resources import resource_filename
 
 import nibabel as nb
 import numpy as np
 
+from hyve_examples import (
+    get_null400_cifti,
+    get_pain_thresh_nifti,
+)
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
@@ -96,11 +99,8 @@ def test_parcellation_modal_cmap(output, v2f):
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=resource_filename(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
-        pain_nifti=nb.load('/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz'),
+        parcellation_cifti=get_null400_cifti(),
+        pain_nifti=nb.load(get_pain_thresh_nifti()),
         pain_cmap='inferno',
         pain_clim='robust',
         pain_alpha=0.5,

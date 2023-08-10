@@ -6,13 +6,16 @@ Unit tests for elementary surfplot-based visualisations
 """
 import pytest
 
-from pkg_resources import resource_filename as pkgrf
-
 import nibabel as nb
 import numpy as np
 import pandas as pd
 import pyvista as pv
 
+from hyve_examples import (
+    get_pain_thresh_nifti,
+    get_schaefer400_cifti,
+    get_schaefer400_synthetic_conmat,
+)
 from hyve.plot import unified_plotter, Layer
 from hyve.surf import CortexTriSurface
 from hyve.util import (
@@ -74,7 +77,7 @@ def test_unified_plotter():
         off_screen=False,
     )[0].show()
 
-    vol = nb.load("/Users/rastkociric/Downloads/pain_thresh_cFWE05.nii.gz")
+    vol = nb.load(get_pain_thresh_nifti())
     vol_data = vol.get_fdata()
     vol_loc = np.where(vol_data > 0)
     vol_scalars = vol_data[vol_data > 0]
@@ -142,7 +145,7 @@ def test_unified_plotter():
         off_screen=False,
     )[0].show()
 
-    parcellation = '/Users/rastkociric/Downloads/desc-schaefer_res-0400_atlas.nii'
+    parcellation = get_schaefer400_cifti()
     surf_lr = CortexTriSurface.from_tflow(load_mask=True, projections=('inflated',))
     surf_lr.add_vertex_dataset(
         'parcellation',
@@ -155,10 +158,9 @@ def test_unified_plotter():
         apply_mask=False,
     )
     node_coor = surf_lr.parcel_centres_of_mass('parcellation', 'inflated')
-    cov = pd.read_csv(pkgrf(
-        'hyve',
-        'data/examples/atlas-schaefer400_desc-synth_cov.tsv',
-    ), sep='\t', header=None).values
+    cov = pd.read_csv(
+        get_schaefer400_synthetic_conmat(), sep='\t', header=None
+    ).values
     vis_nodes_edge_selection = np.zeros(400, dtype=bool)
     vis_nodes_edge_selection[0:2] = True
     vis_nodes_edge_selection[200:202] = True

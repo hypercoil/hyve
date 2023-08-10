@@ -6,11 +6,13 @@ Unit tests for elementary brain surface visualisations
 """
 import pytest
 
-from pkg_resources import resource_filename as pkgrf
-
 import numpy as np
 import templateflow.api as tflow
 
+from hyve_examples import (
+    get_null400_cifti,
+    get_null400_gifti,
+)
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
@@ -76,10 +78,7 @@ def test_parcellation():
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
+        parcellation_cifti=get_null400_cifti(),
         surf_projection=('veryinflated',),
         hemisphere=['left', 'right'],
         views=[
@@ -103,10 +102,7 @@ def test_parcellation():
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
+        parcellation_cifti=get_null400_cifti(),
         surf_projection=('veryinflated',),
         surf_scalars_boundary_color='black',
         surf_scalars_boundary_width=5,
@@ -133,17 +129,12 @@ def test_parcellation_modal_cmap():
             ),
         ),
     )
+    parcellation_gifti = get_null400_gifti()
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_gifti_left=pkgrf(
-            'hyve',
-            'data/examples/nullexample_L.gii'
-        ),
-        parcellation_gifti_right=pkgrf(
-            'hyve',
-            'data/examples/nullexample_R.gii'
-        ),
+        parcellation_gifti_left=parcellation_gifti['left'],
+        parcellation_gifti_right=parcellation_gifti['right'],
         surf_projection=('veryinflated',),
         hemisphere=['left', 'right'],
         views=[
@@ -167,10 +158,7 @@ def test_parcellation_modal_cmap():
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
+        parcellation_cifti=get_null400_cifti(),
         surf_projection=('veryinflated',),
         surf_scalars_boundary_color='black',
         surf_scalars_boundary_width=5,
@@ -198,10 +186,7 @@ def test_parcellation_html():
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii'
-        ),
+        parcellation_cifti=get_null400_cifti(),
         surf_projection=['veryinflated'],
         # surf_scalars_boundary_color='black',
         # surf_scalars_boundary_width=5,
@@ -228,10 +213,7 @@ def test_parcellated_scalars():
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii',
-        ),
+        parcellation_cifti=get_null400_cifti(),
         gmdensity_nifti=tflow.get(
             template='MNI152NLin2009cAsym',
             suffix='probseg',
@@ -260,10 +242,7 @@ def test_parcellated_scalars():
     plot_f(
         template="fsLR",
         load_mask=True,
-        parcellation_cifti=pkgrf(
-            'hyve',
-            'data/examples/nullexample.nii',
-        ),
+        parcellation_cifti=get_null400_cifti(),
         noise_parcellated=parcellated,
         surf_projection=['inflated'],
         surf_scalars_clim=(0, 1),

@@ -31,6 +31,7 @@ dependencies = [
     "pkg_resources",
     "pyvista",
     "scipy",
+    "svg.py",
     "templateflow",
     "trame",
     "trame-vtk",
