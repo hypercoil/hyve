@@ -973,8 +973,11 @@ class CortexTriSurface:
             data, parcellation, 'right'
         )
         if sink is not None:
-            self.left.point_data[sink] = scattered_left
-            self.right.point_data[sink] = scattered_right
+            return self.add_vertex_dataset(
+                name=sink,
+                left_data=scattered_left.T,
+                right_data=scattered_right.T,
+            )
         return (scattered_left, scattered_right)
 
     def vertex_to_face(

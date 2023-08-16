@@ -492,13 +492,13 @@ def parcellate_surf_scalars_f(
         name=scalars,
         parcellation=parcellation_name,
     )
-    surf.scatter_into_parcels(
+    scalar_names = surf.scatter_into_parcels(
         data=parcellated,
         parcellation=parcellation_name,
         sink=sink,
     )
     if plot:
-        surf_scalars = tuple(list(surf_scalars) + [sink])
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
     return surf, surf_scalars
 
 
@@ -510,13 +510,13 @@ def scatter_into_parcels_f(
     surf_scalars: Sequence[str] = (),
     plot: bool = True,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
-    surf.scatter_into_parcels(
+    scalar_names = surf.scatter_into_parcels(
         data=parcellated,
         parcellation=parcellation_name,
         sink=scalars,
     )
     if plot:
-        surf_scalars = tuple(list(surf_scalars) + [scalars])
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
     return surf, surf_scalars
 
 
