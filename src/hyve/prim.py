@@ -150,6 +150,27 @@ def surf_from_gifti_f(
     return surf, (projection,)
 
 
+def surf_from_freesurfer_f(
+    left_surf: Union[str, Tuple[Tensor, Tensor]],
+    right_surf: Union[str, Tuple[Tensor, Tensor]],
+    projection: Optional[str] = None,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    if projection is None:
+        projection = 'unknown'
+    if isinstance(left_surf, str):
+        left_surf = nb.freesurfer.io.read_geometry(left_surf)
+    if isinstance(right_surf, str):
+        right_surf = nb.freesurfer.io.read_geometry(right_surf)
+    left_surf = {projection: left_surf}
+    right_surf = {projection: right_surf}
+    surf = CortexTriSurface.from_darrays(
+        left=left_surf,
+        right=right_surf,
+        projection=projection,
+    )
+    return surf, (projection,)
+
+
 def surf_scalars_from_cifti_f(
     surf: CortexTriSurface,
     scalars: str,
@@ -204,6 +225,42 @@ def surf_scalars_from_gifti_f(
         null_value=null_value,
         select=select,
         exclude=exclude,
+        allow_multihemisphere=allow_multihemisphere,
+        coerce_to_scalar=coerce_to_scalar,
+    )
+    if plot:
+        surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
+    return surf, surf_scalars
+
+
+def surf_scalars_from_freesurfer_f(
+    surf: CortexTriSurface,
+    scalars: str,
+    left_morph: Optional[str] = None,
+    right_morph: Optional[str] = None,
+    surf_scalars: Sequence[str] = (),
+    is_masked: bool = False,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.0,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = False,
+    plot: bool = True,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    left_array = nb.freesurfer.io.read_morph_data(left_morph)
+    right_array = nb.freesurfer.io.read_morph_data(right_morph)
+    scalar_names = surf.add_vertex_dataset(
+        name=scalars,
+        data=None,
+        left_data=left_array,
+        right_data=right_array,
+        left_slice=None,
+        right_slice=None,
+        default_slices=False,
+        is_masked=is_masked,
+        apply_mask=apply_mask,
+        null_value=null_value,
+        select=None,
+        exclude=None,
         allow_multihemisphere=allow_multihemisphere,
         coerce_to_scalar=coerce_to_scalar,
     )
@@ -2010,6 +2067,14 @@ surf_from_gifti_p = Primitive(
 )
 
 
+surf_from_freesurfer_p = Primitive(
+    surf_from_freesurfer_f,
+    'surf_from_freesurfer',
+    output=('surf', 'surf_projection'),
+    forward_unused=True,
+)
+
+
 surf_scalars_from_cifti_p = Primitive(
     surf_scalars_from_cifti_f,
     'surf_scalars_from_cifti',
@@ -2021,6 +2086,14 @@ surf_scalars_from_cifti_p = Primitive(
 surf_scalars_from_gifti_p = Primitive(
     surf_scalars_from_gifti_f,
     'surf_scalars_from_gifti',
+    output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+surf_scalars_from_freesurfer_p = Primitive(
+    surf_scalars_from_freesurfer_f,
+    'surf_scalars_from_freesurfer',
     output=('surf', 'surf_scalars'),
     forward_unused=True,
 )

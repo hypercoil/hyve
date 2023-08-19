@@ -12,11 +12,14 @@ import templateflow.api as tflow
 from hyve_examples import (
     get_null400_cifti,
     get_null400_gifti,
+    get_poldrack_freesurfer,
 )
 from hyve.flows import plotdef
 from hyve.transforms import (
     surf_from_archive,
+    surf_from_freesurfer,
     surf_scalars_from_cifti,
+    surf_scalars_from_freesurfer,
     surf_scalars_from_gifti,
     surf_scalars_from_nifti,
     parcellate_colormap,
@@ -34,7 +37,6 @@ def print_params(**params):
     assert 0
 
 
-@pytest.mark.ci_unsupported
 def test_scalars():
     plot_f = plotdef(
         surf_from_archive(),
@@ -249,6 +251,32 @@ def test_parcellated_scalars():
         surf_scalars_clim=(0, 1),
         surf_scalars_cmap='inferno',
         surf_scalars_below_color=(0, 0, 0, 0),
+        hemisphere=['left', 'right'],
+        output_dir='/tmp',
+    )
+
+
+def test_freesurfer():
+    fs = get_poldrack_freesurfer()
+    geom_left, morph_left = fs['left']
+    geom_right, morph_right = fs['right']
+    plot_f = plotdef(
+        surf_from_freesurfer(projection='inflated'),
+        surf_scalars_from_freesurfer('curv'),
+        plot_to_image(),
+        save_snapshots(
+            fname_spec=(
+                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}'
+            ),
+        ),
+    )
+    plot_f(
+        left_surf=geom_left,
+        right_surf=geom_right,
+        curv_morph_left=morph_left,
+        curv_morph_right=morph_right,
+        surf_scalars_cmap='RdYlBu_r',
+        surf_scalars_clim=(-0.35, 0.35),
         hemisphere=['left', 'right'],
         output_dir='/tmp',
     )

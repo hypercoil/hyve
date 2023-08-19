@@ -64,9 +64,11 @@ from .prim import (
     scalar_focus_camera_p,
     scatter_into_parcels_p,
     surf_from_archive_p,
+    surf_from_freesurfer_p,
     surf_from_gifti_p,
     surf_scalars_from_array_p,
     surf_scalars_from_cifti_p,
+    surf_scalars_from_freesurfer_p,
     surf_scalars_from_gifti_p,
     surf_scalars_from_nifti_p,
     transform_postprocessor_p,
@@ -180,6 +182,30 @@ def surf_from_gifti(
                 right_surf=right_surf,
                 left_mask=left_mask,
                 right_mask=right_mask,
+            )
+
+        return f_transformed
+    return transform
+
+
+def surf_from_freesurfer(
+    projection: Optional[str] = None,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(surf_from_freesurfer_p, projection=projection)
+
+        @splice_on(f, occlusion=surf_from_freesurfer_p.output)
+        def f_transformed(
+            left_surf: Union[str, Tuple[Tensor, Tensor]],
+            right_surf: Union[str, Tuple[Tensor, Tensor]],
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                left_surf=left_surf,
+                right_surf=right_surf,
             )
 
         return f_transformed
@@ -368,6 +394,65 @@ def surf_scalars_from_gifti(
             return compositor(f, transformer_f)(**params)(
                 left_gifti=left_gifti,
                 right_gifti=right_gifti,
+                surf=surf,
+                surf_scalars=surf_scalars,
+            )
+
+        return f_transformed
+    return transform
+
+
+def surf_scalars_from_freesurfer(
+    scalars: str,
+    is_masked: bool = False,
+    apply_mask: bool = False,
+    null_value: Optional[float] = 0.0,
+    allow_multihemisphere: bool = True,
+    coerce_to_scalar: bool = False,
+    plot: bool = True,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        paramstr_left = f'{sanitise(scalars)}_morph_left'
+        paramstr_right = f'{sanitise(scalars)}_morph_right'
+        transformer_f = Partial(
+            surf_scalars_from_freesurfer_p,
+            scalars=scalars,
+            is_masked=is_masked,
+            apply_mask=apply_mask,
+            null_value=null_value,
+            allow_multihemisphere=allow_multihemisphere,
+            coerce_to_scalar=coerce_to_scalar,
+            plot=plot,
+        )
+
+        @splice_on(
+            f,
+            occlusion=surf_scalars_from_freesurfer_p.output,
+            expansion={
+                paramstr_left: (Union[str, Tuple[Tensor, Tensor]], REQUIRED),
+                paramstr_right: (Union[str, Tuple[Tensor, Tensor]], REQUIRED),
+            },
+        )
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            **params: Mapping,
+        ):
+            left_morph = params.pop(paramstr_left, None)
+            right_morph = params.pop(paramstr_right, None)
+            if left_morph is None and right_morph is None:
+                raise TypeError(
+                    'Transformed plot function missing a required '
+                    f'keyword-only argument: either {paramstr_left} or '
+                    f'{paramstr_right}'
+                )
+            surf_scalars = params.pop('surf_scalars', ())
+            return compositor(f, transformer_f)(**params)(
+                left_morph=left_morph,
+                right_morph=right_morph,
                 surf=surf,
                 surf_scalars=surf_scalars,
             )
