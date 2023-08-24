@@ -1181,6 +1181,13 @@ def add_postprocessor_f(
     return postprocessors
 
 
+# Note: For camera primitives, we currently carry forward a `close_plotter`
+#       parameter, which specifies whether to close the plotter after the
+#       primitive is executed, when another downstream primitive like
+#       `plot_to_image` is called. It would probably be better to either
+#       handling the close operation in a base postprocessor that is
+#       pre-transformed into the postprocessor chain, or to automatically
+#       splice the close parameter into the postprocessor chain.
 def transform_postprocessor_f(
     name: str,
     transformer: Optional[Callable] = None,
@@ -1247,6 +1254,7 @@ def scalar_focus_camera_f(
     surf_projection: str,
     kind: str,
     plotter: Optional[pv.Plotter] = None,
+    close_plotter: bool = True,
 ) -> Mapping:
     hemispheres = hemispheres or ('left', 'right')
     views = []
@@ -1281,7 +1289,7 @@ def scalar_focus_camera_f(
         views.append(
             (vector, focus, (0, 0, 1))
         )
-    return plotter, views, hemispheres
+    return plotter, views, hemispheres, close_plotter
 
 
 def scalar_focus_camera_aux_f(
@@ -1308,6 +1316,7 @@ def closest_ortho_camera_f(
     surf_projection: str,
     n_ortho: int,
     plotter: Optional[pv.Plotter] = None,
+    close_plotter: bool = True,
 ) -> Mapping:
     metric = 'euclidean'
     # if projection == 'sphere':
@@ -1352,7 +1361,7 @@ def closest_ortho_camera_f(
     # if surf_projection == 'sphere':
     #     surf.left.project(cur_proj)
     #     surf.right.project(cur_proj)
-    return plotter, closest_poles, hemispheres
+    return plotter, closest_poles, hemispheres, close_plotter
 
 
 def closest_ortho_camera_aux_f(
@@ -1380,6 +1389,7 @@ def planar_sweep_camera_f(
     n_steps: int = 10,
     require_planar: bool = True,
     plotter: Optional[pv.Plotter] = None,
+    close_plotter: bool = True,
 ) -> Mapping:
     if normal is None:
         _x, _y, _z = initial
@@ -1439,7 +1449,7 @@ def planar_sweep_camera_f(
             views.append(
                 (v, focus, (0, 0, 1))
             )
-    return plotter, views, hemispheres
+    return plotter, views, hemispheres, close_plotter
 
 
 def planar_sweep_camera_aux_f(
@@ -1470,10 +1480,11 @@ def auto_camera_f(
     initial_angle: Tuple[float, float, float] = (1, 0, 0),
     normal_vector: Optional[Tuple[float, float, float]] = None,
     plotter: Optional[pv.Plotter] = None,
+    close_plotter: bool = True,
 ) -> Mapping:
     views_ortho = views_focused = views_planar = []
     if n_ortho > 0:
-        _, views_ortho, _ = closest_ortho_camera_f(
+        _, views_ortho, _, _ = closest_ortho_camera_f(
             surf=surf,
             hemispheres=hemispheres,
             surf_scalars=surf_scalars,
@@ -1482,7 +1493,7 @@ def auto_camera_f(
             plotter=plotter,
         )
     if focus is not None:
-        _, views_focused, _ = scalar_focus_camera_f(
+        _, views_focused, _, _ = scalar_focus_camera_f(
             surf=surf,
             hemispheres=hemispheres,
             surf_scalars=surf_scalars,
@@ -1491,7 +1502,7 @@ def auto_camera_f(
             plotter=plotter,
         )
     if n_angles > 0:
-        _, views_planar, _ = planar_sweep_camera_f(
+        _, views_planar, _, _ = planar_sweep_camera_f(
             surf=surf,
             hemispheres=hemispheres,
             n_steps=n_angles,
@@ -1500,7 +1511,7 @@ def auto_camera_f(
             plotter=plotter,
         )
     views = tuple(views_ortho + views_focused + views_planar)
-    return plotter, views, hemispheres
+    return plotter, views, hemispheres, close_plotter
 
 
 def auto_camera_aux_f(
@@ -2246,7 +2257,7 @@ plot_to_image_aux_p = Primitive(
 scalar_focus_camera_p = Primitive(
     scalar_focus_camera_f,
     'scalar_focus_camera',
-    output=('plotter', 'views', 'hemispheres'),
+    output=('plotter', 'views', 'hemispheres', 'close_plotter'),
     forward_unused=True,
 )
 
@@ -2262,7 +2273,7 @@ scalar_focus_camera_aux_p = Primitive(
 closest_ortho_camera_p = Primitive(
     closest_ortho_camera_f,
     'closest_ortho_camera',
-    output=('plotter', 'views', 'hemispheres'),
+    output=('plotter', 'views', 'hemispheres', 'close_plotter'),
     forward_unused=True,
 )
 
@@ -2278,7 +2289,7 @@ closest_ortho_camera_aux_p = Primitive(
 planar_sweep_camera_p = Primitive(
     planar_sweep_camera_f,
     'planar_sweep_camera',
-    output=('plotter', 'views', 'hemispheres'),
+    output=('plotter', 'views', 'hemispheres', 'close_plotter'),
     forward_unused=True,
 )
 
@@ -2294,7 +2305,7 @@ planar_sweep_camera_aux_p = Primitive(
 auto_camera_p = Primitive(
     auto_camera_f,
     'auto_camera',
-    output=('plotter', 'views', 'hemispheres'),
+    output=('plotter', 'views', 'hemispheres', 'close_plotter'),
     forward_unused=True,
 )
 
