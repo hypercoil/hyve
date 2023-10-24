@@ -125,8 +125,8 @@ def surf_from_archive(
           will be passed to the archive loader function.
         * An optional ``load_mask`` argument can be passed to the transformed
           plotter to indicate whether the surface mask should be loaded
-        (defaults to ``True``).
-        * An optional ``projections`` argument can be passed to the
+          (defaults to ``True``).
+        * An optional ``surf_projection`` argument can be passed to the
           transformed plotter to indicate which projections to load
           (defaults to ``("veryinflated",)``).
     """

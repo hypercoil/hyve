@@ -11,8 +11,9 @@ flows of visualisation functions.
 import inspect
 from typing import Any, Literal, Optional, Sequence
 
-from conveyant import emulate_assignment, ichain, join
+from conveyant import emulate_assignment, ichain, join, splice_docstring
 
+from .const import DOCBASE, RETBASE, docbuilder
 from .prim import automap_unified_plotter_p
 
 
@@ -27,7 +28,12 @@ def plotdef(*pparams: Sequence[callable]) -> callable:
     )
     plot_f = emulate_assignment()(plot_f)
     # TODO: build docstring here when it's done
-    return plot_f
+    return splice_docstring(
+        f=plot_f,
+        template=docbuilder(),
+        base_str=DOCBASE,
+        returns=RETBASE,
+    )
 
 
 def _get_unique_parameters_and_make_signature(
