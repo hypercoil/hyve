@@ -88,6 +88,7 @@ def splice_on(
     expansion: Optional[Mapping[str, Tuple[Type, Any]]] = None,
     allow_variadic: bool = True,
     strict_emulation: bool = True,
+    doc_subs: Optional[Mapping[str, Tuple[str, Mapping[str, str]]]] = None,
 ) -> callable:
     """
     Patch ``splice_on`` to allow for variadic functions by default.
@@ -98,6 +99,7 @@ def splice_on(
         expansion=expansion,
         allow_variadic=allow_variadic,
         strict_emulation=strict_emulation,
+        doc_subs=doc_subs,
     )
 
 
@@ -716,6 +718,9 @@ def surf_scalars_from_nifti(
             f,
             occlusion=surf_scalars_from_nifti_p.output,
             expansion={paramstr: (Union[nb.Nifti1Image, str], REQUIRED)},
+            doc_subs={
+                paramstr: ('surf_scalars_nifti', {'scalars_name': scalars})
+            },
         )
         def f_transformed(
             *,
@@ -1005,7 +1010,11 @@ def add_surface_overlay(
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
         result = add_surface_overlay_p(layer_name=layer_name, chains=chains)
-        transformer_f, signature = result['prim'], result['signature']
+        transformer_f, signature, metadata = (
+            result['prim'],
+            result['signature'],
+            result['metadata'],
+        )
 
         @splice_on(
             f,
@@ -1013,6 +1022,7 @@ def add_surface_overlay(
                 k: (v.annotation, v.default)
                 for k, v in signature.parameters.items()
             },
+            doc_subs = metadata.get('__doc__', {}).get('subs', {}),
         )
         def f_transformed(**params: Mapping):
             return compositor(f, transformer_f)()(params=params)
@@ -1030,7 +1040,11 @@ def add_points_overlay(
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
         result = add_points_overlay_p(layer_name=layer_name, chains=chains)
-        transformer_f, signature = result['prim'], result['signature']
+        transformer_f, signature, metadata = (
+            result['prim'],
+            result['signature'],
+            result['metadata'],
+        )
 
         @splice_on(
             f,
@@ -1038,6 +1052,7 @@ def add_points_overlay(
                 k: (v.annotation, v.default)
                 for k, v in signature.parameters.items()
             },
+            doc_subs = metadata.get('__doc__', {}).get('subs', {}),
         )
         def f_transformed(**params: Mapping):
             return compositor(f, transformer_f)()(params=params)
@@ -1055,7 +1070,11 @@ def add_network_overlay(
         compositor: callable = direct_compositor,
     ) -> direct_compositor:
         result = add_network_overlay_p(layer_name=layer_name, chains=chains)
-        transformer_f, signature = result['prim'], result['signature']
+        transformer_f, signature, metadata = (
+            result['prim'],
+            result['signature'],
+            result['metadata'],
+        )
 
         @splice_on(
             f,
@@ -1063,6 +1082,7 @@ def add_network_overlay(
                 k: (v.annotation, v.default)
                 for k, v in signature.parameters.items()
             },
+            doc_subs = metadata.get('__doc__', {}).get('subs', {}),
         )
         def f_transformed(**params: Mapping):
             return compositor(f, transformer_f)()(params=params)

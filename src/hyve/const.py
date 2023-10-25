@@ -126,6 +126,17 @@ DOCBUILDER = {
             """
         ),
     },
+    'surf_scalars_nifti' : {
+        'type': 'str',
+        'default': None,
+        'desc': descr(
+            """
+            The path to a NIfTI file containing scalar-valued data to be
+            resampled over a surface geometry. The resampled data will be
+            loaded into the surface's ``point_data`` attribute as {scalars_name}.
+            """
+        ),
+    },
     'surf_alpha' : {
         'type': 'float',
         'default': 1.0,
@@ -136,9 +147,10 @@ DOCBUILDER = {
         'default': None,
         'desc': descr(
             """
-            The name of the scalars to plot on the surface. The scalars must
-            be available in the surface's ``point_data`` attribute. If not
-            specified, no scalars will be plotted.
+            The name of the scalars to plot on the surface as the base layer.
+            The scalars must be available in the surface's ``point_data``
+            attribute. If not specified, no scalars will be plotted on the
+            surface as the base layer.
             """
         ),
     },
@@ -451,6 +463,78 @@ DOCBUILDER = {
             together with various parameters for the nodes and edges in the
             layer. If not specified, a single layer will be created for the
             first network in ``networks``.
+            """
+        ),
+    },
+    'layer_cmap' : {
+        'type': 'str',
+        'default': None,
+        'desc': descr('The colormap to use for the {layer_name} scalars.'),
+    },
+    'layer_clim' : {
+        'type': 'tuple',
+        'default': None,
+        'desc': descr(
+            """
+            The colormap limits to use for the {layer_name} scalars. The
+            specified values determine the dynamic range of the colormap. If
+            set to ``'robust'``, the colormap limits will be set to the 5th
+            and 95th percentiles of the data (not supported for all
+            geometries).
+            """
+        ),
+    },
+    'layer_cmap_negative' : {
+        'type': 'str',
+        'default': None,
+        'desc': descr(
+            """
+            The colormap to use for negative values of the {layer_name}
+            scalars. If this is specified, then separate colormaps will be
+            used for positive and negative values of the {layer_name}
+            scalars. If not specified, the same colormap will be used for
+            all values of the {layer_name} scalars.
+            """
+        ),
+    },
+    'layer_clim_negative' : {
+        'type': 'tuple',
+        'default': None,
+        'desc': descr(
+            """
+            The colormap limits to use for negative values of the {layer_name}
+            scalars.
+            """
+        ),
+    },
+    'layer_color' : {
+        'type': 'str',
+        'default': None,
+        'desc': descr(
+            """
+            If specified, use a solid color for all values for the scalars in
+            layer {layer_name}. If not specified, the colormap will be used.
+            """
+        ),
+    },
+    'layer_alpha' : {
+        'type': 'str',
+        'default': None,
+        'desc': descr(
+            """
+            The opacity to use for the scalars in layer {layer_name}. If not
+            specified, the opacity will be set to 1.0.
+            """
+        ),
+    },
+    'layer_below_color' : {
+        'type': 'str',
+        'default': 'black',
+        'desc': descr(
+            """
+            The color to use for values below the colormap limits for the
+            layer {layer_name}. Specify an alpha of 0 to hide values below the
+            colormap limits (e.g., for thresholding).
             """
         ),
     },

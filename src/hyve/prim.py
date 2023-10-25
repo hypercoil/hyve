@@ -644,7 +644,18 @@ def _get_inner_signature(
             + list(parameters.values())
         ),
     )
-    return inner_signature
+    inner_metadata = getattr(inner_f, '__meta__', {})
+    doc_metadata = inner_metadata.get('__doc__', {})
+    doc_metadata['subs'] = {
+        **doc_metadata.get('subs', {}),
+        **{
+            f'{paramstr}_{k}': (f'layer_{k}', {'layer_name': paramstr})
+            for k in inspect.signature(basefunc).parameters.keys()
+            if str(k) not in {'self', 'name', 'hide_subthreshold'}
+        },
+    }
+    inner_metadata['__doc__'] = doc_metadata
+    return inner_signature, inner_metadata
 
 
 def add_surface_overlay_f(
@@ -774,8 +785,10 @@ def add_surface_overlay_f(
         output=None,
         forward_unused=True,
     )
-    inner_signature = _get_inner_signature(paramstr=paramstr, inner_f=inner_f)
-    return _add_surface_overlay_p, inner_signature
+    inner_signature, inner_metadata = _get_inner_signature(
+        paramstr=paramstr, inner_f=inner_f
+    )
+    return _add_surface_overlay_p, inner_signature, inner_metadata
 
 
 def add_points_overlay_f(
@@ -875,8 +888,10 @@ def add_points_overlay_f(
         output=None,
         forward_unused=True,
     )
-    inner_signature = _get_inner_signature(paramstr=paramstr, inner_f=inner_f)
-    return _add_points_overlay_p, inner_signature
+    inner_signature, inner_metadata = _get_inner_signature(
+        paramstr=paramstr, inner_f=inner_f
+    )
+    return _add_points_overlay_p, inner_signature, inner_metadata
 
 
 def add_network_overlay_f(
@@ -1041,20 +1056,21 @@ def add_network_overlay_f(
         output=None,
         forward_unused=True,
     )
-    inner_signature = _get_inner_signature(
+    inner_signature, inner_metadata = _get_inner_signature(
         paramstr=paramstr,
         inner_f=inner_f,
         basefunc=NodeLayer.__init__,
         infix='_node',
     )
     inner_f.__signature__ = inner_signature
-    inner_signature = _get_inner_signature(
+    inner_f.__meta__ = inner_metadata
+    inner_signature, inner_metadata = _get_inner_signature(
         paramstr=paramstr,
         inner_f=inner_f,
         basefunc=EdgeLayer.__init__,
         infix='_edge',
     )
-    return _add_network_overlay_p, inner_signature
+    return _add_network_overlay_p, inner_signature, inner_metadata
 
 
 def build_network_f(
@@ -2177,7 +2193,7 @@ vertex_to_face_p = Primitive(
 add_surface_overlay_p = Primitive(
     add_surface_overlay_f,
     'add_surface_overlay',
-    output=('prim', 'signature'),
+    output=('prim', 'signature', 'metadata'),
     forward_unused=True,
 )
 
@@ -2185,7 +2201,7 @@ add_surface_overlay_p = Primitive(
 add_points_overlay_p = Primitive(
     add_points_overlay_f,
     'add_points_overlay',
-    output=('prim', 'signature'),
+    output=('prim', 'signature', 'metadata'),
     forward_unused=True,
 )
 
@@ -2193,7 +2209,7 @@ add_points_overlay_p = Primitive(
 add_network_overlay_p = Primitive(
     add_network_overlay_f,
     'add_network_overlay',
-    output=('prim', 'signature'),
+    output=('prim', 'signature', 'metadata'),
     forward_unused=True,
 )
 
