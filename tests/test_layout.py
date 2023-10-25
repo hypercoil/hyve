@@ -4,7 +4,7 @@
 """
 Unit tests for layout representation
 """
-from hyve.layout import CellLayout, Cell, hsplit, vsplit, grid
+from hyve.layout import CellLayout, Cell, hsplit, vsplit, grid, float_layout
 
 
 def test_simple_layout():
@@ -145,3 +145,51 @@ def test_layout_product():
     for cell_a, cell_b in zip(annotated10.layout, layout10):
         assert cell_a.cell_loc == cell_b.cell_loc
         assert cell_a.cell_dim == cell_b.cell_dim
+
+
+def test_layout_floating():
+    anchor = Cell() | Cell() | Cell() | Cell() | (1 / 5)
+    floating = Cell() / Cell() / (1 / 3)
+    floating_inner = Cell() | Cell() | (1 / 2)
+    layout_inner = float_layout(
+        floating=floating_inner,
+        anchor=floating,
+        loc_rel=(0.1, 0.4),
+        dim_rel=(0.8, 0.2),
+    )
+    layout = float_layout(
+        floating=layout_inner,
+        anchor=anchor,
+        loc_rel=(0.7, 0.1),
+        dim_rel=(0.2, 0.8),
+    )
+    for i, cell in enumerate(layout):
+        if i < 4:
+            assert cell.root is layout
+        elif i < 6:
+            assert cell.root is layout.floating[0]
+        else:
+            assert cell.root is layout.floating[1]
+
+    layout.partition(500, 500)
+    cells = list(layout)
+    assert cells[0].cell_loc == (0, 0)
+    assert cells[0].cell_dim == (100, 500)
+    assert cells[1].cell_loc == (100, 0)
+    assert cells[1].cell_dim == (100, 500)
+    assert cells[2].cell_loc == (200, 0)
+    assert cells[2].cell_dim == (100, 500)
+    assert cells[3].cell_loc == (300, 0)
+    assert cells[3].cell_dim == (200, 500)
+
+    # Total area is (100, 400)
+    assert cells[4].cell_loc == (350, 50)
+    assert cells[4].cell_dim == (100, 133)
+    assert cells[5].cell_loc == (350, 183)
+    assert cells[5].cell_dim == (100, 267)
+
+    # Total area is (80, 80)
+    assert cells[6].cell_loc == (360, 210)
+    assert cells[6].cell_dim == (40, 80)
+    assert cells[7].cell_loc == (400, 210)
+    assert cells[7].cell_dim == (40, 80)

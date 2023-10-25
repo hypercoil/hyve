@@ -64,6 +64,7 @@ class CellLayout:
         self.parent = None
         self.cell_loc = None
         self.cell_dim = None
+        self.floating = None
 
     def _leftmost(self) -> 'CellLayout':
         if self.left is None:
@@ -93,12 +94,9 @@ class CellLayout:
         return candidate
 
     def __getitem__(self, index: int) -> 'CellLayout':
-        cur_idx = 0
-        cur_cell = self._leftmost()
-        while cur_idx < index:
-            cur_cell = cur_cell._next_leaf()
-            cur_idx += 1
-        return cur_cell
+        for i, cell in enumerate(self):
+            if i == index:
+                return cell
 
     def __next__(self) -> 'CellLayout':
         return self._next_leaf()
@@ -108,16 +106,19 @@ class CellLayout:
         while cur_cell is not None:
             yield cur_cell
             cur_cell = cur_cell._next_leaf()
+        if self.floating is not None:
+            for f in self.floating:
+                yield from f
 
     def __repr__(self) -> str:
-        return (
-            f'CellLayout(left={self.left}, right={self.right}, '
-            f'orientation={self.split_orientation}, '
-            f'position={self.split_position}'
-            ')'
-        )
+        return self._repr()
 
     def __len__(self) -> int:
+        if self.parent is not None:
+            raise ValueError(
+                'Cannot get length of a non-root layout, use '
+                'len(layout.root) instead'
+            )
         return sum(1 for _ in self)
 
     def __mod__(self, other: int) -> 'CellLayoutSubstitution':
@@ -144,14 +145,27 @@ class CellLayout:
             layout = layout.substitute(i - 1, other)
         return layout
 
-    def copy(self) -> 'CellLayout':
+    @property
+    def root(self) -> 'CellLayout':
+        """Get the root of the layout tree"""
+        if self.parent is None:
+            return self
+        return self.parent.root
+
+    def copy(self, **extra_params) -> 'CellLayout':
         left = self.left.copy() if self.left is not None else None
         right = self.right.copy() if self.right is not None else None
+        floating = (
+            [f.copy() for f in self.floating]
+            if self.floating is not None
+            else None
+        )
         copy = self.__class__(
             left=left,
             right=right,
             split_orientation=self.split_orientation,
             split_position=self.split_position,
+            **extra_params,
         )
         copy.cell_loc = self.cell_loc
         copy.cell_dim = self.cell_dim
@@ -159,6 +173,8 @@ class CellLayout:
             left.parent = copy
         if right is not None:
             right.parent = copy
+        if floating is not None:
+            copy.floating = floating
         return copy
 
     def substitute(self, index: int, other: 'CellLayout') -> 'CellLayout':
@@ -226,6 +242,19 @@ class CellLayout:
                 y_offset=right_y_offset,
                 padding=padding,
             )
+        if self.floating is not None:
+            for f in self.floating:
+                floating_width = round(f.float_dim_rel[0] * width)
+                floating_height = round(f.float_dim_rel[1] * height)
+                floating_x_offset = round(f.float_loc_rel[0] * width)
+                floating_y_offset = round(f.float_loc_rel[1] * height)
+                f.partition(
+                    width=floating_width,
+                    height=floating_height,
+                    x_offset=floating_x_offset,
+                    y_offset=floating_y_offset,
+                    padding=padding,
+                )
         self.cell_loc = (x_offset + padding, y_offset + padding)
         self.cell_dim = (width - 2 * padding, height - 2 * padding)
         return self
@@ -241,6 +270,20 @@ class CellLayout:
         return AnnotatedLayout(
             layout=self.copy(),
             annotations=annotations,
+        )
+
+    def _repr(self, inject: Optional[str] = None) -> str:
+        inject = '' if inject is None else inject
+        if self.floating:
+            floating = f', floating={self.floating}'
+        else:
+            floating = ''
+        return (
+            f'{self.__class__.__name__}'
+            f'(left={self.left}, right={self.right}{floating}, '
+            f'orientation={self.split_orientation}, '
+            f'position={self.split_position}'
+            f'{inject})'
         )
 
 
@@ -261,6 +304,44 @@ class Cell(CellLayout):
 
     def copy(self) -> 'Cell':
         return self.__class__()
+
+
+class FloatingCellLayout(CellLayout):
+    """
+    A cell layout that floats on top of other cells
+    """
+    def __init__(
+        self,
+        float_loc_rel: Tuple[float, float],
+        float_dim_rel: Tuple[float, float],
+        left: Optional['CellLayout'],
+        right: Optional['CellLayout'],
+        split_orientation: Optional[Literal['h', 'v']],
+        split_position: Optional[float],
+    ):
+        self.left = left
+        self.right = right
+        self.split_orientation = split_orientation
+        self.split_position = split_position
+        self.parent = None
+        self.cell_loc = None
+        self.cell_dim = None
+        self.float_loc_rel = float_loc_rel
+        self.float_dim_rel = float_dim_rel
+        self.floating = None
+
+    def __repr__(self) -> str:
+        return self._repr(
+            f', float_loc_rel={self.float_loc_rel}, '
+            f'float_dim_rel={self.float_dim_rel}'
+        )
+
+    def copy(self, **extra_params) -> 'FloatingCellLayout':
+        return super().copy(
+            float_loc_rel=self.float_loc_rel,
+            float_dim_rel=self.float_dim_rel,
+            **extra_params,
+        )
 
 
 @dataclasses.dataclass
@@ -547,3 +628,48 @@ def grid(
     else:
         raise ValueError(f'Invalid grid order: {order}')
     return layout
+
+
+def float_layout(
+    floating: CellLayout,
+    anchor: CellLayout,
+    loc_rel: Tuple[float, float],
+    dim_rel: Tuple[float, float],
+) -> CellLayout:
+    reframed = []
+    if floating.floating is not None:
+        inner = floating.floating
+        for e in inner:
+            new_dim_rel = tuple(
+                i * j for i, j in zip(e.float_dim_rel, dim_rel)
+            )
+            new_loc_rel = tuple(
+                i + j * k
+                for i, j, k in zip(loc_rel, e.float_loc_rel, dim_rel)
+            )
+            reframed.append(
+                float_layout(
+                    e,
+                    anchor,
+                    loc_rel=new_loc_rel,
+                    dim_rel=new_dim_rel,
+                ).floating[-1]
+            )
+    to_float = floating.copy()
+    to_float.floating = None
+    floating = FloatingCellLayout(
+        float_loc_rel=loc_rel,
+        float_dim_rel=dim_rel,
+        left=to_float.left,
+        right=to_float.right,
+        split_orientation=to_float.split_orientation,
+        split_position=to_float.split_position,
+    )
+    floating.left.parent = floating
+    floating.right.parent = floating
+    anchor = anchor.copy()
+    if anchor.floating is None:
+        anchor.floating = [floating] + reframed
+    else:
+        anchor.floating += [floating] + reframed
+    return anchor
