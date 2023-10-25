@@ -547,6 +547,12 @@ def split(
         return cells[0]
     elif len(cells) == 2:
         left, right = cells
+        left = left.copy() if left is not None else None
+        right = right.copy() if right is not None else None
+        left_floating = left.floating or []
+        right_floating = right.floating or []
+        left.floating = None
+        right.floating = None
         layout = CellLayout(
             left=left,
             right=right,
@@ -555,8 +561,44 @@ def split(
         )
         if left is not None:
             left.parent = layout
+            left_floating = [
+                refloat_layout(
+                    e,
+                    layout,
+                    loc_rel=(0, 0),
+                    dim_rel=(
+                        (1, position)
+                        if orientation == 'h'
+                        else (position, 1)
+                    ),
+                    inner_loc_rel=e.float_loc_rel,
+                    inner_dim_rel=e.float_dim_rel,
+                )
+                for e in left_floating
+            ]
         if right is not None:
             right.parent = layout
+            right_floating = [
+                refloat_layout(
+                    e,
+                    layout,
+                    loc_rel=(
+                        (0, position)
+                        if orientation == 'h'
+                        else (position, 0)
+                    ),
+                    dim_rel=(
+                        (1, 1 - position)
+                        if orientation == 'h'
+                        else (1 - position, 1)
+                    ),
+                    inner_loc_rel=e.float_loc_rel,
+                    inner_dim_rel=e.float_dim_rel,
+                )
+                for e in right_floating
+            ]
+        floating = left_floating + right_floating or None
+        layout.floating = floating
         return layout
     else:
         new_position = position / (1 - position)
@@ -630,30 +672,48 @@ def grid(
     return layout
 
 
+def refloat_layout(
+    floating: CellLayout,
+    anchor: CellLayout,
+    loc_rel: Tuple[float, float],
+    dim_rel: Tuple[float, float],
+    inner_loc_rel: Tuple[float, float],
+    inner_dim_rel: Tuple[float, float],
+) -> CellLayout:
+    new_dim_rel = tuple(
+        i * j for i, j in zip(inner_dim_rel, dim_rel)
+    )
+    new_loc_rel = tuple(
+        i + j * k
+        for i, j, k in zip(loc_rel, inner_loc_rel, dim_rel)
+    )
+    return float_layout(
+        floating,
+        anchor,
+        loc_rel=new_loc_rel,
+        dim_rel=new_dim_rel,
+    ).floating[-1]
+
+
 def float_layout(
     floating: CellLayout,
     anchor: CellLayout,
     loc_rel: Tuple[float, float],
     dim_rel: Tuple[float, float],
 ) -> CellLayout:
-    reframed = []
+    refloated = []
     if floating.floating is not None:
         inner = floating.floating
         for e in inner:
-            new_dim_rel = tuple(
-                i * j for i, j in zip(e.float_dim_rel, dim_rel)
-            )
-            new_loc_rel = tuple(
-                i + j * k
-                for i, j, k in zip(loc_rel, e.float_loc_rel, dim_rel)
-            )
-            reframed.append(
-                float_layout(
+            refloated.append(
+                refloat_layout(
                     e,
                     anchor,
-                    loc_rel=new_loc_rel,
-                    dim_rel=new_dim_rel,
-                ).floating[-1]
+                    loc_rel=loc_rel,
+                    dim_rel=dim_rel,
+                    inner_loc_rel=e.float_loc_rel,
+                    inner_dim_rel=e.float_dim_rel,
+                )
             )
     to_float = floating.copy()
     to_float.floating = None
@@ -669,7 +729,7 @@ def float_layout(
     floating.right.parent = floating
     anchor = anchor.copy()
     if anchor.floating is None:
-        anchor.floating = [floating] + reframed
+        anchor.floating = [floating] + refloated
     else:
-        anchor.floating += [floating] + reframed
+        anchor.floating += [floating] + refloated
     return anchor
