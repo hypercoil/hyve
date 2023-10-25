@@ -32,6 +32,36 @@ def test_simple_layout():
     assert cells[4].cell_dim == (40, 120)
 
 
+def test_layout_substitute():
+    layout = (
+        (Cell() | (1 / 2) | (
+            Cell() / (1 / 4) /
+            Cell()
+        )) / (1 / 3) /
+        (
+            Cell(),
+            Cell(),
+        )
+    )
+    layout_inner = Cell() | (1 / 4) | (Cell(), Cell())
+    layout_sub = (layout % 1 % layout_inner).partition(120, 120)
+    cells = list(layout_sub)
+    assert cells[0].cell_loc == (0, 0)
+    assert cells[0].cell_dim == (40, 60)
+    assert cells[1].cell_loc == (0, 60)
+    assert cells[1].cell_dim == (10, 15)
+    assert cells[2].cell_loc == (0, 75)
+    assert cells[2].cell_dim == (10, 15)
+    assert cells[3].cell_loc == (0, 90)
+    assert cells[3].cell_dim == (10, 30)
+    assert cells[4].cell_loc == (10, 60)
+    assert cells[4].cell_dim == (30, 60)
+    assert cells[5].cell_loc == (40, 0)
+    assert cells[5].cell_dim == (40, 120)
+    assert cells[6].cell_loc == (80, 0)
+    assert cells[6].cell_dim == (40, 120)
+
+
 def test_grid_layout():
     gridlayout = grid(n_cols=6, n_rows=5).partition(1200, 900)
     cells = list(gridlayout)

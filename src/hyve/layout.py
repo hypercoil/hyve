@@ -7,7 +7,38 @@ Layout representation
 Classes for representing layouts of data
 """
 import dataclasses
-from typing import Literal, Mapping, Optional, Sequence, Tuple
+from typing import Literal, Mapping, Optional, Sequence, Tuple, Union
+
+
+@dataclasses.dataclass(frozen=True)
+class CellLayoutSubstitution:
+    layout: 'CellLayout'
+    index: int
+
+    def __mod__(self, other: 'CellLayout'):
+        return self.layout.substitute(self.index, other)
+
+
+@dataclasses.dataclass(frozen=True)
+class CellLayoutVerticalSplit:
+    layout: 'CellLayout'
+    position: float
+
+    def __truediv__(self, other: Union['CellLayout', Sequence['CellLayout']]):
+        if isinstance(other, CellLayout):
+            other = [other]
+        return vsplit(self.position, self.layout, *other)
+
+
+@dataclasses.dataclass(frozen=True)
+class CellLayoutHorizontalSplit:
+    layout: 'CellLayout'
+    position: float
+
+    def __or__(self, other: Union['CellLayout', Sequence['CellLayout']]):
+        if isinstance(other, CellLayout):
+            other = [other]
+        return hsplit(self.position, self.layout, *other)
 
 
 class CellLayout:
@@ -87,6 +118,56 @@ class CellLayout:
     def __len__(self) -> int:
         return sum(1 for _ in self)
 
+    def __mod__(self, other: int) -> 'CellLayoutSubstitution':
+        return CellLayoutSubstitution(
+            layout=self,
+            index=other,
+        )
+
+    def __truediv__(self, other: float) -> 'CellLayoutVerticalSplit':
+        return CellLayoutVerticalSplit(
+            layout=self,
+            position=other,
+        )
+
+    def __or__(self, other: float) -> 'CellLayoutHorizontalSplit':
+        return CellLayoutHorizontalSplit(
+            layout=self,
+            position=other,
+        )
+
+    def copy(self):
+        left = self.left.copy() if self.left is not None else None
+        right = self.right.copy() if self.right is not None else None
+        copy = self.__class__(
+            left=left,
+            right=right,
+            split_orientation=self.split_orientation,
+            split_position=self.split_position,
+        )
+        copy.cell_loc = self.cell_loc
+        copy.cell_dim = self.cell_dim
+        if left is not None:
+            left.parent = copy
+        if right is not None:
+            right.parent = copy
+        return copy
+
+    def substitute(self, index: int, other: 'CellLayout') -> 'CellLayout':
+        """Substitute a cell in the layout with another layout"""
+        if len(self) == 0:
+            return other
+        new = self.copy()
+        other = other.copy()
+        cur_idx = 0
+        cur_cell = new._leftmost()
+        while cur_idx < index:
+            cur_cell = cur_cell._next_leaf()
+            cur_idx += 1
+        cur_cell.parent.left = other
+        other.parent = cur_cell.parent
+        return new
+
     def partition(
         self,
         width: int,
@@ -153,6 +234,9 @@ class Cell(CellLayout):
 
     def __repr__(self) -> str:
         return f'Cell(loc={self.cell_loc}, dim={self.cell_dim})'
+
+    def copy(self) -> 'Cell':
+        return self.__class__()
 
 
 @dataclasses.dataclass
