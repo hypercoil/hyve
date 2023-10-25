@@ -136,7 +136,15 @@ class CellLayout:
             position=other,
         )
 
-    def copy(self):
+    def __mul__(self, other: 'CellLayout') -> 'CellLayout':
+        """Note that this 'product' is not commutative"""
+        layout = self
+        n = len(layout)
+        for i in range(n, 0, -1):
+            layout = layout.substitute(i - 1, other)
+        return layout
+
+    def copy(self) -> 'CellLayout':
         left = self.left.copy() if self.left is not None else None
         right = self.right.copy() if self.right is not None else None
         copy = self.__class__(
@@ -155,7 +163,7 @@ class CellLayout:
 
     def substitute(self, index: int, other: 'CellLayout') -> 'CellLayout':
         """Substitute a cell in the layout with another layout"""
-        if len(self) == 0:
+        if len(self) <= 1:
             return other
         new = self.copy()
         other = other.copy()
@@ -164,7 +172,10 @@ class CellLayout:
         while cur_idx < index:
             cur_cell = cur_cell._next_leaf()
             cur_idx += 1
-        cur_cell.parent.left = other
+        if cur_cell.parent.left is cur_cell:
+            cur_cell.parent.left = other
+        else:
+            cur_cell.parent.right = other
         other.parent = cur_cell.parent
         return new
 
@@ -218,6 +229,19 @@ class CellLayout:
         self.cell_loc = (x_offset + padding, y_offset + padding)
         self.cell_dim = (width - 2 * padding, height - 2 * padding)
         return self
+
+    def annotate(
+        self,
+        annotations: Mapping[int, Optional[Mapping]],
+    ) -> 'AnnotatedLayout':
+        """
+        Annotate a layout with a dictionary of annotations
+        """
+        assert len(annotations) == len(self)
+        return AnnotatedLayout(
+            layout=self.copy(),
+            annotations=annotations,
+        )
 
 
 class Cell(CellLayout):
@@ -281,6 +305,22 @@ class AnnotatedLayout(CellLayout):
 
     def __len__(self) -> int:
         return len(self.layout)
+
+    def __mul__(self, other: 'AnnotatedLayout') -> 'AnnotatedLayout':
+        layout = self.layout * other.layout
+        len_l = len(self)
+        len_r = len(other)
+        annotations = {
+            i * (len_r) + j: {
+                **self.annotations[i],
+                **other.annotations[j],
+            }
+            for i in range(len_l) for j in range(len_r)
+        }
+        return AnnotatedLayout(
+            layout=layout,
+            annotations=annotations,
+        )
 
     def partition(
         self,
