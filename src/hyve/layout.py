@@ -20,25 +20,27 @@ class CellLayoutSubstitution:
 
 
 @dataclasses.dataclass(frozen=True)
-class CellLayoutVerticalSplit:
-    layout: 'CellLayout'
-    position: float
+class CellLayoutVerticalChain:
+    chain: Sequence['CellLayout']
 
-    def __truediv__(self, other: Union['CellLayout', Sequence['CellLayout']]):
+    def __or__(self, other: Union['CellLayout', float]):
         if isinstance(other, CellLayout):
-            other = [other]
-        return vsplit(self.position, self.layout, *other)
+            return CellLayoutVerticalChain(
+                chain=self.chain + [other]
+            )
+        return vsplit(other, *self.chain)
 
 
 @dataclasses.dataclass(frozen=True)
-class CellLayoutHorizontalSplit:
-    layout: 'CellLayout'
-    position: float
+class CellLayoutHorizontalChain:
+    chain: Sequence['CellLayout']
 
-    def __or__(self, other: Union['CellLayout', Sequence['CellLayout']]):
+    def __truediv__(self, other: Union['CellLayout', float]):
         if isinstance(other, CellLayout):
-            other = [other]
-        return hsplit(self.position, self.layout, *other)
+            return CellLayoutHorizontalChain(
+                chain=self.chain + [other]
+            )
+        return hsplit(other, *self.chain)
 
 
 class CellLayout:
@@ -124,16 +126,14 @@ class CellLayout:
             index=other,
         )
 
-    def __truediv__(self, other: float) -> 'CellLayoutVerticalSplit':
-        return CellLayoutVerticalSplit(
-            layout=self,
-            position=other,
+    def __truediv__(self, other: 'CellLayout') -> 'CellLayoutHorizontalChain':
+        return CellLayoutHorizontalChain(
+            chain=[self, other]
         )
 
-    def __or__(self, other: float) -> 'CellLayoutHorizontalSplit':
-        return CellLayoutHorizontalSplit(
-            layout=self,
-            position=other,
+    def __or__(self, other: 'CellLayout') -> 'CellLayoutVerticalChain':
+        return CellLayoutVerticalChain(
+            chain=[self, other]
         )
 
     def __mul__(self, other: 'CellLayout') -> 'CellLayout':

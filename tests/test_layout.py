@@ -33,17 +33,29 @@ def test_simple_layout():
 
 
 def test_layout_substitute():
-    layout = (
-        (Cell() | (1 / 2) | (
-            Cell() / (1 / 4) /
-            Cell()
-        )) / (1 / 3) /
-        (
-            Cell(),
-            Cell(),
-        )
+    # layout = (
+    #     (Cell() | (1 / 2) | (Cell() /
+    #                          (1 / 4) /
+    #                          Cell())
+    #     ) / (1 / 3) / (
+    #         Cell(),
+    #         Cell(),
+    #     )
+    # )
+    # layout = (
+    #     (Cell() | (Cell() /
+    #                Cell() /
+    #                (1 / 4)) | (1 / 2)) /
+    #      Cell() /
+    #      Cell() /
+    #      (1 / 3)
+    # )
+    layout = ((
+        Cell() /
+        (Cell() | Cell() | (1 / 4)) /
+        (1 / 2))| Cell() | Cell() | (1 / 3)
     )
-    layout_inner = Cell() | (1 / 4) | (Cell(), Cell())
+    layout_inner = Cell() / Cell() / Cell() / (1 / 4)
     layout_sub = (layout % 1 % layout_inner).partition(120, 120)
     cells = list(layout_sub)
     assert cells[0].cell_loc == (0, 0)
@@ -78,8 +90,8 @@ def test_grid_layout():
             assert cells[5 * j + i].cell_loc == (200 * j, 180 * i)
 
 def test_layout_product():
-    layout0 = Cell() | (1 / 3) | Cell()
-    layout1 = Cell() / (1 / 4) / Cell()
+    layout0 = Cell() / Cell() / (1 / 3)
+    layout1 = Cell() | Cell() | (1 / 4)
     layout01 = (layout0 * layout1).partition(120, 120)
     cells = list(layout01)
     assert cells[0].cell_loc == (0, 0)
