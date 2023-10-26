@@ -7,27 +7,40 @@ Layout representation
 Classes for representing layouts of data
 """
 import dataclasses
-from typing import Literal, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
+
+
+@dataclasses.dataclass(frozen=True)
+class CellLayoutArgument:
+    # We use this as a buffer for operators with precedence slower than <<,
+    # i.e. | (__or__)
+    layout: 'CellLayout'
+    argument: Any
 
 
 @dataclasses.dataclass(frozen=True)
 class CellLayoutSubstitution:
     layout: 'CellLayout'
-    index: int
+    substitute: 'CellLayout'
 
-    def __mod__(self, other: 'CellLayout'):
-        return self.layout.substitute(self.index, other)
+    def __lshift__(self, other: int):
+        return self.layout.substitute(other, self.substitute)
 
 
 @dataclasses.dataclass(frozen=True)
 class CellLayoutVerticalChain:
     chain: Sequence['CellLayout']
 
-    def __or__(self, other: Union['CellLayout', float]):
-        if isinstance(other, CellLayout):
-            return CellLayoutVerticalChain(
-                chain=self.chain + [other]
-            )
+    def __or__(self, other: Union[float, 'CellLayoutArgument']):
+        if isinstance(other, CellLayoutArgument):
+            # We already have everything required to evaluate the chain
+            chain = self.chain + [other.layout]
+            return vsplit(other.argument, *chain)
+        return CellLayoutVerticalChain(
+            chain=self.chain + [other]
+        )
+
+    def __lshift__(self, other: float):
         return vsplit(other, *self.chain)
 
 
@@ -35,11 +48,12 @@ class CellLayoutVerticalChain:
 class CellLayoutHorizontalChain:
     chain: Sequence['CellLayout']
 
-    def __truediv__(self, other: Union['CellLayout', float]):
-        if isinstance(other, CellLayout):
-            return CellLayoutHorizontalChain(
-                chain=self.chain + [other]
-            )
+    def __truediv__(self, other: 'CellLayout'):
+        return CellLayoutHorizontalChain(
+            chain=self.chain + [other]
+        )
+
+    def __lshift__(self, other: float):
         return hsplit(other, *self.chain)
 
 
@@ -121,10 +135,10 @@ class CellLayout:
             )
         return sum(1 for _ in self)
 
-    def __mod__(self, other: int) -> 'CellLayoutSubstitution':
+    def __mod__(self, other: 'CellLayout') -> 'CellLayoutSubstitution':
         return CellLayoutSubstitution(
             layout=self,
-            index=other,
+            substitute=other,
         )
 
     def __truediv__(self, other: 'CellLayout') -> 'CellLayoutHorizontalChain':
@@ -132,7 +146,11 @@ class CellLayout:
             chain=[self, other]
         )
 
-    def __or__(self, other: 'CellLayout') -> 'CellLayoutVerticalChain':
+    def __or__(
+        self, other: Union['CellLayout', 'CellLayoutArgument']
+    ) -> Union['CellLayoutVerticalChain', 'CellLayout']:
+        if isinstance(other, CellLayoutArgument):
+            return vsplit(other.argument, self, other.layout)
         return CellLayoutVerticalChain(
             chain=[self, other]
         )
@@ -144,6 +162,12 @@ class CellLayout:
         for i in range(n, 0, -1):
             layout = layout.substitute(i - 1, other)
         return layout
+
+    def __lshift__(self, other: Any):
+        return CellLayoutArgument(
+            layout=self,
+            argument=other,
+        )
 
     @property
     def root(self) -> 'CellLayout':

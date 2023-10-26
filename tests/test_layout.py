@@ -44,19 +44,19 @@ def test_layout_substitute():
     # )
     # layout = (
     #     (Cell() | (Cell() /
-    #                Cell() /
-    #                (1 / 4)) | (1 / 2)) /
+    #                Cell() <<
+    #                (1 / 4)) << (1 / 2)) /
     #      Cell() /
-    #      Cell() /
+    #      Cell() <<
     #      (1 / 3)
     # )
     layout = ((
         Cell() /
-        (Cell() | Cell() | (1 / 4)) /
-        (1 / 2))| Cell() | Cell() | (1 / 3)
+        (Cell() | Cell() << (1 / 4)) <<
+        (1 / 2))| Cell() | Cell() << (1 / 3)
     )
-    layout_inner = Cell() / Cell() / Cell() / (1 / 4)
-    layout_sub = (layout % 1 % layout_inner).partition(120, 120)
+    layout_inner = Cell() / Cell() / Cell() << (1 / 4)
+    layout_sub = (layout % layout_inner << 1).partition(120, 120)
     cells = list(layout_sub)
     assert cells[0].cell_loc == (0, 0)
     assert cells[0].cell_dim == (40, 60)
@@ -90,8 +90,8 @@ def test_grid_layout():
             assert cells[5 * j + i].cell_loc == (200 * j, 180 * i)
 
 def test_layout_product():
-    layout0 = Cell() / Cell() / (1 / 3)
-    layout1 = Cell() | Cell() | (1 / 4)
+    layout0 = Cell() / Cell() << (1 / 3)
+    layout1 = Cell() | Cell() << (1 / 4)
     layout01 = (layout0 * layout1).partition(120, 120)
     cells = list(layout01)
     assert cells[0].cell_loc == (0, 0)
@@ -148,9 +148,9 @@ def test_layout_product():
 
 
 def test_layout_floating():
-    anchor = Cell() | Cell() | Cell() | Cell() | (1 / 5)
-    floating = Cell() / Cell() / (1 / 3)
-    floating_inner = Cell() | Cell() | (1 / 2)
+    anchor = Cell() | Cell() | Cell() | Cell() << (1 / 5)
+    floating = Cell() / Cell() << (1 / 3)
+    floating_inner = Cell() | Cell() << (1 / 2)
     layout_inner = float_layout(
         floating=floating_inner,
         anchor=floating,
@@ -194,15 +194,17 @@ def test_layout_floating():
     assert cells[7].cell_loc == (400, 210)
     assert cells[7].cell_dim == (40, 80)
 
-    anchor = Cell() | Cell() | (1 / 2)
-    floating = Cell() / Cell() / (1 / 4)
+    anchor = Cell() | Cell() << (1 / 2)
+    floating = Cell() / Cell() << (1 / 4)
     base = float_layout(
         floating=floating,
         anchor=anchor,
         loc_rel=(0.1, 0.1),
         dim_rel=(0.8, 0.8),
     )
-    layout = (base | base | (1 / 2)) / (base | base | (1 / 2)) / (1 / 2)
+    layout = (
+        base | base << (1 / 2)) / (
+        base | base << (1 / 2)) << (1 / 2)
     layout.partition(400, 400)
     cells = list(layout)
     assert cells[0].cell_loc == (0, 0)
