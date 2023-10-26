@@ -7,6 +7,7 @@ Layout representation
 Classes for representing layouts of data
 """
 import dataclasses
+from functools import singledispatch
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 
@@ -196,6 +197,11 @@ class CellLayout:
         if self.parent is None:
             return self
         return self.parent.root
+
+    @property
+    def direct_size(self):
+        """The direct size of a layout excludes any floating cells"""
+        return sum(1 for e in self if e.root is self)
 
     def copy(self, **extra_params) -> 'CellLayout':
         left = self.left.copy() if self.left is not None else None
@@ -448,6 +454,17 @@ class AnnotatedLayout(CellLayout):
             annotations=annotations,
         )
 
+    @property
+    def root(self) -> 'CellLayout':
+        raise NotImplementedError(
+            'AnnotatedLayout does not support root property'
+        )
+
+    @property
+    def direct_size(self):
+        """The direct size of a layout excludes any floating cells"""
+        return sum(1 for e in self.layout if e.root is self.layout)
+
     def partition(
         self,
         width: int,
@@ -580,14 +597,47 @@ class AnnotatedLayout(CellLayout):
         return layout, indices
 
 
-def split(
-    orientation: Literal['h', 'v'],
-    position: float,
+def reindex_annotations(*cells: AnnotatedLayout) -> Mapping[int, Mapping]:
+    aggregate_size = 0
+    floating_size = 0
+    root_annotations = {}
+    floating_annotations = {}
+    for cell in cells:
+        direct_size = cell.direct_size
+        root_annotations = {
+            **root_annotations,
+            **{
+                aggregate_size + i: annotation
+                for i, annotation in cell.annotations.items()
+                if i < direct_size
+            },
+        }
+        floating_annotations = {
+            **floating_annotations,
+            **{
+                floating_size + i - direct_size: annotation
+                for i, annotation in cell.annotations.items()
+                if i >= direct_size
+            },
+        }
+        aggregate_size += direct_size
+        floating_size += len(cell) - direct_size
+    floating_annotations = {
+        aggregate_size + i: annotation
+        for i, annotation in floating_annotations.items()
+    }
+    return {
+        **root_annotations,
+        **floating_annotations,
+    }
+
+
+@singledispatch
+def _split(
     *cells: CellLayout,
+    split_orientation: Literal['h', 'v'],
+    split_position: float,
 ) -> CellLayout:
-    """
-    Create a split layout
-    """
     if len(cells) == 1:
         return cells[0]
     elif len(cells) == 2:
@@ -601,8 +651,8 @@ def split(
         layout = CellLayout(
             left=left,
             right=right,
-            split_orientation=orientation,
-            split_position=position,
+            split_orientation=split_orientation,
+            split_position=split_position,
         )
         if left is not None:
             left.parent = layout
@@ -612,9 +662,9 @@ def split(
                     layout,
                     loc_rel=(0, 0),
                     dim_rel=(
-                        (1, position)
-                        if orientation == 'h'
-                        else (position, 1)
+                        (1, split_position)
+                        if split_orientation == 'h'
+                        else (split_position, 1)
                     ),
                     inner_loc_rel=e.float_loc_rel,
                     inner_dim_rel=e.float_dim_rel,
@@ -628,14 +678,14 @@ def split(
                     e,
                     layout,
                     loc_rel=(
-                        (0, position)
-                        if orientation == 'h'
-                        else (position, 0)
+                        (0, split_position)
+                        if split_orientation == 'h'
+                        else (split_position, 0)
                     ),
                     dim_rel=(
-                        (1, 1 - position)
-                        if orientation == 'h'
-                        else (1 - position, 1)
+                        (1, 1 - split_position)
+                        if split_orientation == 'h'
+                        else (1 - split_position, 1)
                     ),
                     inner_loc_rel=e.float_loc_rel,
                     inner_dim_rel=e.float_dim_rel,
@@ -646,13 +696,47 @@ def split(
         layout.floating = floating
         return layout
     else:
-        new_position = position / (1 - position)
+        new_position = split_position / (1 - split_position)
         return split(
-            orientation,
-            position,
+            split_orientation,
+            split_position,
             cells[0],
-            split(orientation, new_position, *cells[1:])
+            split(split_orientation, new_position, *cells[1:])
         )
+
+
+@_split.register
+def _(
+    *cells: AnnotatedLayout,
+    split_orientation: Literal['h', 'v'],
+    split_position: float,
+) -> AnnotatedLayout:
+    layouts = [cell.layout for cell in cells]
+    layout = _split(
+        *layouts,
+        split_orientation=split_orientation,
+        split_position=split_position,
+    )
+    annotations = reindex_annotations(*cells)
+    return AnnotatedLayout(
+        layout=layout,
+        annotations=annotations,
+    )
+
+
+def split(
+    orientation: Literal['h', 'v'],
+    position: float,
+    *cells: CellLayout,
+) -> CellLayout:
+    """
+    Create a split layout
+    """
+    return _split(
+        *cells,
+        split_orientation=orientation,
+        split_position=position,
+    )
 
 
 def vsplit(
@@ -740,9 +824,10 @@ def refloat_layout(
     ).floating[-1]
 
 
-def float_layout(
-    floating: CellLayout,
+@singledispatch
+def _float_layout(
     anchor: CellLayout,
+    floating: CellLayout,
     loc_rel: Tuple[float, float],
     dim_rel: Tuple[float, float],
 ) -> CellLayout:
@@ -778,3 +863,45 @@ def float_layout(
     else:
         anchor.floating += [floating] + refloated
     return anchor
+
+
+@_float_layout.register
+def _(
+    anchor: AnnotatedLayout,
+    floating: AnnotatedLayout,
+    loc_rel: Tuple[float, float],
+    dim_rel: Tuple[float, float],
+) -> AnnotatedLayout:
+    layout = _float_layout(
+        anchor.layout,
+        floating.layout,
+        loc_rel=loc_rel,
+        dim_rel=dim_rel,
+    )
+    anchor_size = len(anchor)
+    floating_annotations = {
+        anchor_size + i: annotation
+        for i, annotation in floating.annotations.items()
+    }
+    annotations = {
+        **anchor.annotations,
+        **floating_annotations,
+    }
+    return AnnotatedLayout(
+        layout=layout,
+        annotations=annotations,
+    )
+
+
+def float_layout(
+    floating: CellLayout,
+    anchor: CellLayout,
+    loc_rel: Tuple[float, float],
+    dim_rel: Tuple[float, float],
+) -> CellLayout:
+    return _float_layout(
+        anchor,
+        floating,
+        loc_rel=loc_rel,
+        dim_rel=dim_rel,
+    )

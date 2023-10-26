@@ -186,43 +186,91 @@ def test_layout_floating():
 
     anchor = Cell() | Cell() << (1 / 2)
     floating = Cell() / Cell() << (1 / 4)
-    base = anchor + floating <<((0.1, 0.1), (0.8, 0.8))
+    base = anchor + floating << ((0.1, 0.1), (0.8, 0.8))
     layout = (
         base | base << (1 / 2)) / (
         base | base << (1 / 2)) << (1 / 2)
     layout.partition(400, 400)
     cells = list(layout)
-    assert cells[0].cell_loc == (0, 0)
-    assert cells[0].cell_dim == (100, 200)
-    assert cells[1].cell_loc == (100, 0)
-    assert cells[1].cell_dim == (100, 200)
-    assert cells[2].cell_loc == (200, 0)
-    assert cells[2].cell_dim == (100, 200)
-    assert cells[3].cell_loc == (300, 0)
-    assert cells[3].cell_dim == (100, 200)
-    assert cells[4].cell_loc == (0, 200)
-    assert cells[4].cell_dim == (100, 200)
-    assert cells[5].cell_loc == (100, 200)
-    assert cells[5].cell_dim == (100, 200)
-    assert cells[6].cell_loc == (200, 200)
-    assert cells[6].cell_dim == (100, 200)
-    assert cells[7].cell_loc == (300, 200)
-    assert cells[7].cell_dim == (100, 200)
+    def check_cells(cells):
+        assert cells[0].cell_loc == (0, 0)
+        assert cells[0].cell_dim == (100, 200)
+        assert cells[1].cell_loc == (100, 0)
+        assert cells[1].cell_dim == (100, 200)
+        assert cells[2].cell_loc == (200, 0)
+        assert cells[2].cell_dim == (100, 200)
+        assert cells[3].cell_loc == (300, 0)
+        assert cells[3].cell_dim == (100, 200)
+        assert cells[4].cell_loc == (0, 200)
+        assert cells[4].cell_dim == (100, 200)
+        assert cells[5].cell_loc == (100, 200)
+        assert cells[5].cell_dim == (100, 200)
+        assert cells[6].cell_loc == (200, 200)
+        assert cells[6].cell_dim == (100, 200)
+        assert cells[7].cell_loc == (300, 200)
+        assert cells[7].cell_dim == (100, 200)
 
-    # Total area is (160, 160)
-    assert cells[8].cell_loc == (20, 20)
-    assert cells[8].cell_dim == (160, 40)
-    assert cells[9].cell_loc == (20, 60)
-    assert cells[9].cell_dim == (160, 120)
-    assert cells[10].cell_loc == (220, 20)
-    assert cells[10].cell_dim == (160, 40)
-    assert cells[11].cell_loc == (220, 60)
-    assert cells[11].cell_dim == (160, 120)
-    assert cells[12].cell_loc == (20, 220)
-    assert cells[12].cell_dim == (160, 40)
-    assert cells[13].cell_loc == (20, 260)
-    assert cells[13].cell_dim == (160, 120)
-    assert cells[14].cell_loc == (220, 220)
-    assert cells[14].cell_dim == (160, 40)
-    assert cells[15].cell_loc == (220, 260)
-    assert cells[15].cell_dim == (160, 120)
+        # Total area is (160, 160)
+        assert cells[8].cell_loc == (20, 20)
+        assert cells[8].cell_dim == (160, 40)
+        assert cells[9].cell_loc == (20, 60)
+        assert cells[9].cell_dim == (160, 120)
+        assert cells[10].cell_loc == (220, 20)
+        assert cells[10].cell_dim == (160, 40)
+        assert cells[11].cell_loc == (220, 60)
+        assert cells[11].cell_dim == (160, 120)
+        assert cells[12].cell_loc == (20, 220)
+        assert cells[12].cell_dim == (160, 40)
+        assert cells[13].cell_loc == (20, 260)
+        assert cells[13].cell_dim == (160, 120)
+        assert cells[14].cell_loc == (220, 220)
+        assert cells[14].cell_dim == (160, 40)
+        assert cells[15].cell_loc == (220, 260)
+        assert cells[15].cell_dim == (160, 120)
+
+    check_cells(cells)
+
+    annotated0 = base.annotate(
+        {0: {'i': 0}, 1: {'i': 1}, 2: {'i': 8}, 3: {'i': 9}}
+    )
+    annotated1 = base.annotate(
+        {0: {'i': 2}, 1: {'i': 3}, 2: {'i': 10}, 3: {'i': 11}}
+    )
+    annotated2 = base.annotate(
+        {0: {'i': 4}, 1: {'i': 5}, 2: {'i': 12}, 3: {'i': 13}}
+    )
+    annotated3 = base.annotate(
+        {0: {'i': 6}, 1: {'i': 7}, 2: {'i': 14}, 3: {'i': 15}}
+    )
+    annotated = (
+        annotated0 | annotated1 << (1 / 2)) / (
+        annotated2 | annotated3 << (1 / 2)) << (1 / 2)
+    annotated.partition(400, 400)
+    cells = list(annotated)
+    check_cells(cells)
+    assert len(annotated) == 16
+    for i in range(len(annotated)):
+        assert annotated.annotations[i]['i'] == i
+
+    annotated_a0 = anchor.annotate({0: {'i': 0}, 1: {'i': 1}})
+    annotated_a1 = anchor.annotate({0: {'i': 2}, 1: {'i': 3}})
+    annotated_a2 = anchor.annotate({0: {'i': 4}, 1: {'i': 5}})
+    annotated_a3 = anchor.annotate({0: {'i': 6}, 1: {'i': 7}})
+    annotated_f0 = floating.annotate({0: {'i': 8}, 1: {'i': 9}})
+    annotated_f1 = floating.annotate({0: {'i': 10}, 1: {'i': 11}})
+    annotated_f2 = floating.annotate({0: {'i': 12}, 1: {'i': 13}})
+    annotated_f3 = floating.annotate({0: {'i': 14}, 1: {'i': 15}})
+    annotated0 = annotated_a0 + annotated_f0 << ((0.1, 0.1), (0.8, 0.8))
+    annotated1 = annotated_a1 + annotated_f1 << ((0.1, 0.1), (0.8, 0.8))
+    annotated2 = annotated_a2 + annotated_f2 << ((0.1, 0.1), (0.8, 0.8))
+    annotated3 = annotated_a3 + annotated_f3 << ((0.1, 0.1), (0.8, 0.8))
+    annotated = (
+        (annotated0 | annotated1 << (1 / 2)) /
+        (annotated2 | annotated3 << (1 / 2)) << (1 / 2)
+    )
+    annotated.partition(400, 400)
+    cells = list(annotated)
+    check_cells(cells)
+    assert len(annotated) == 16
+    for i in range(len(annotated)):
+        assert annotated.annotations[i]['i'] == i
