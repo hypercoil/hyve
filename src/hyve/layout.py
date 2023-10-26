@@ -11,6 +11,9 @@ from functools import singledispatch
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 
+BIG = 2**63 - 1
+
+
 @dataclasses.dataclass(frozen=True)
 class CellLayoutArgument:
     # We use this as a buffer for operators with precedence slower than <<,
@@ -25,7 +28,7 @@ class CellLayoutSubstitution:
     substitute: 'CellLayout'
 
     def __lshift__(self, other: int):
-        return self.layout.substitute(other, self.substitute)
+        return substitute(self.layout, self.substitute, other)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -182,7 +185,7 @@ class CellLayout:
         layout = self
         n = len(layout)
         for i in range(n, 0, -1):
-            layout = layout.substitute(i - 1, other)
+            layout = substitute(layout, other, i - 1)
         return layout
 
     def __lshift__(self, other: Any):
@@ -227,24 +230,6 @@ class CellLayout:
         if floating is not None:
             copy.floating = floating
         return copy
-
-    def substitute(self, index: int, other: 'CellLayout') -> 'CellLayout':
-        """Substitute a cell in the layout with another layout"""
-        if len(self) <= 1:
-            return other
-        new = self.copy()
-        other = other.copy()
-        cur_idx = 0
-        cur_cell = new._leftmost()
-        while cur_idx < index:
-            cur_cell = cur_cell._next_leaf()
-            cur_idx += 1
-        if cur_cell.parent.left is cur_cell:
-            cur_cell.parent.left = other
-        else:
-            cur_cell.parent.right = other
-        other.parent = cur_cell.parent
-        return new
 
     def partition(
         self,
@@ -355,6 +340,24 @@ class Cell(CellLayout):
 
     def copy(self) -> 'Cell':
         return self.__class__()
+
+    @property
+    def index(self):
+        return list(self.root).index(self)
+
+    @property
+    def root_loc(self):
+        # Neither the most efficient nor the most flexible way to do this,
+        # but we'll take it for now
+        loc = self.root.copy().partition(BIG, BIG)[self.index].cell_loc
+        return (loc[0] / BIG, loc[1] / BIG)
+
+    @property
+    def root_dim(self):
+        # Neither the most efficient nor the most flexible way to do this,
+        # but we'll take it for now
+        dim = self.root.copy().partition(BIG, BIG)[self.index].cell_dim
+        return (dim[0] / BIG, dim[1] / BIG)
 
 
 class FloatingCellLayout(CellLayout):
@@ -904,4 +907,121 @@ def float_layout(
         floating,
         loc_rel=loc_rel,
         dim_rel=dim_rel,
+    )
+
+
+@singledispatch
+def _substitute(
+    orig: CellLayout,
+    substitute: CellLayout,
+    index: int,
+) -> CellLayout:
+    if len(orig) <= 1:
+        return substitute
+    new = orig.copy()
+    substitute = substitute.copy()
+
+    cur_idx = 0
+    cur_cell = new._leftmost()
+    while cur_idx < index:
+        cur_cell = cur_cell._next_leaf()
+        cur_idx += 1
+    cell_root_loc = cur_cell.root_loc
+    cell_root_dim = cur_cell.root_dim
+    if cur_cell.parent.left is cur_cell:
+        cur_cell.parent.left = substitute
+    else:
+        cur_cell.parent.right = substitute
+    substitute.parent = cur_cell.parent
+
+    if substitute.floating is not None:
+        substitute_floating = [
+            refloat_layout(
+                e,
+                substitute,
+                loc_rel=cell_root_loc,
+                dim_rel=cell_root_dim,
+                inner_loc_rel=e.float_loc_rel,
+                inner_dim_rel=e.float_dim_rel,
+            )
+            for e in substitute.floating
+        ]
+        new.floating = (
+            new.floating + substitute_floating
+            if new.floating is not None
+            else substitute_floating
+        )
+        substitute.floating = None
+    return new
+
+
+@_substitute.register
+def _(
+    orig: AnnotatedLayout,
+    substitute: AnnotatedLayout,
+    index: int,
+) -> AnnotatedLayout:
+    layout = _substitute(
+        orig.layout,
+        substitute.layout,
+        index=index,
+    )
+    substitute_size = substitute.direct_size
+    orig_size = orig.direct_size
+    new_size = layout.direct_size
+    incr = substitute_size - 1
+    root_annotations = {
+        i: annotation
+        for i, annotation in orig.annotations.items()
+        if (i < orig_size and i != index)
+    }
+    root_annotations = {
+        **{
+            i if i < index else i + incr: annotation
+            for i, annotation in root_annotations.items()
+        },
+        **{
+            i + index: annotation
+            for i, annotation in substitute.annotations.items()
+            if i < substitute_size
+        },
+    }
+    if layout.floating is not None:
+        orig_floating_size = len(orig) - orig_size
+        floating_annotations = {
+            **{
+                i - orig_size + new_size: annotation
+                for i, annotation in orig.annotations.items()
+                if i >= orig_size
+            },
+            **{
+                (
+                    i - substitute_size + new_size + orig_floating_size
+                ): annotation
+                for i, annotation in substitute.annotations.items()
+                if i >= substitute_size
+            },
+        }
+    else:
+        floating_annotations = {}
+    annotations = {
+        **root_annotations,
+        **floating_annotations,
+    }
+    return AnnotatedLayout(
+        layout=layout,
+        annotations=annotations,
+    )
+
+
+def substitute(
+    orig: CellLayout,
+    substitute: CellLayout,
+    index: int,
+) -> CellLayout:
+    """Substitute a cell in the layout with another layout"""
+    return _substitute(
+        orig,
+        substitute,
+        index=index,
     )

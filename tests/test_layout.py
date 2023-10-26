@@ -252,6 +252,35 @@ def test_layout_floating():
     for i in range(len(annotated)):
         assert annotated.annotations[i]['i'] == i
 
+    annotated0 = base.annotate(
+        {0: {'i': 0}, 1: {'i': None}, 2: {'i': 3}, 3: {'i': 4}}
+    )
+    annotated1 = base.annotate(
+        {0: {'i': 1}, 1: {'i': 2}, 2: {'i': 5}, 3: {'i': 6}}
+    )
+    annotated = annotated0 % annotated1 << 1
+    annotated.partition(400, 400)
+    assert len(annotated) == 7
+    for i in range(len(annotated)):
+        assert annotated.annotations[i]['i'] == i
+        if i > 2:
+            assert type(annotated[i].root).__name__ == 'FloatingCellLayout'
+    cells = list(annotated)
+    assert cells[0].cell_loc == (0, 0)
+    assert cells[0].cell_dim == (200, 400)
+    assert cells[1].cell_loc == (200, 0)
+    assert cells[1].cell_dim == (100, 400)
+    assert cells[2].cell_loc == (300, 0)
+    assert cells[2].cell_dim == (100, 400)
+    assert cells[3].cell_loc == (40, 40)
+    assert cells[3].cell_dim == (320, 80)
+    assert cells[4].cell_loc == (40, 120)
+    assert cells[4].cell_dim == (320, 240)
+    assert cells[5].cell_loc == (220, 40)
+    assert cells[5].cell_dim == (160, 80)
+    assert cells[6].cell_loc == (220, 120)
+    assert cells[6].cell_dim == (160, 240)
+
     annotated_a0 = anchor.annotate({0: {'i': 0}, 1: {'i': 1}})
     annotated_a1 = anchor.annotate({0: {'i': 2}, 1: {'i': 3}})
     annotated_a2 = anchor.annotate({0: {'i': 4}, 1: {'i': 5}})
