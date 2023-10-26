@@ -303,3 +303,68 @@ def test_layout_floating():
     assert len(annotated) == 16
     for i in range(len(annotated)):
         assert annotated.annotations[i]['i'] == i
+
+    layout0 = Cell() | Cell() << (1 / 2)
+    layout1 = Cell() / Cell() << (1 / 4)
+    onecell = Cell()
+    annotated0 = layout0.annotate({0: {'x': 0}, 1: {'x': 1}})
+    annotated1 = layout1.annotate({0: {'y': 0}, 1: {'y': 1}})
+    annotated2 = onecell.annotate({0: {'float0': True}})
+    annotated3 = onecell.annotate({0: {'float1': True}})
+    annotated12 = annotated1 + annotated2 << ((0.1, 0.6), (0.8, 0.3))
+    annotated03 = annotated0 + annotated3 << ((0.6, 0.1), (0.3, 0.8))
+    annotated = annotated0 * annotated12
+    annotated.partition(400, 400)
+    cells = list(annotated)
+    annotations = annotated.annotations
+    assert cells[0].cell_loc == (0, 0)
+    assert cells[0].cell_dim == (200, 100)
+    assert annotations[0] == {'x': 0, 'y': 0}
+    assert cells[1].cell_loc == (0, 100)
+    assert cells[1].cell_dim == (200, 300)
+    assert annotations[1] == {'x': 0, 'y': 1}
+    assert cells[2].cell_loc == (200, 0)
+    assert cells[2].cell_dim == (200, 100)
+    assert annotations[2] == {'x': 1, 'y': 0}
+    assert cells[3].cell_loc == (200, 100)
+    assert cells[3].cell_dim == (200, 300)
+    assert annotations[3] == {'x': 1, 'y': 1}
+    assert cells[4].cell_loc == (20, 240)
+    assert cells[4].cell_dim == (160, 120)
+    assert annotations[4] == {'float0': True, 'x': 0}
+    assert cells[5].cell_loc == (220, 240)
+    assert cells[5].cell_dim == (160, 120)
+    assert annotations[5] == {'float0': True, 'x': 1}
+
+    # Really I don't think you should do this in practice, but it's possible
+    annotated = annotated03 * annotated12
+    annotations = annotated.annotations
+    cells = list(annotated.partition(400, 400))
+    assert cells[0].cell_loc == (0, 0)
+    assert cells[0].cell_dim == (200, 100)
+    assert annotations[0] == {'x': 0, 'y': 0}
+    assert cells[1].cell_loc == (0, 100)
+    assert cells[1].cell_dim == (200, 300)
+    assert annotations[1] == {'x': 0, 'y': 1}
+    assert cells[2].cell_loc == (200, 0)
+    assert cells[2].cell_dim == (200, 100)
+    assert annotations[2] == {'x': 1, 'y': 0}
+    assert cells[3].cell_loc == (200, 100)
+    assert cells[3].cell_dim == (200, 300)
+    assert annotations[3] == {'x': 1, 'y': 1}
+    assert cells[4].cell_loc == (20, 240)
+    assert cells[4].cell_dim == (160, 120)
+    assert annotations[4] == {'x': 0, 'float0': True}
+    assert cells[5].cell_loc == (220, 240)
+    assert cells[5].cell_dim == (160, 120)
+    assert annotations[5] == {'x': 1, 'float0': True}
+    # TODO: need to double check the below -- something here isn't right
+    assert cells[6].cell_loc == (240, 40)
+    assert cells[6].cell_dim == (120, 80)
+    assert annotations[6] == {'y': 0, 'float1': True}
+    assert cells[7].cell_loc == (240, 120)
+    assert cells[7].cell_dim == (120, 240)
+    assert annotations[7] == {'y': 1, 'float1': True}
+    assert cells[8].cell_loc == (252, 232)
+    assert cells[8].cell_dim == (96, 96)
+    assert annotations[8] == {'float0': True, 'float1': True}

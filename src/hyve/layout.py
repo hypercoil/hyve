@@ -7,7 +7,7 @@ Layout representation
 Classes for representing layouts of data
 """
 import dataclasses
-from functools import singledispatch
+from functools import cached_property, singledispatch
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 
@@ -182,11 +182,7 @@ class CellLayout:
 
     def __mul__(self, other: 'CellLayout') -> 'CellLayout':
         """Note that this 'product' is not commutative"""
-        layout = self
-        n = len(layout)
-        for i in range(n, 0, -1):
-            layout = substitute(layout, other, i - 1)
-        return layout
+        return product(self, other)
 
     def __lshift__(self, other: Any):
         return CellLayoutArgument(
@@ -302,7 +298,6 @@ class CellLayout:
         """
         Annotate a layout with a dictionary of annotations
         """
-        assert len(annotations) == len(self)
         return AnnotatedLayout(
             layout=self.copy(),
             annotations=annotations,
@@ -397,6 +392,47 @@ class FloatingCellLayout(CellLayout):
             **extra_params,
         )
 
+    def defloat(self) -> 'CellLayout':
+        if len(self) == 1:
+            return Cell()
+        else:
+            new = self.copy()
+            return CellLayout(
+                left=new.left,
+                right=new.right,
+                split_orientation=self.split_orientation,
+                split_position=self.split_position,
+            )
+
+
+class FloatingCell(Cell):
+    def __init__(
+        self,
+        float_loc_rel: Tuple[float, float],
+        float_dim_rel: Tuple[float, float],
+    ):
+        super().__init__()
+        self.float_loc_rel = float_loc_rel
+        self.float_dim_rel = float_dim_rel
+
+    def __repr__(self) -> str:
+        return (
+            'FloatingCell('
+            f'loc={self.cell_loc}, dim={self.cell_dim}, '
+            f'float_loc_rel={self.float_loc_rel}, '
+            f'float_dim_rel={self.float_dim_rel}'
+            ')'
+        )
+
+    def copy(self, **extra_params) -> 'FloatingCell':
+        return self.__class__(
+            float_loc_rel=self.float_loc_rel,
+            float_dim_rel=self.float_dim_rel,
+        )
+
+    def defloat(self) -> 'Cell':
+        return Cell()
+
 
 @dataclasses.dataclass
 class AnnotatedLayout(CellLayout):
@@ -441,22 +477,6 @@ class AnnotatedLayout(CellLayout):
     def __len__(self) -> int:
         return len(self.layout)
 
-    def __mul__(self, other: 'AnnotatedLayout') -> 'AnnotatedLayout':
-        layout = self.layout * other.layout
-        len_l = len(self)
-        len_r = len(other)
-        annotations = {
-            i * (len_r) + j: {
-                **self.annotations[i],
-                **other.annotations[j],
-            }
-            for i in range(len_l) for j in range(len_r)
-        }
-        return AnnotatedLayout(
-            layout=layout,
-            annotations=annotations,
-        )
-
     @property
     def root(self) -> 'CellLayout':
         raise NotImplementedError(
@@ -467,6 +487,42 @@ class AnnotatedLayout(CellLayout):
     def direct_size(self):
         """The direct size of a layout excludes any floating cells"""
         return sum(1 for e in self.layout if e.root is self.layout)
+
+    @property
+    def floating(self):
+        return self.layout.floating
+
+    @cached_property
+    def decomposition(self):
+        if self.floating is None:
+            return self, []
+        else:
+            max_annotation = self.direct_size
+            root_layout = self.layout.copy()
+            root_layout.floating = None
+            root_layout = AnnotatedLayout(
+                layout=root_layout,
+                annotations={
+                    i: annotation
+                    for i, annotation in self.annotations.items()
+                    if i < max_annotation
+                },
+            )
+            floating_layouts = []
+            for floating in self.floating:
+                min_annotation = max_annotation
+                max_annotation += len(floating)
+                floating_layouts.append(
+                    AnnotatedLayout(
+                        layout=floating.defloat(),
+                        annotations={
+                            i - min_annotation: annotation
+                            for i, annotation in self.annotations.items()
+                            if i < max_annotation and i >= min_annotation
+                        },
+                    )
+                )
+            return root_layout, floating_layouts
 
     def partition(
         self,
@@ -850,16 +906,24 @@ def _float_layout(
             )
     to_float = floating.copy()
     to_float.floating = None
-    floating = FloatingCellLayout(
-        float_loc_rel=loc_rel,
-        float_dim_rel=dim_rel,
-        left=to_float.left,
-        right=to_float.right,
-        split_orientation=to_float.split_orientation,
-        split_position=to_float.split_position,
-    )
-    floating.left.parent = floating
-    floating.right.parent = floating
+    if isinstance(to_float, Cell):
+        floating = FloatingCell(
+            float_loc_rel=loc_rel,
+            float_dim_rel=dim_rel,
+        )
+    else:
+        floating = FloatingCellLayout(
+            float_loc_rel=loc_rel,
+            float_dim_rel=dim_rel,
+            left=to_float.left,
+            right=to_float.right,
+            split_orientation=to_float.split_orientation,
+            split_position=to_float.split_position,
+        )
+    if floating.left is not None:
+        floating.left.parent = floating
+    if floating.right is not None:
+        floating.right.parent = floating
     anchor = anchor.copy()
     if anchor.floating is None:
         anchor.floating = [floating] + refloated
@@ -1024,4 +1088,113 @@ def substitute(
         orig,
         substitute,
         index=index,
+    )
+
+
+@singledispatch
+def _product(
+    outer: CellLayout,
+    inner: CellLayout,
+) -> CellLayout:
+    if outer.floating is not None:
+        # Try to lift the floating cells and recompose
+        outer_base = outer.copy()
+        outer_base.floating = None
+        layout = product(outer_base, inner)
+        float_loc_rel = [e.float_loc_rel for e in outer.floating]
+        float_dim_rel = [e.float_dim_rel for e in outer.floating]
+        floating_product = [
+            product(e, inner)
+            for e in outer.floating
+        ]
+        for floating, loc, dim in zip(
+            floating_product,
+            float_loc_rel,
+            float_dim_rel,
+        ):
+            layout = float_layout(
+                floating,
+                layout,
+                loc_rel=loc,
+                dim_rel=dim,
+            )
+        return layout
+    assert outer.floating is None, (
+        'Floating cells are not supported in the outer layout'
+    )
+    layout = outer
+    inner_size = inner.direct_size
+    for i in range(len(layout)):
+        layout = substitute(layout, inner, i * inner_size)
+    return layout
+
+
+@_product.register
+def _(
+    outer: AnnotatedLayout,
+    inner: AnnotatedLayout
+) -> AnnotatedLayout:
+    if outer.floating is not None:
+        # Try to lift the floating cells and recompose
+        outer_base, outer_floating = outer.decomposition
+        layout = product(outer_base, inner)
+        float_loc_rel = [e.float_loc_rel for e in outer.floating]
+        float_dim_rel = [e.float_dim_rel for e in outer.floating]
+        floating_product = [
+            product(e, inner)
+            for e in outer_floating
+        ]
+        for floating, loc, dim in zip(
+            floating_product,
+            float_loc_rel,
+            float_dim_rel,
+        ):
+            layout = float_layout(
+                floating,
+                layout,
+                loc_rel=loc,
+                dim_rel=dim,
+            )
+        return layout
+    assert outer.floating is None, (
+        'Floating cells are not supported in the outer layout'
+    )
+    layout = outer.layout * inner.layout
+    outer_size = outer.direct_size
+    inner_size = inner.direct_size
+    fixed_size = outer_size * inner_size
+    inner_total_size = len(inner)
+    root_annotations = {
+        i * inner_size + j: {
+            **outer.annotations.get(i, {}),
+            **inner.annotations.get(j, {})
+        }
+        for i in range(outer_size) for j in range(inner_size)
+    }
+    floating_annotations = {
+        i * inner_total_size - (i + 1) * inner_size + j + fixed_size: {
+            **outer.annotations.get(i, {}),
+            **inner.annotations.get(j, {})
+        }
+        for i in range(outer_size)
+        for j in range(inner_size, inner_total_size)
+    }
+
+    return AnnotatedLayout(
+        layout=layout,
+        annotations={
+            **root_annotations,
+            **floating_annotations,
+        },
+    )
+
+
+def product(
+    inner: CellLayout,
+    outer: CellLayout,
+) -> CellLayout:
+    """Product of two layouts"""
+    return _product(
+        inner,
+        outer,
     )
