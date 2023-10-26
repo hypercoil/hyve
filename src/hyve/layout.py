@@ -28,6 +28,20 @@ class CellLayoutSubstitution:
 
 
 @dataclasses.dataclass(frozen=True)
+class CellLayoutFloat:
+    anchor: 'CellLayout'
+    floating: 'CellLayout'
+
+    def __lshift__(self, other: Tuple[Tuple[float, float], Tuple[float, float]]):
+        return float_layout(
+            self.floating,
+            self.anchor,
+            loc_rel=other[0],
+            dim_rel=other[1],
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class CellLayoutVerticalChain:
     chain: Sequence['CellLayout']
 
@@ -153,6 +167,13 @@ class CellLayout:
             return vsplit(other.argument, self, other.layout)
         return CellLayoutVerticalChain(
             chain=[self, other]
+        )
+
+    def __add__(self, other: 'CellLayout') -> 'CellLayoutFloat':
+        """Note that this 'sum' is not commutative"""
+        return CellLayoutFloat(
+            anchor=self,
+            floating=other,
         )
 
     def __mul__(self, other: 'CellLayout') -> 'CellLayout':

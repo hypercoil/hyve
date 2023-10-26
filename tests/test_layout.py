@@ -151,18 +151,8 @@ def test_layout_floating():
     anchor = Cell() | Cell() | Cell() | Cell() << (1 / 5)
     floating = Cell() / Cell() << (1 / 3)
     floating_inner = Cell() | Cell() << (1 / 2)
-    layout_inner = float_layout(
-        floating=floating_inner,
-        anchor=floating,
-        loc_rel=(0.1, 0.4),
-        dim_rel=(0.8, 0.2),
-    )
-    layout = float_layout(
-        floating=layout_inner,
-        anchor=anchor,
-        loc_rel=(0.7, 0.1),
-        dim_rel=(0.2, 0.8),
-    )
+    layout_inner = floating + floating_inner << ((0.1, 0.4), (0.8, 0.2))
+    layout = anchor + layout_inner << ((0.7, 0.1), (0.2, 0.8))
     for i, cell in enumerate(layout):
         if i < 4:
             assert cell.root is layout
@@ -196,12 +186,7 @@ def test_layout_floating():
 
     anchor = Cell() | Cell() << (1 / 2)
     floating = Cell() / Cell() << (1 / 4)
-    base = float_layout(
-        floating=floating,
-        anchor=anchor,
-        loc_rel=(0.1, 0.1),
-        dim_rel=(0.8, 0.8),
-    )
+    base = anchor + floating <<((0.1, 0.1), (0.8, 0.8))
     layout = (
         base | base << (1 / 2)) / (
         base | base << (1 / 2)) << (1 / 2)
