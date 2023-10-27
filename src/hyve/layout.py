@@ -1337,6 +1337,39 @@ def _break_at(
         return to_break, broken
 
 
+@_break_at.register
+def _(
+    layout: AnnotatedLayout,
+    index: int,
+) -> Tuple[AnnotatedLayout, AnnotatedLayout]:
+    left, right = _break_at(
+        layout.layout,
+        index=index,
+    )
+    left_size = left.direct_size
+    right_size = right.direct_size
+    left_annotations = {
+        i: annotation
+        for i, annotation in layout.annotations.items()
+        if i < left_size
+    }
+    right_annotations = {
+        i - left_size: annotation
+        for i, annotation in layout.annotations.items()
+        if i >= left_size and i < left_size + right_size
+    }
+    return (
+        AnnotatedLayout(
+            layout=left,
+            annotations=left_annotations,
+        ),
+        AnnotatedLayout(
+            layout=right,
+            annotations=right_annotations,
+        ),
+    )
+
+
 def break_at(
     layout: CellLayout,
     index: int,

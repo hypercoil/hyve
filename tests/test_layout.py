@@ -424,3 +424,12 @@ def test_break():
             print('very bad', i)
             continue
         assert (len(left), len(right)) == ((k * (i + 1), l - k * (i + 1)))
+
+    annotated = layout.annotate({i: {'i': i} for i in range(len(layout))})
+    for i in range(47):
+        left, right = annotated @ i
+        assert len(left), len(right) == (k * (i + 1), l - k * (i + 1))
+        assert left.annotations == {j: {'i': j} for j in range(k * (i + 1))}
+        assert right.annotations == {
+            i: {'i': j} for i, j in enumerate(range(k * (i + 1), l))
+        }
