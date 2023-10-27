@@ -368,3 +368,51 @@ def test_layout_floating():
     assert cells[8].cell_loc == (252, 232)
     assert cells[8].cell_dim == (96, 96)
     assert annotations[8] == {'float0': True, 'float1': True}
+
+
+def test_break():
+    layout0 = Cell() | Cell() | Cell() << (1 / 3)
+    layout1 = Cell() | Cell() << (1 /2)
+    layout2 = Cell() / Cell() << (1 / 2)
+    layout = layout0 * layout1 * layout2
+    left, right = layout @ 0
+    assert len(left), len(right) == (2, 10)
+    left, right = layout @ 1
+    assert len(left), len(right) == (4, 8)
+    left, right = layout @ 2
+    assert len(left), len(right) == (6, 6)
+    left, right = layout @ 3
+    assert len(left), len(right) == (8, 4)
+    left, right = layout @ 4
+    assert len(left), len(right) == (10, 2)
+
+    assert len(list(layout.breakpoints)) == 5
+    assert len(list(layout[0].parent.breakpoints)) == 1
+    assert len(list(layout[0].parent.parent.breakpoints)) == 1
+
+    layout = layout1 * layout0 * layout2
+    breakpoints = list(layout.breakpoints)
+    bpdict = dict(zip(breakpoints, range(len(breakpoints))))
+    # not intuitive, because of operator precedence
+    assert breakpoints[0] is layout.left
+    assert breakpoints[1] is layout.left.right
+    assert breakpoints[2] is layout
+    assert breakpoints[3] is layout.right
+    assert breakpoints[4] is layout.right.right
+    left, right = layout @ 0
+    assert len(left), len(right) == (2, 10)
+    left, right = layout @ 1
+    assert len(left), len(right) == (4, 8)
+    left, right = layout @ 2
+    assert len(left), len(right) == (6, 6)
+    left, right = layout @ 3
+    assert len(left), len(right) == (8, 4)
+    left, right = layout @ 4
+    assert len(left), len(right) == (10, 2)
+
+    layout = (
+        layout1 * layout1 * layout1 * layout0 * layout1 * layout2 * layout1
+    )
+    for i in range(47):
+        left, right = layout @ i
+        assert len(left), len(right) == (6 * (i + 1), 192 - 6 * (i + 1))

@@ -184,6 +184,9 @@ class CellLayout:
         """Note that this 'product' is not commutative"""
         return product(self, other)
 
+    def __matmul__(self, other: int) -> Tuple['CellLayout', 'CellLayout']:
+        return self.break_at(other)
+
     def __lshift__(self, other: Any):
         return CellLayoutArgument(
             layout=self,
@@ -201,6 +204,33 @@ class CellLayout:
     def direct_size(self):
         """The direct size of a layout excludes any floating cells"""
         return sum(1 for e in self if e.root is self)
+
+    @property
+    def breakpoints_left(self):
+        """Get valid breakpoints on the left side of the layout tree."""
+        self.split_orientation
+        if self.left.split_orientation == self.split_orientation:
+            yield from self.left.breakpoints
+
+    @property
+    def breakpoints_right(self):
+        """Get valid breakpoints on the right side of the layout tree."""
+        if self.right.split_orientation == self.split_orientation:
+            yield from self.right.breakpoints
+
+    @property
+    def breakpoints(self):
+        yield from self.breakpoints_left
+        yield self
+        yield from self.breakpoints_right
+
+    @property
+    def is_left(self):
+        return self.parent is not None and self.parent.left is self
+
+    @property
+    def is_right(self):
+        return self.parent is not None and self.parent.right is self
 
     def copy(self, **extra_params) -> 'CellLayout':
         left = self.left.copy() if self.left is not None else None
@@ -226,6 +256,99 @@ class CellLayout:
         if floating is not None:
             copy.floating = floating
         return copy
+
+    def break_at(self, index: int):
+        to_break = self.copy()
+        broken = None
+        breakpoints_left = list(to_break.breakpoints_left)
+        breakpoints_right = list(to_break.breakpoints_right)
+        breakpoints = (
+            breakpoints_left + [to_break] + breakpoints_right
+        )
+        break_point = breakpoints[index]
+        breakpoints = dict(zip(breakpoints, range(len(breakpoints))))
+        if break_point is to_break:
+            left = to_break.left
+            right = to_break.right
+            left.parent = None
+            right.parent = None
+            return left, right
+
+        # By the way we've defined valid break points, we can only traverse
+        # valid break points when moving from the root to any valid break
+        # point. This means that we can use the index of the break point
+        # to determine whether we need to traverse left or right to get to
+        # it.
+        pointer = to_break
+        leftward = index < breakpoints[pointer]
+        parent = None
+        break_leftward = None
+        while pointer != break_point:
+            previous = pointer
+            pointer = pointer.left if leftward else pointer.right
+            if ((index < breakpoints[pointer]) != leftward):
+                if leftward:
+                    previous.left = None
+                else:
+                    previous.right = None
+                pointer.parent = None
+                if broken is None:
+                    break_reference = previous
+                    break_leftward = leftward
+                    attach_left = breakpoints[break_reference] < index
+                    broken = pointer
+                elif parent is not None:
+                    if leftward:
+                        parent.right = pointer
+                    else:
+                        parent.left = pointer
+                    pointer.parent = parent
+                leftward = not leftward
+                parent = previous
+        if broken is None:
+            break_reference = previous
+            break_leftward = leftward
+            attach_left = breakpoints[break_reference] < index
+            broken = pointer
+
+        branch_upper = (
+            break_point.left if attach_left else break_point.right
+        )
+        branch_lower = (
+            break_point.right if attach_left else break_point.left
+        )
+        # break_point.left = None
+        # break_point.right = None
+        branch_upper.parent = None
+        branch_lower.parent = None
+        match break_leftward:
+            case True:
+                break_reference.left = branch_upper
+                branch_upper.parent = break_reference
+                if break_point.parent is None:
+                    broken = branch_lower
+                elif break_point.is_left:
+                    break_point.parent.left = branch_lower
+                    branch_lower.parent = break_point.parent
+                elif break_point.is_right:
+                    break_point.parent.right = branch_lower
+                    branch_lower.parent = break_point.parent
+            case False:
+                break_reference.right = branch_upper
+                break_point.left.parent = break_reference
+                if break_point.parent is None:
+                    broken = branch_lower
+                if break_point.is_left:
+                    break_point.parent.left = branch_lower
+                    branch_lower.parent = break_point.parent
+                elif break_point.is_right:
+                    break_point.parent.right = branch_lower
+                    branch_lower.parent = break_point.parent
+        #break_point.parent = None
+        if index < breakpoints[to_break]:
+            return broken, to_break
+        else:
+            return to_break, broken
 
     def partition(
         self,
