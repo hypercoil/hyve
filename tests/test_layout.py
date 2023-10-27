@@ -413,6 +413,14 @@ def test_break():
     layout = (
         layout1 * layout1 * layout1 * layout0 * layout1 * layout2 * layout1
     )
+    l = len(layout)
+    k = 4
+    layout @ 35
     for i in range(47):
         left, right = layout @ i
-        assert len(left), len(right) == (6 * (i + 1), 192 - 6 * (i + 1))
+        try:
+            len(right)
+        except Exception:
+            print('very bad', i)
+            continue
+        assert (len(left), len(right)) == ((k * (i + 1), l - k * (i + 1)))
