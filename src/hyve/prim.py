@@ -6,6 +6,7 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
+from functools import reduce
 import inspect
 from io import StringIO
 from itertools import chain
@@ -78,7 +79,13 @@ from .const import (
     Tensor,
 )
 from .elements import RasterBuilder, build_raster, tile_plot_elements
-from .layout import AnnotatedLayout, CellLayout, grid
+from .layout import (
+    AnnotatedLayout,
+    Cell,
+    CellLayout,
+    GroupSpec,
+    grid,
+)
 from .plot import (
     EdgeLayer,
     Layer,
@@ -1741,61 +1748,17 @@ def plot_to_display_f(
 def save_figure_f(
     snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
     canvas_size: Tuple[int, int],
-    layout: CellLayout,
     output_dir: str,
+    layout_kernel: CellLayout = Cell(),
     sort_by: Optional[Sequence[str]] = None,
+    group_spec: Optional[Sequence[GroupSpec]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'svg',
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
 ) -> None: # Union[Tuple[Image.Image], Image.Image]:
-    panels_per_page = len(layout)
-    cell_indices = list(range(panels_per_page))
-    try:
-        n_scenes = len(snapshots)
-        if sort_by is not None:
-
-            def sort_func(snapshot):
-                _, cmeta = snapshot
-                return tuple(cmeta[cfield] for cfield in sort_by)
-
-            snapshots = sorted(snapshots, key=sort_func)
-
-        if getattr(layout, 'annotations', None) is not None:
-            # TODO: This block behaves unexpectedly if there's more than one
-            #       page of snapshots.
-            # It's an annotated layout, so we'll match the annotations
-            # to the snapshot metadata to 'semantically' assign snapshots
-            # to cells.
-            queries = [meta for (_, meta) in snapshots][:panels_per_page]
-            layout, cell_indices = layout.match_and_assign_all(
-                queries=queries,
-                force_unmatched=True,
-            )
-        if n_scenes > panels_per_page:
-            n_panels = panels_per_page
-            n_pages = ceil(n_scenes / n_panels)
-            snapshots = tuple(
-                snapshots[i * n_panels:(i + 1) * n_panels]
-                for i in range(n_pages)
-            )
-        else:
-            n_pages = 1
-            n_panels = n_scenes
-            snapshots = (snapshots,)
-        snapshots = tuple(
-            list(zip(cell_indices, snapshot_group))
-            for snapshot_group in snapshots
-        )
-    except TypeError:
-        # snapshots is a single snapshot
-        snapshots = ((snapshots,),)
-        n_scenes = 1
-        n_pages = 1
-        n_panels = 1
-    cells = list(layout.partition(*canvas_size, padding=padding))
-
+    # Helper function: write a single snapshot group to a file.
     def writer(snapshot_group, fname):
         _canvas_color = colors.to_hex(canvas_color)
         bg = svg.Rect(
@@ -1840,39 +1803,178 @@ def save_figure_f(
         with open(fname, 'w') as f:
             f.write(canvas.__str__())
 
-    elements_fields = list(
-        set(
-            sum(
-                [
-                    list(cmeta.get('elements', {}).keys())
-                    for snapshot_group in snapshots
-                    for (_, (_, cmeta)) in snapshot_group
-                ],
-                [],
-            )
+    # Step 0: Configure inputs
+    try:
+        n_scenes = len(snapshots)
+    except TypeError:
+        n_scenes = 1
+        snapshots = (snapshots,)
+    if sort_by is not None:
+
+        def sort_func(snapshot):
+            _, cmeta = snapshot
+            return tuple(cmeta[cfield] for cfield in sort_by)
+
+        snapshots = sorted(snapshots, key=sort_func)
+
+    meta = [meta for (_, meta) in snapshots]
+
+    # Step 1: Apply any grouping modulators to the provided layout template.
+    if group_spec:
+        group_layouts, group_spec, bp, nb = tuple(
+            zip(*[spec(meta) for spec in group_spec])
         )
-    )
-    if elements_fields and getattr(layout, 'annotations', None) is not None:
-        queries = [{'elements': cfield} for cfield in elements_fields]
-        # Each assignment should not "fill" a slot since we might want to
-        # assign multiple elements fields to a single cell. Because layout is
-        # not mutable, this shouldn't be a problem.
-        elements_asgt = [layout.match_and_assign(query=q) for q in queries]
-        _, elements_asgt = zip(*elements_asgt)
-        elements_asgt = {
-            k: v
-            for k, v in zip(elements_fields, elements_asgt)
-            if v < len(cells)
-        }
+        bp, nb = bp[0], nb[0]
+        bp_factor = 1
+        if group_layouts[0].layout.split_orientation == 'v':
+            if group_spec[0].n_rows == 1:
+                for spec in group_spec[1:]:
+                    if spec.order == 'row' and spec.n_rows > 1:
+                        break
+                    bp_factor *= spec.n_cols
+                    if spec.n_rows > 1:
+                        break
+        else:
+            if group_spec[0].n_cols == 1:
+                for spec in group_spec[1:]:
+                    if spec.order == 'col' and spec.n_cols > 1:
+                        break
+                    bp_factor *= spec.n_rows
+                    if spec.n_cols > 1:
+                        break
+
+        if bp is not None:
+            bp = (bp + 1) * bp_factor - 1
+        group_layouts = reduce(
+            (lambda x, y: x * y),
+            group_layouts,
+        )
+        if not hasattr(layout_kernel, 'annotations'):
+            layout_kernel = layout_kernel.annotate({})
+        layout = group_layouts * layout_kernel
     else:
-        elements_asgt = {}
-    for i, snapshot_group in enumerate(snapshots):
+        layout = layout_kernel
+        bp = None
+        nb = 0
+
+    # Step 2: Determine the layout of cells on the canvas
+    # Case a: layout is an annotated CellLayout. Here we assume that the
+    #         provided layout specifies the layout of all pages together.
+    if getattr(layout, 'annotations', None) is not None:
+        # It's an annotated layout, so we'll match the annotations
+        # to the snapshot metadata to 'semantically' assign snapshots
+        # to cells.
+        layout, cell_indices = layout.match_and_assign_all(
+            queries=meta,
+            force_unmatched=True,
+        )
+        assert len(cell_indices) == len(meta)
+        index_map = dict(zip(cell_indices, snapshots))
+        # Now, we use the breakpoint to split the layout into pages.
+        pages = ()
+        snapshots = ()
+        maximum = 0
+        nb_seen = 0
+        terminal = False
+        while not terminal:
+            minimum = maximum
+            if nb_seen == nb:
+                terminal = True
+            try:
+                # Here's a dumb hack to skip to the except block if we're on
+                # the last page.
+                if terminal:
+                    raise IndexError
+                left, right = layout @ bp
+                maximum += left.count
+                pages += (left,)
+                layout = right
+            except (IndexError, TypeError):
+                maximum += layout.count
+                pages += (layout,)
+                terminal = True
+            nb_seen += 1
+            snapshots += ([
+                (i - minimum, index_map.get(i, None))
+                for i in range(minimum, maximum)
+                if index_map.get(i, None) is not None
+            ],)
+        panels_per_page = pages[0].count
+        n_panels = panels_per_page
+        n_pages = len(pages)
+    # Case b: layout is a regular CellLayout. Here we assume that the provided
+    #         layout specifies the layout of a single page, so we don't need
+    #         to handle the layout splitting.
+    else:
+        panels_per_page = layout.count
+        cell_indices = list(range(panels_per_page))
+        if n_scenes > panels_per_page:
+            n_panels = panels_per_page
+            n_pages = ceil(n_scenes / n_panels)
+            snapshots = tuple(
+                snapshots[i * n_panels:(i + 1) * n_panels]
+                for i in range(n_pages)
+            )
+        else:
+            n_pages = 1
+            n_panels = n_scenes
+            snapshots = (snapshots,)
+        pages = tuple(layout.copy() for _ in range(n_pages))
+        snapshots = tuple(
+            list(zip(cell_indices, snapshot_group))
+            for snapshot_group in snapshots
+        )
+
+    # Step 3: Write to the canvas
+    for i, (page, snapshot_group) in enumerate(zip(pages, snapshots)):
+        cells = list(page.partition(*canvas_size, padding=padding))
+        # Build page-level metadata. This includes the page number as well as
+        # any metadata that is constant across all snapshots on the page.
         page = f'{i + 1:{len(str(n_pages))}d}'
-        if elements_asgt:
-            elements = [
-                cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
-            ]
-            elements = _seq_to_dict(elements, merge_type='union')
+        page_entities = [meta for (_, (_, meta)) in snapshot_group]
+        page_entities = _seq_to_dict(page_entities, merge_type='union')
+        page_entities = {
+            k : set(v) - {None} for k, v in page_entities.items()
+            if k != 'elements'
+        }
+        page_entities = {
+            k : list(v)[0] for k, v in page_entities.items() if len(v) == 1
+        }
+        page_entities['page'] = page
+        # Time to handle any additional plot elements that need to be added
+        # to the canvas. This includes things like colorbars, legends, etc.
+        # We can only semantically add these if we have an annotated layout.
+        elements_asgt = {}
+        if hasattr(layout, 'annotations'):
+            elements_fields = list(
+                set(
+                    sum(
+                        [
+                            list(cmeta.get('elements', {}).keys())
+                            for (_, (_, cmeta)) in snapshot_group
+                        ],
+                        [],
+                    )
+                )
+            )
+            if elements_fields:
+                queries = [{'elements': cfield} for cfield in elements_fields]
+                # Each assignment should not "fill" a slot since we might want
+                # to assign multiple elements fields to a single cell. Because
+                # layout is not mutable, this shouldn't be a problem.
+                elements_asgt = [
+                    layout.match_and_assign(query=q) for q in queries
+                ]
+                _, elements_asgt = zip(*elements_asgt)
+                elements_asgt = {
+                    k: v
+                    for k, v in zip(elements_fields, elements_asgt)
+                    if v < len(cells)
+                }
+                elements = [
+                    cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
+                ]
+                elements = _seq_to_dict(elements, merge_type='union')
         for cell_idx in set(elements_asgt.values()):
             if cell_idx >= len(cells):
                 continue
@@ -1891,7 +1993,7 @@ def save_figure_f(
         write_f(
             writer=writer,
             argument=snapshot_group,
-            entities={'page': page},
+            entities=page_entities,
             output_dir=output_dir,
             fname_spec=fname_spec,
             suffix=suffix,
@@ -1905,7 +2007,9 @@ def save_grid_f(
     n_rows: int,
     n_cols: int,
     output_dir: str,
+    layout_kernel: CellLayout = Cell(),
     sort_by: Optional[Sequence[str]] = None,
+    group_spec: Optional[Sequence[GroupSpec]] = None,
     annotations: Optional[Mapping[int, Mapping]] = None,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -1914,15 +2018,21 @@ def save_grid_f(
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
 ) -> None:
-    layout = grid(n_rows=n_rows, n_cols=n_cols, order=order)
+    layout = grid(
+        n_rows=n_rows,
+        n_cols=n_cols,
+        order=order,
+        kernel=lambda: layout_kernel,
+    )
     if annotations is not None:
         layout = AnnotatedLayout(layout, annotations=annotations)
     save_figure_f(
         snapshots=snapshots,
         canvas_size=canvas_size,
-        layout=layout,
         output_dir=output_dir,
+        layout_kernel=layout,
         sort_by=sort_by,
+        group_spec=group_spec,
         fname_spec=fname_spec,
         suffix=suffix,
         extension=extension,

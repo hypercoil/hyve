@@ -30,7 +30,7 @@ from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
 
 from .const import DEFAULT_WINDOW_SIZE, REQUIRED, Tensor
-from .layout import CellLayout
+from .layout import Cell, CellLayout, GroupSpec
 from .plot import _null_sbprocessor, overlay_scalar_bars
 from .prim import (
     add_edge_variable_p,
@@ -1636,9 +1636,10 @@ def save_snapshots(
 
 
 def save_figure(
-    layout: CellLayout,
     canvas_size: Tuple[int, int] = (2048, 2048),
+    layout_kernel: CellLayout = Cell(),
     sort_by: Optional[Sequence[str]] = None,
+    group_spec: Optional[Sequence[GroupSpec]] = None,
     padding: int = 0,
     canvas_color: Any = (255, 255, 255, 255),
     fname_spec: Optional[str] = None,
@@ -1652,9 +1653,10 @@ def save_figure(
     ) -> callable:
         transformer_f = Partial(
             save_figure_p,
-            layout=layout,
             canvas_size=canvas_size,
+            layout_kernel=layout_kernel,
             sort_by=sort_by,
+            group_spec=group_spec,
             padding=padding,
             canvas_color=canvas_color,
             fname_spec=fname_spec,
@@ -1680,7 +1682,9 @@ def save_grid(
     n_rows: int,
     n_cols: int,
     order: Literal['row', 'column'] = 'row',
+    layout_kernel: CellLayout = Cell(),
     sort_by: Optional[Sequence[str]] = None,
+    group_spec: Optional[Sequence[GroupSpec]] = None,
     annotations: Optional[Mapping[int, Mapping]] = None,
     canvas_size: Tuple[int, int] = (2048, 2048),
     padding: int = 0,
@@ -1699,7 +1703,9 @@ def save_grid(
             n_rows=n_rows,
             n_cols=n_cols,
             order=order,
+            layout_kernel=layout_kernel,
             sort_by=sort_by,
+            group_spec=group_spec,
             annotations=annotations,
             canvas_size=canvas_size,
             padding=padding,
