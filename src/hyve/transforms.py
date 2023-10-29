@@ -57,6 +57,7 @@ from .prim import (
     plot_to_image_f,
     points_scalars_from_array_p,
     points_scalars_from_nifti_p,
+    pyplot_element_p,
     save_figure_p,
     save_grid_p,
     save_html_p,
@@ -1643,7 +1644,7 @@ def save_figure(
     sort_by: Optional[Sequence[str]] = None,
     group_spec: Optional[Sequence[GroupSpec]] = None,
     padding: int = 0,
-    canvas_color: Any = (255, 255, 255, 255),
+    canvas_color: Any = (1, 1, 1, 1),
     fname_spec: Optional[str] = None,
     scalar_bar_action: Literal['overlay', 'collect'] = 'overlay',
     suffix: Optional[str] = 'scene',
@@ -1690,7 +1691,7 @@ def save_grid(
     annotations: Optional[Mapping[int, Mapping]] = None,
     canvas_size: Tuple[int, int] = (2048, 2048),
     padding: int = 0,
-    canvas_color: Any = (255, 255, 255, 255),
+    canvas_color: Any = (1, 1, 1, 1),
     fname_spec: Optional[str] = None,
     scalar_bar_action: Literal['overlay', 'collect'] = 'overlay',
     suffix: Optional[str] = 'scene',
@@ -1756,6 +1757,37 @@ def svg_element(
         )
 
         @splice_on(f, occlusion=svg_element_p.output)
+        def f_transformed(
+            elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
+            **params,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                elements=elements,
+            )
+
+        return f_transformed
+    return transform
+
+
+def pyplot_element(
+    name: str,
+    plotter: callable,
+    priority: int = 0,
+    **plotter_params,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            pyplot_element_p,
+            name=name,
+            plotter=plotter,
+            priority=priority,
+            plotter_params=plotter_params,
+        )
+
+        @splice_on(f, occlusion=pyplot_element_p.output)
         def f_transformed(
             elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
             **params,

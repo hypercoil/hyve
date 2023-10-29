@@ -54,6 +54,7 @@ from .const import (
     EDGE_COLOR_DEFAULT_VALUE,
     EDGE_RADIUS_DEFAULT_VALUE,
     EDGE_RLIM_DEFAULT_VALUE,
+    EMPIRICAL_DPI,
     LAYER_ALPHA_DEFAULT_VALUE,
     LAYER_BELOW_COLOR_DEFAULT_VALUE,
     LAYER_BLEND_MODE_DEFAULT_VALUE,
@@ -1763,7 +1764,7 @@ def save_figure_f(
     suffix: Optional[str] = None,
     extension: str = 'svg',
     padding: int = 0,
-    canvas_color: Any = (255, 255, 255, 255),
+    canvas_color: Any = (1, 1, 1, 1),
 ) -> None: # Union[Tuple[Image.Image], Image.Image]:
     # Helper function: write a single snapshot group to a file.
     def writer(snapshot_group, fname):
@@ -2023,7 +2024,7 @@ def save_grid_f(
     extension: str = 'svg',
     order: Literal['row', 'column'] = 'row',
     padding: int = 0,
-    canvas_color: Any = (255, 255, 255, 255),
+    canvas_color: Any = (1, 1, 1, 1),
 ) -> None:
     layout = grid(
         n_rows=n_rows,
@@ -2085,6 +2086,40 @@ def svg_element_f(
         width = width_mm / PXMM
     with open(src_file, encoding='utf-8') as f:
         content = f.read()
+    elements[name] = (
+        UnknownBuilder(
+            content=content,
+            height=height,
+            width=width,
+            priority=priority,
+        ),
+    )
+    return elements
+
+
+def pyplot_element_f(
+    name: str,
+    plotter: callable,
+    priority: int = 0,
+    elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
+    plotter_params: Mapping[str, Any] = None,
+) -> Mapping[str, Sequence[ElementBuilder]]:
+    if elements is None:
+        elements = {}
+    plotter_params = plotter_params or {}
+    fig = plotter(**plotter_params)
+    try:
+        width_in, height_in = fig.get_size_inches()
+    except AttributeError: # some seaborn figure-level functions return
+                           # a FacetGrid instead of a Figure
+         width_in, height_in = fig.figure.get_size_inches()
+    height = height_in * EMPIRICAL_DPI
+    width = width_in * EMPIRICAL_DPI
+
+    buffer = StringIO()
+    fig.savefig(buffer, format='svg')
+    buffer.seek(0)
+    content = buffer.read()
     elements[name] = (
         UnknownBuilder(
             content=content,
@@ -2523,6 +2558,14 @@ save_grid_p = Primitive(
 svg_element_p = Primitive(
     svg_element_f,
     'svg_element',
+    output=('elements',),
+    forward_unused=True,
+)
+
+
+pyplot_element_p = Primitive(
+    pyplot_element_f,
+    'pyplot_element',
     output=('elements',),
     forward_unused=True,
 )

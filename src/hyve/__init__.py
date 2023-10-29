@@ -48,7 +48,9 @@ from .transforms import (
     plot_final_image,
     plot_to_html,
     plot_to_display,
+    pyplot_element,
     save_snapshots,
     save_figure,
     save_grid,
+    svg_element,
 )
