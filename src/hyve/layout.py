@@ -7,7 +7,9 @@ Layout representation
 Classes for representing layouts of data
 """
 import dataclasses
+import warnings
 from functools import cached_property, singledispatch
+from math import ceil
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 
@@ -529,6 +531,10 @@ class AnnotatedLayout(CellLayout):
         return sum(1 for e in self.layout if e.root is self.layout)
 
     @property
+    def count(self):
+        return self.layout.count
+
+    @property
     def floating(self):
         return self.layout.floating
 
@@ -685,7 +691,10 @@ class AnnotatedLayout(CellLayout):
                 matched[i] = True
             elif force_unmatched:
                 assigned = layout.assigned.copy()
-                indices[i] = assigned.index(False)
+                try:
+                    indices[i] = assigned.index(False)
+                except ValueError:
+                    break
                 matched[i] = True
                 assigned[indices[i]] = True
                 layout = AnnotatedLayout(
@@ -694,6 +703,119 @@ class AnnotatedLayout(CellLayout):
                     assigned=assigned,
                 )
         return layout, indices
+
+
+@dataclasses.dataclass(frozen=True)
+class GroupSpec:
+    variable: str
+    n_rows: int = -1
+    n_cols: int = -1
+    max_levels: Optional[int] = None
+    order: Literal['row', 'col'] = 'row'
+
+    def __post_init__(self):
+        if self.n_rows == -1 and self.n_cols == -1:
+            raise ValueError(
+                'Must specify either n_row or n_col when creating a GroupSpec'
+            )
+        if self.max_levels is not None:
+            assert self.max_levels % self.n_rows == 0, (
+                f'Maximum number of levels ({self.max_levels}) must be '
+                f'divisible by n_rows ({self.n_rows})'
+            )
+            assert self.max_levels % self.n_cols == 0, (
+                f'Maximum number of levels ({self.max_levels}) must be '
+                f'divisible by n_cols ({self.n_cols})'
+            )
+            if self.n_rows != -1 and self.n_cols != -1:
+                assert self.max_levels == self.n_rows * self.n_cols, (
+                    f'Maximum number of levels ({self.max_levels}) must be '
+                    f'equal to n_rows ({self.n_rows}) * n_cols '
+                    f'({self.n_cols}) when both are specified'
+                )
+
+    def __call__(self, metadata: Sequence[Mapping[str, str]]) -> Tuple[
+        AnnotatedLayout,
+        Optional[int]
+    ]:
+        seen = set()
+        levels = []
+        for obs in metadata:
+            value = obs.get(self.variable, None)
+            if value not in seen and value is not None:
+                seen.add(value)
+                levels.append(value)
+        n_levels = len(levels)
+        n_rows, n_cols = self.n_rows, self.n_cols
+        if n_rows == -1:
+            n_rows = ceil(n_levels / n_cols)
+        elif n_cols == -1:
+            n_cols = ceil(n_levels / n_rows)
+        elif n_levels < n_rows * n_cols:
+            warnings.warn(
+                f'n_rows ({n_rows}) * n_cols ({n_cols}) is insufficient to '
+                f'accommodate {n_levels} levels; your data will be '
+                'truncated. To circumvent this issue, set either n_rows or '
+                'n_cols to -1'
+            )
+        layout = grid(
+            n_rows=n_rows,
+            n_cols=n_cols,
+            order=self.order,
+            kernel=Cell,
+        )
+        if self.max_levels is not None:
+            if self.order == 'col':
+                bp = self.max_levels // n_rows
+                nb = ceil(n_rows / (bp + 1))
+            else:
+                bp = self.max_levels // n_cols
+                nb = ceil(n_cols / (bp + 1))
+        else:
+            bp = None
+            nb = 1
+        return (
+            layout.annotate({
+                i: {self.variable: level}
+                for i, level in enumerate(levels)
+            }),
+            GroupSpec(
+                variable=self.variable,
+                n_rows=n_rows,
+                n_cols=n_cols,
+                max_levels=None,
+                order=self.order,
+            ),
+            bp,
+            nb - 1,
+        )
+
+
+@dataclasses.dataclass(frozen=True, init=False)
+class RowGroupSpec(GroupSpec):
+    variable: str
+    max_levels: Optional[int] = None
+
+    def __init__(self, variable: str, max_levels: Optional[int] = None):
+        object.__setattr__(self, 'variable', variable)
+        object.__setattr__(self, 'n_rows', 1)
+        object.__setattr__(self, 'n_cols', -1)
+        object.__setattr__(self, 'max_levels', max_levels)
+        object.__setattr__(self, 'order', 'row')
+
+
+
+@dataclasses.dataclass(frozen=True, init=False)
+class ColGroupSpec(GroupSpec):
+    variable: str
+    max_levels: Optional[int] = None
+
+    def __init__(self, variable: str, max_levels: Optional[int] = None):
+        object.__setattr__(self, 'variable', variable)
+        object.__setattr__(self, 'n_rows', -1)
+        object.__setattr__(self, 'n_cols', 1)
+        object.__setattr__(self, 'max_levels', max_levels)
+        object.__setattr__(self, 'order', 'col')
 
 
 def reindex_annotations(*cells: AnnotatedLayout) -> Mapping[int, Mapping]:

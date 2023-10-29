@@ -32,6 +32,22 @@ def test_simple_layout():
     assert cells[4].cell_dim == (40, 120)
 
 
+def test_grid_layout():
+    gridlayout = grid(n_cols=6, n_rows=5).partition(1200, 900)
+    cells = list(gridlayout)
+    assert all([cells[i].cell_dim == (200, 180) for i in range(30)])
+    for i in range(5):
+        for j in range(6):
+            assert cells[6 * i + j].cell_loc == (200 * j, 180 * i)
+
+    gridlayout = grid(n_cols=6, n_rows=5, order='col').partition(1200, 900)
+    cells = list(gridlayout)
+    assert all([cells[i].cell_dim == (200, 180) for i in range(30)])
+    for i in range(5):
+        for j in range(6):
+            assert cells[5 * j + i].cell_loc == (200 * j, 180 * i)
+
+
 def test_layout_substitute():
     # layout = (
     #     (Cell() | (1 / 2) | (Cell() /
@@ -72,22 +88,6 @@ def test_layout_substitute():
     assert cells[5].cell_dim == (40, 120)
     assert cells[6].cell_loc == (80, 0)
     assert cells[6].cell_dim == (40, 120)
-
-
-def test_grid_layout():
-    gridlayout = grid(n_cols=6, n_rows=5).partition(1200, 900)
-    cells = list(gridlayout)
-    assert all([cells[i].cell_dim == (200, 180) for i in range(30)])
-    for i in range(5):
-        for j in range(6):
-            assert cells[6 * i + j].cell_loc == (200 * j, 180 * i)
-
-    gridlayout = grid(n_cols=6, n_rows=5, order='col').partition(1200, 900)
-    cells = list(gridlayout)
-    assert all([cells[i].cell_dim == (200, 180) for i in range(30)])
-    for i in range(5):
-        for j in range(6):
-            assert cells[5 * j + i].cell_loc == (200 * j, 180 * i)
 
 def test_layout_product():
     layout0 = Cell() / Cell() << (1 / 3)
