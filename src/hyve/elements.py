@@ -9,6 +9,7 @@ Operations for creating and tiling 2-dimensional plots and plot elements.
 import base64
 import dataclasses
 import io
+import re
 from abc import abstractmethod
 from collections.abc import Mapping as MappingABC
 from statistics import median
@@ -67,29 +68,29 @@ class ElementBuilder(MappingABC):
 
     @abstractmethod
     def __eq__(self, other) -> bool:
-        pass
+        ...
 
     @abstractmethod
     def __hash__(self) -> int:
-        pass
+        ...
 
     @abstractmethod
     def __call__(self, backend: Optional[str] = None) -> Any:
-        pass
+        ...
 
     @property
     @abstractmethod
     def canvas_height(self) -> int:
-        pass
+        ...
 
     @property
     @abstractmethod
     def canvas_width(self) -> int:
-        pass
+        ...
 
     @abstractmethod
     def set_canvas_size(self, height: int, width: int) -> 'ElementBuilder':
-        pass
+        ...
 
     def eval_spec(self, metadata: Mapping[str, str]) -> 'ElementBuilder':
         return self
@@ -279,11 +280,73 @@ class RasterBuilder(ElementBuilder):
     def set_canvas_size(self, height, width) -> 'RasterBuilder':
         return dataclasses.replace(
             self,
+            bounding_box_height=height,
+            bounding_box_width=width,
+        )
+
+    def eval_spec(self, metadata: Mapping[str, str]) -> 'RasterBuilder':
+        return self
+
+
+@dataclasses.dataclass(frozen=True)
+class UnknownBuilder(ElementBuilder):
+    """Addressable container for arbitrary SVG content."""
+    content: str
+    height: int
+    width: int
+    priority: int = 0
+    _orig_height: Optional[int] = None
+    _orig_width: Optional[int] = None
+
+    def __post_init__(self):
+        content_sanitised = re.sub('\<\?xml.*\n', '', self.content)
+        object.__setattr__(
+            self,
+            'content',
+            re.sub('\<\!DOCTYPE.*\n', '', content_sanitised)
+        )
+        if self._orig_height is None:
+            object.__setattr__(self, '_orig_height', self.height)
+        if self._orig_width is None:
+            object.__setattr__(self, '_orig_width', self.width)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, RasterBuilder):
+            return False
+        return all(
+            self[key] == other[key]
+            for key in dataclasses.asdict(self)
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            tuple(
+                v for k, v in dataclasses.asdict(self).items()
+                if k != 'content'
+            )
+        )
+
+    def __call__(self, backend: Optional[str] = None) -> Any:
+        if backend is None:
+            backend = get_default_backend()
+        return build_unknown(**dataclasses.asdict(self))
+
+    @property
+    def canvas_height(self) -> int:
+        return self.height
+
+    @property
+    def canvas_width(self) -> int:
+        return self.width
+
+    def set_canvas_size(self, height: int, width: int) -> 'UnknownBuilder':
+        return dataclasses.replace(
+            self,
             height=height,
             width=width,
         )
 
-    def eval_spec(self, metadata: Mapping[str, str]) -> 'RasterBuilder':
+    def eval_spec(self, metadata: Mapping[str, str]) -> 'UnknownBuilder':
         return self
 
 
@@ -955,6 +1018,59 @@ def build_raster_svg(
         height=bounding_box_height,
         elements=[svg.G(elements=[img], transform=transform)],
         viewBox=f'0 0 {bounding_box_width} {bounding_box_height}',
+    )
+
+
+@dataclasses.dataclass
+class UnknownSVGElement(svg.Element):
+    element_name = 'unknown'
+    content: str = ''
+
+    def as_str(self) -> str:
+        return self.content
+
+
+def build_unknown(
+    *,
+    content: str,
+    height: int,
+    width: int,
+    _orig_height: int,
+    _orig_width: int,
+    backend: Optional[str] = None,
+    **params: Any,
+):
+    if backend is None:
+        backend = get_default_backend()
+    params = {
+        'content': content,
+        'height': height,
+        'width': width,
+        'orig_height': _orig_height,
+        'orig_width': _orig_width,
+    }
+    if backend == 'svg':
+        return build_unknown_svg(**params)
+    raise ValueError(f'Unknown backend {backend}')
+
+
+def build_unknown_svg(
+    *,
+    content: str,
+    height: int,
+    width: int,
+    orig_height: int,
+    orig_width: int,
+):
+    elements = [UnknownSVGElement(content=content)]
+    scale_factor = min(height / orig_height, width / orig_width)
+    transform = [svg.Scale(scale_factor, scale_factor)]
+    # By convention, we wrap it in a singleton group before returning
+    return svg.SVG(
+        width=width,
+        height=height,
+        elements=[svg.G(elements=elements, transform=[transform])],
+        viewBox=f'0 0 {width} {height}',
     )
 
 
