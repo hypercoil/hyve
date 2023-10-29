@@ -30,6 +30,7 @@ from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
 
 from .const import DEFAULT_WINDOW_SIZE, REQUIRED, Tensor
+from .elements import ElementBuilder
 from .layout import Cell, CellLayout, GroupSpec
 from .plot import _null_sbprocessor, overlay_scalar_bars
 from .prim import (
@@ -71,6 +72,7 @@ from .prim import (
     surf_scalars_from_freesurfer_p,
     surf_scalars_from_gifti_p,
     surf_scalars_from_nifti_p,
+    svg_element_p,
     transform_postprocessor_p,
     vertex_to_face_p,
 )
@@ -1724,6 +1726,43 @@ def save_grid(
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
             )(sbprocessor=sbprocessor, **params)
+
+        return f_transformed
+    return transform
+
+
+def svg_element(
+    name: str,
+    src_file: str,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
+    height_mm: Optional[int] = None,
+    width_mm: Optional[int] = None,
+    priority: int = 0,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            svg_element_p,
+            name=name,
+            src_file=src_file,
+            height=height,
+            width=width,
+            height_mm=height_mm,
+            width_mm=width_mm,
+            priority=priority,
+        )
+
+        @splice_on(f, occlusion=svg_element_p.output)
+        def f_transformed(
+            elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
+            **params,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                elements=elements,
+            )
 
         return f_transformed
     return transform

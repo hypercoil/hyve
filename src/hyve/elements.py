@@ -1065,11 +1065,17 @@ def build_unknown_svg(
     elements = [UnknownSVGElement(content=content)]
     scale_factor = min(height / orig_height, width / orig_width)
     transform = [svg.Scale(scale_factor, scale_factor)]
+    #transform = []
     # By convention, we wrap it in a singleton group before returning
     return svg.SVG(
         width=width,
         height=height,
-        elements=[svg.G(elements=elements, transform=[transform])],
+        elements=[
+            svg.G(
+                elements=[svg.G(elements=elements, transform=transform)],
+                transform=[],
+            ),
+        ],
         viewBox=f'0 0 {width} {height}',
     )
 

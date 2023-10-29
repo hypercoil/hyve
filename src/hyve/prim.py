@@ -72,13 +72,20 @@ from .const import (
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
     POINTS_SCALARS_DEFAULT_VALUE,
+    PXMM,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
     Tensor,
 )
-from .elements import RasterBuilder, build_raster, tile_plot_elements
+from .elements import (
+    ElementBuilder,
+    RasterBuilder,
+    UnknownBuilder,
+    build_raster,
+    tile_plot_elements,
+)
 from .layout import (
     AnnotatedLayout,
     Cell,
@@ -2060,6 +2067,35 @@ def write_f(
     return writer(argument, fname)
 
 
+def svg_element_f(
+    name: str,
+    src_file: str,
+    height: Optional[int] = None,
+    width: Optional[int] = None,
+    height_mm: Optional[int] = None,
+    width_mm: Optional[int] = None,
+    priority: int = 0,
+    elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
+) -> Mapping[str, Sequence[ElementBuilder]]:
+    if elements is None:
+        elements = {}
+    if height is None:
+        height = height_mm / PXMM
+    if width is None:
+        width = width_mm / PXMM
+    with open(src_file, encoding='utf-8') as f:
+        content = f.read()
+    elements[name] = (
+        UnknownBuilder(
+            content=content,
+            height=height,
+            width=width,
+            priority=priority,
+        ),
+    )
+    return elements
+
+
 def splice_on(f):
     return splice_on_orig(
         f, kwonly_only=True, strict_emulation=False, allow_variadic=True
@@ -2480,6 +2516,14 @@ save_grid_p = Primitive(
     save_grid_f,
     'save_grid',
     output=(),
+    forward_unused=True,
+)
+
+
+svg_element_p = Primitive(
+    svg_element_f,
+    'svg_element',
+    output=('elements',),
     forward_unused=True,
 )
 
