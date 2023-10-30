@@ -1875,6 +1875,7 @@ def save_figure_f(
         layout, cell_indices = layout.match_and_assign_all(
             queries=meta,
             force_unmatched=True,
+            # drop={'elements'},
         )
         assert len(cell_indices) == len(meta)
         index_map = dict(zip(cell_indices, snapshots))

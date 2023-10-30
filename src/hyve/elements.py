@@ -291,7 +291,7 @@ class RasterBuilder(ElementBuilder):
 @dataclasses.dataclass(frozen=True)
 class UnknownBuilder(ElementBuilder):
     """Addressable container for arbitrary SVG content."""
-    content: str
+    content: str = dataclasses.field(repr=False)
     height: int
     width: int
     priority: int = 0

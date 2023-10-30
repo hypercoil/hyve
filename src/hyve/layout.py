@@ -633,28 +633,31 @@ class AnnotatedLayout(CellLayout):
         """
         assigned = self.assigned.copy()
         matched = False
+        candidates = []
         for index, annotation in self.annotations.items():
             if assigned[index]:
                 continue
-            if annotation is None:
-                if match_to_unannotated:
-                    assigned[index] = True
-                    matched = True
-                    break
-                else:
-                    continue
-            if all(
+            if (annotation is None) and match_to_unannotated:
+                candidates += [(index, 0)]
+            elif all(
                 (
                     query.get(key, None) == value
                     or query.get(key, None) in value
                 )
                 for key, value in annotation.items()
             ):
-                assigned[index] = True
-                matched = True
-                break
-        if not matched:
+                difficulty = len(annotation)
+                candidates += [(index, difficulty)]
+        # Select the candidate that is hardest to match
+        if len(candidates) == 0:
             index = len(self)
+        else:
+            index, _ = sorted(
+                candidates,
+                key=lambda x: x[1],
+                reverse=True,
+            )[0]
+            assigned[index] = True
         return AnnotatedLayout(
             layout=self.layout,
             annotations=self.annotations,
@@ -665,6 +668,7 @@ class AnnotatedLayout(CellLayout):
         self,
         queries: Sequence[Mapping],
         force_unmatched: bool = False,
+        # drop: Optional[Sequence[str]] = None,
     ) -> Tuple['AnnotatedLayout', Sequence[int]]:
         """
         Match annotations against a sequence of queries and assign the first
@@ -673,6 +677,11 @@ class AnnotatedLayout(CellLayout):
         layout = self
         matched = [False] * len(queries)
         indices = [None] * len(queries)
+        # if drop is not None:
+        #     queries = [
+        #         {k: v for k, v in query.items() if k not in drop}
+        #         for query in queries
+        #     ]
         for i, query in enumerate(queries):
             layout, index = layout.match_and_assign(
                 query, match_to_unannotated=False
