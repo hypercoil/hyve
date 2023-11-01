@@ -697,9 +697,17 @@ class CortexTriSurface:
 
         left_array = right_array = None
         if left_gifti and len(left_data) > 0:
-            left_array = np.stack([d.data for d in left_data], axis=0)
+            left_data = [
+                d.data[None, ...] if d.data.ndim == 1 else d.data
+                for d in left_data
+            ]
+            left_array = np.concatenate(left_data, axis=0)
         if right_gifti and len(right_data) > 0:
-            right_array = np.stack([d.data for d in right_data], axis=0)
+            right_data = [
+                d.data[None, ...] if d.data.ndim == 1 else d.data
+                for d in right_data
+            ]
+            right_array = np.concatenate(right_data, axis=0)
 
         return self.add_vertex_dataset(
             name=name,
