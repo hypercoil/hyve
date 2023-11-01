@@ -519,14 +519,16 @@ def parcellate_colormap_f(
     surf: CortexTriSurface,
     cmap_name: str,
     parcellation_name: str,
-    cmap: str,
+    cmap: Tuple[str, str],
     target: Union[str, Sequence[str]] = ('surf_scalars', 'node'),
 ):
-    surf.add_cifti_dataset(
+    cmap_L, cmap_R = cmap
+    surf.add_gifti_dataset(
         name=f'cmap_{cmap_name}',
-        cifti=cmap,
-        is_masked=True,
-        apply_mask=False,
+        left_gifti=cmap_L,
+        right_gifti=cmap_R,
+        is_masked=False,
+        apply_mask=True,
         null_value=0.0,
         coerce_to_scalar=False,
     )

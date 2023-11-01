@@ -752,6 +752,7 @@ def parcellate_colormap(
     cmap_name: str,
     parcellation_name: str,
     target: Union[str, Sequence[str]] = ('surf_scalars', 'node'),
+    template: Literal['fsLR', 'fsaverage'] = 'fsLR',
 ) -> callable:
     """
     Add a colormap to a surface, and then parcellate it to obtain colours for
@@ -780,13 +781,16 @@ def parcellate_colormap(
           ``cmap``, ``clim``, ``node_cmap``, or ``node_cmap_range``.
     """
     cmaps = {
-        'network': 'data/cmap/cmap_network.nii',
-        'modal': 'data/cmap/cmap_modal.nii',
+        'modal': (
+            f'data/cmap/tpl-{template}_hemi-L_desc-modal_rgba.gii',
+            f'data/cmap/tpl-{template}_hemi-R_desc-modal_rgba.gii',
+        ),
+        'network': (
+            f'data/cmap/tpl-{template}_hemi-L_desc-network_rgba.gii',
+            f'data/cmap/tpl-{template}_hemi-R_desc-network_rgba.gii',
+        ),
     }
-    cmap = pkgrf(
-        'hyve',
-        cmaps[cmap_name],
-    )
+    cmap = tuple(pkgrf('hyve', hemi) for hemi in cmaps[cmap_name])
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
