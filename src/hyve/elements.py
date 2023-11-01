@@ -34,6 +34,7 @@ from .const import (
     SCALAR_BAR_DEFAULT_LENGTH,
     SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_NAME,
+    SCALAR_BAR_DEFAULT_NAME_SUFFIX,
     SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
     SCALAR_BAR_DEFAULT_ORIENTATION,
@@ -101,6 +102,7 @@ class ScalarBarBuilder(ElementBuilder):
     """Addressable container for scalar bar parameters."""
     mapper: Optional[cm.ScalarMappable]
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME
+    name_suffix: Optional[str] = SCALAR_BAR_DEFAULT_NAME_SUFFIX
     below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR
     length: int = SCALAR_BAR_DEFAULT_LENGTH
     width: int = SCALAR_BAR_DEFAULT_WIDTH
@@ -133,6 +135,7 @@ class ScalarBarBuilder(ElementBuilder):
             return self.name == other.name
         return (
             self.name == other.name
+            and self.name_suffix == other.name_suffix
             and np.isclose(mapper.norm.vmin, other.mapper.norm.vmin)
             and np.isclose(mapper.norm.vmax, other_mapper.norm.vmax)
         )
@@ -140,9 +143,10 @@ class ScalarBarBuilder(ElementBuilder):
     def __hash__(self) -> int:
         mapper = self.mapper
         if mapper is None or mapper.norm is None:
-            return hash((self.name, 'ScalarBarBuilder'))
+            return hash((self.name, self.name_suffix, 'ScalarBarBuilder'))
         return hash((
             self.name,
+            self.name_suffix,
             mapper.norm.vmin,
             mapper.norm.vmax,
             'ScalarBarBuilder'
@@ -548,6 +552,7 @@ def build_scalar_bar(
     *,
     mapper: cm.ScalarMappable,
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
+    name_suffix: Optional[str] = SCALAR_BAR_DEFAULT_NAME_SUFFIX,
     below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
     length: int = SCALAR_BAR_DEFAULT_LENGTH,
     width: int = SCALAR_BAR_DEFAULT_WIDTH,
@@ -614,6 +619,7 @@ def build_scalar_bar(
     params = {
         'mapper': mapper,
         'name': name,
+        'name_suffix': name_suffix,
         'below_color': below_color,
         'length': length,
         'width': width,
@@ -637,6 +643,7 @@ def build_scalar_bar_matplotlib(
     *,
     mapper: cm.ScalarMappable,
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
+    name_suffix: Optional[str] = SCALAR_BAR_DEFAULT_NAME_SUFFIX,
     below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
     length: int = SCALAR_BAR_DEFAULT_LENGTH,
     width: int = SCALAR_BAR_DEFAULT_WIDTH,
@@ -658,6 +665,8 @@ def build_scalar_bar_matplotlib(
     ),
 ) -> Figure:
     if name is not None:
+        name_suffix = name_suffix or ''
+        name = f'{name}{name_suffix}'
         name = name.upper() # TODO: change this! work into style
     vmin, vmax = mapper.get_clim()
 
@@ -781,6 +790,7 @@ def build_scalar_bar_svg(
     *,
     mapper: cm.ScalarMappable,
     name: Optional[str] = SCALAR_BAR_DEFAULT_NAME,
+    name_suffix: Optional[str] = SCALAR_BAR_DEFAULT_NAME_SUFFIX,
     below_color: Optional[str] = SCALAR_BAR_DEFAULT_BELOW_COLOR,
     length: int = SCALAR_BAR_DEFAULT_LENGTH,
     width: int = SCALAR_BAR_DEFAULT_WIDTH,
@@ -802,6 +812,8 @@ def build_scalar_bar_svg(
     ),
 ) -> Figure:
     if name is not None:
+        name_suffix = name_suffix or ''
+        name = f'{name}{name_suffix}'
         name = name.upper() # TODO: change this! work into style
     vmin, vmax = mapper.get_clim()
 
@@ -810,7 +822,7 @@ def build_scalar_bar_svg(
     dynamic = mapper.to_rgba(np.linspace(vmin, vmax, dynamic_length))
 
     dynamic_grad = svg.LinearGradient(
-        id=f'{name}-gradient',
+        id=f'{hash(name)}-gradient',
         elements=[
             svg.Stop(
                 offset=i / len(dynamic),
@@ -824,7 +836,7 @@ def build_scalar_bar_svg(
         y=0,
         width=dynamic_length,
         height=width,
-        fill=f'url(#{name}-gradient)',
+        fill=f'url(#{hash(name)}-gradient)',
     )
     above = svg.Rect(
         x=length / 2,

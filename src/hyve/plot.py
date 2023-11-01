@@ -492,17 +492,18 @@ def scalars_to_rgba(
         if clim_negative is None:
             clim_negative = clim
         scalars_negative = -scalars.copy()
+        scalars = scalars.copy()
         neg_idx = scalars_negative > 0
-        scalars_negative[scalars_negative < 0] = 0
+        scalars_negative[~neg_idx] = 0
         scalars[neg_idx] = 0
         if scalar_bar_builder is not None:
             scalar_bar_builder_negative = ScalarBarBuilder(**{
                 **scalar_bar_builder,
-                **{'name': f'{scalar_bar_builder.name} (—)'}
+                **{'name_suffix': ' (—)'}
             })
             scalar_bar_builder = ScalarBarBuilder(**{
                 **scalar_bar_builder,
-                **{'name': f'{scalar_bar_builder.name} (+)'}
+                **{'name_suffix': ' (+)'}
             })
         rgba_neg, scalar_bar_builder_negative = _rgba_impl(
             scalars=scalars_negative,
