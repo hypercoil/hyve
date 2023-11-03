@@ -1715,6 +1715,7 @@ def base_plotter(
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     return_builders: bool = False,
     sbprocessor: Optional[callable] = None,
+    empty_builders: bool = False,
     postprocessors: Optional[Sequence[callable]] = None,
     **params,
 ) -> Tuple[Any]:
@@ -1724,6 +1725,8 @@ def base_plotter(
     #       we're sticking with a white background for now.
     theme = theme or pv.themes.DocumentTheme()
 
+    # by convention, None denotes both hemispheres
+    if hemisphere == 'both': hemisphere = None
     if plotter is None:
         plotter = pv.Plotter(
             window_size=window_size,
@@ -1763,10 +1766,16 @@ def base_plotter(
 
     if sbprocessor is None:
         sbprocessor = overlay_scalar_bars
-    plotter, scalar_bar = sbprocessor(
-        plotter=params['plotter'],
-        builders=params['scalar_bar_builders'],
-    )
+    if empty_builders:
+        plotter, scalar_bar = sbprocessor(
+            plotter=params['plotter'],
+            builders=(),
+        )
+    else:
+        plotter, scalar_bar = sbprocessor(
+            plotter=params['plotter'],
+            builders=params['scalar_bar_builders'],
+        )
     builders = {'scalar_bar': scalar_bar}
 
     if postprocessors is None or len(postprocessors) == 0:
@@ -1796,6 +1805,8 @@ def base_plotmeta(
 ) -> Mapping[str, Sequence[str]]:
     metadata = {}
 
+    # by convention, None denotes both hemispheres
+    if hemisphere == 'both': hemisphere = None
     if key_scalars == '__default__':
         key_scalars = _default_key_scalars(params)
     _, hemisphere_str = _cfg_hemispheres(

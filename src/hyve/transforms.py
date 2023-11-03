@@ -29,7 +29,20 @@ from conveyant import splice_on as splice_on_orig
 from lytemaps.transforms import mni152_to_fsaverage, mni152_to_fslr
 from pkg_resources import resource_filename as pkgrf
 
-from .const import DEFAULT_WINDOW_SIZE, REQUIRED, Tensor
+from .const import (
+    DEFAULT_WINDOW_SIZE,
+    REQUIRED,
+    TEXT_DEFAULT_ANGLE,
+    TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
+    TEXT_DEFAULT_BOUNDING_BOX_WIDTH,
+    TEXT_DEFAULT_CONTENT,
+    TEXT_DEFAULT_FONT,
+    TEXT_DEFAULT_FONT_COLOR,
+    TEXT_DEFAULT_FONT_OUTLINE_COLOR,
+    TEXT_DEFAULT_FONT_OUTLINE_MULTIPLIER,
+    TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
+    Tensor,
+)
 from .elements import ElementBuilder
 from .layout import Cell, CellLayout, GroupSpec
 from .plot import _null_sbprocessor, overlay_scalar_bars
@@ -74,6 +87,7 @@ from .prim import (
     surf_scalars_from_gifti_p,
     surf_scalars_from_nifti_p,
     svg_element_p,
+    text_element_p,
     transform_postprocessor_p,
     vertex_to_face_p,
 )
@@ -1397,11 +1411,23 @@ def auto_camera(
     n_angles: int = 0,
     initial_angle: Tuple[float, float, float] = (1, 0, 0),
     normal_vector: Optional[Tuple[float, float, float]] = None,
+    surf_scalars: Optional[str] = None,
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        __allowed__ = (
+            'surf',
+            'hemispheres',
+            'surf_projection',
+            'close_plotter',
+        )
+        if surf_scalars is None:
+            __allowed__ += ('surf_scalars',)
+            transformer_arg = {}
+        else:
+            transformer_arg = {'surf_scalars': surf_scalars}
         transformer_f = Partial(
             transform_postprocessor_p,
             name='snapshots',
@@ -1412,13 +1438,8 @@ def auto_camera(
                 n_angles=n_angles,
                 initial_angle=initial_angle,
                 normal_vector=normal_vector,
-                __allowed__=(
-                    'surf',
-                    'hemispheres',
-                    'surf_scalars',
-                    'surf_projection',
-                    'close_plotter',
-                ),
+                __allowed__=__allowed__,
+                **transformer_arg,
             ),
             auxwriter=Partial(
                 auto_camera_aux_p,
@@ -1589,26 +1610,19 @@ def plot_to_html(
     return transform
 
 
-def plot_to_display(
-    window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
-) -> callable:
+def plot_to_display() -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        transformer_f = Partial(
-            plot_to_display_p,
-            window_size=window_size,
-        )
+        transformer_f = plot_to_display_p
 
         @splice_on(f, occlusion=('off_screen',))
         def f_transformed(**params):
-            _window_size = params.pop('window_size', window_size)
-            if _window_size == DEFAULT_WINDOW_SIZE:
-                _window_size = window_size
-            return compositor(transformer_f, f)()(
+            window_size = params.pop('window_size', DEFAULT_WINDOW_SIZE)
+            return compositor(transformer_f, f)(window_size=window_size)(
                 off_screen=False,
-                window_size=_window_size,
+                window_size=window_size,
                 **params,
             )
 
@@ -1792,6 +1806,51 @@ def pyplot_element(
         )
 
         @splice_on(f, occlusion=pyplot_element_p.output)
+        def f_transformed(
+            elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
+            **params,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                elements=elements,
+            )
+
+        return f_transformed
+    return transform
+
+
+def text_element(
+    name: str,
+    content: str = TEXT_DEFAULT_CONTENT,
+    font: str = TEXT_DEFAULT_FONT,
+    font_size_multiplier: int = TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
+    font_color: Any = TEXT_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = TEXT_DEFAULT_FONT_OUTLINE_COLOR,
+    font_outline_multiplier: float = TEXT_DEFAULT_FONT_OUTLINE_MULTIPLIER,
+    bounding_box_width: Optional[int] = TEXT_DEFAULT_BOUNDING_BOX_WIDTH,
+    bounding_box_height: Optional[int] = TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
+    angle: int = TEXT_DEFAULT_ANGLE,
+    priority: int = 0,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        transformer_f = Partial(
+            text_element_p,
+            name=name,
+            content=content,
+            font=font,
+            font_size_multiplier=font_size_multiplier,
+            font_color=font_color,
+            font_outline_color=font_outline_color,
+            font_outline_multiplier=font_outline_multiplier,
+            bounding_box_width=bounding_box_width,
+            bounding_box_height=bounding_box_height,
+            angle=angle,
+            priority=priority,
+        )
+
+        @splice_on(f, occlusion=text_element_p.output)
         def f_transformed(
             elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
             **params,

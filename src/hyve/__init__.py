@@ -53,4 +53,5 @@ from .transforms import (
     save_figure,
     save_grid,
     svg_element,
+    text_element,
 )

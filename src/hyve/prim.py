@@ -78,11 +78,21 @@ from .const import (
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
+    TEXT_DEFAULT_ANGLE,
+    TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
+    TEXT_DEFAULT_BOUNDING_BOX_WIDTH,
+    TEXT_DEFAULT_CONTENT,
+    TEXT_DEFAULT_FONT,
+    TEXT_DEFAULT_FONT_COLOR,
+    TEXT_DEFAULT_FONT_OUTLINE_COLOR,
+    TEXT_DEFAULT_FONT_OUTLINE_MULTIPLIER,
+    TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
     Tensor,
 )
 from .elements import (
     ElementBuilder,
     RasterBuilder,
+    TextBuilder,
     UnknownBuilder,
     build_raster,
     tile_plot_elements,
@@ -2134,6 +2144,39 @@ def pyplot_element_f(
     return elements
 
 
+def text_element_f(
+    name: str,
+    content: str = TEXT_DEFAULT_CONTENT,
+    font: str = TEXT_DEFAULT_FONT,
+    font_size_multiplier: int = TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
+    font_color: Any = TEXT_DEFAULT_FONT_COLOR,
+    font_outline_color: Any = TEXT_DEFAULT_FONT_OUTLINE_COLOR,
+    font_outline_multiplier: float = TEXT_DEFAULT_FONT_OUTLINE_MULTIPLIER,
+    bounding_box_width: Optional[int] = TEXT_DEFAULT_BOUNDING_BOX_WIDTH,
+    bounding_box_height: Optional[int] = TEXT_DEFAULT_BOUNDING_BOX_HEIGHT,
+    angle: int = TEXT_DEFAULT_ANGLE,
+    priority: int = 0,
+    elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
+) -> Mapping[str, Sequence[ElementBuilder]]:
+    if elements is None:
+        elements = {}
+    elements[name] = (
+        TextBuilder(
+            content=content,
+            font=font,
+            font_size_multiplier=font_size_multiplier,
+            font_color=font_color,
+            font_outline_color=font_outline_color,
+            font_outline_multiplier=font_outline_multiplier,
+            bounding_box_width=bounding_box_width,
+            bounding_box_height=bounding_box_height,
+            angle=angle,
+            priority=priority,
+        ),
+    )
+    return elements
+
+
 def splice_on(f):
     return splice_on_orig(
         f, kwonly_only=True, strict_emulation=False, allow_variadic=True
@@ -2153,6 +2196,7 @@ def automap_unified_plotter_f(
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     use_single_plotter: bool = True,
     sbprocessor: Optional[callable] = None,
+    empty_builders: bool = False,
     postprocessors: Optional[
         Sequence[Mapping[str, Tuple[callable, callable]]]
     ] = None,
@@ -2569,6 +2613,14 @@ svg_element_p = Primitive(
 pyplot_element_p = Primitive(
     pyplot_element_f,
     'pyplot_element',
+    output=('elements',),
+    forward_unused=True,
+)
+
+
+text_element_p = Primitive(
+    text_element_f,
+    'text_element',
     output=('elements',),
     forward_unused=True,
 )
