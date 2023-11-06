@@ -1906,7 +1906,7 @@ def save_figure_f(
                 # the last page.
                 if terminal:
                     raise IndexError
-                left, right = layout @ bp
+                left, right = layout @ (bp - 1)
                 maximum += left.count
                 pages += (left,)
                 layout = right

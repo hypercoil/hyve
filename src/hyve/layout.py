@@ -162,6 +162,10 @@ class CellLayout:
         )
 
     def __truediv__(self, other: 'CellLayout') -> 'CellLayoutHorizontalChain':
+        if isinstance(other, CellLayoutHorizontalChain):
+            return CellLayoutHorizontalChain(
+                chain=[self] + other.chain
+            )
         return CellLayoutHorizontalChain(
             chain=[self, other]
         )
@@ -171,6 +175,10 @@ class CellLayout:
     ) -> Union['CellLayoutVerticalChain', 'CellLayout']:
         if isinstance(other, CellLayoutArgument):
             return vsplit(other.argument, self, other.layout)
+        elif isinstance(other, CellLayoutVerticalChain):
+            return CellLayoutVerticalChain(
+                chain=[self] + other.chain
+            )
         return CellLayoutVerticalChain(
             chain=[self, other]
         )
@@ -328,6 +336,54 @@ class CellLayout:
         self.cell_loc = (x_offset + padding, y_offset + padding)
         self.cell_dim = (width - 2 * padding, height - 2 * padding)
         return self
+
+    # def clear_partition(self):
+    #     """
+    #     Clear partition information from the layout
+    #     """
+    #     self.cell_loc = None
+    #     self.cell_dim = None
+    #     if self.left is not None:
+    #         self.left.clear_partition()
+    #     if self.right is not None:
+    #         self.right.clear_partition()
+    #     if self.floating is not None:
+    #         for f in self.floating:
+    #             f.clear_partition()
+
+    # @property
+    # def loc(self):
+    #     if self.cell_loc is not None:
+    #         return self.cell_loc
+    #     else:
+    #         left = self.left.loc if self.left is not None else None
+    #         right = self.right.loc if self.right is not None else None
+    #         if right is None:
+    #             return left
+    #         elif left is None:
+    #             return right
+    #         else:
+    #             return (
+    #                 min(left[0], right[0]),
+    #                 min(left[1], right[1]),
+    #             )
+
+    # @property
+    # def dim(self):
+    #     if self.cell_dim is not None:
+    #         return self.cell_dim
+    #     else:
+    #         left = self.left.dim if self.left is not None else None
+    #         right = self.right.dim if self.right is not None else None
+    #         if right is None:
+    #             return left
+    #         elif left is None:
+    #             return right
+    #         else:
+    #             return (
+    #                 max(left[0], right[0]),
+    #                 max(left[1], right[1]),
+    #             )
 
     def annotate(
         self,
@@ -767,22 +823,44 @@ class GroupSpec:
                 'truncated. To circumvent this issue, set either n_rows or '
                 'n_cols to -1'
             )
-        layout = grid(
-            n_rows=n_rows,
-            n_cols=n_cols,
-            order=self.order,
-            kernel=Cell,
-        )
         if self.max_levels is not None:
             if self.order == 'col':
                 bp = self.max_levels // n_rows
-                nb = ceil(n_rows / (bp + 1))
+                nb = ceil(n_cols / (bp + 1))
+                layout = kernel = grid(
+                    n_rows=n_rows,
+                    n_cols=bp,
+                    order=self.order,
+                    kernel=Cell,
+                )
+                i = 0
+                while i < nb:
+                    layout = kernel | layout
+                    i += 1
+                layout = layout << (1 / (nb + 1))
             else:
                 bp = self.max_levels // n_cols
-                nb = ceil(n_cols / (bp + 1))
+                nb = ceil(n_rows / (bp + 1))
+                layout = kernel = grid(
+                    n_rows=bp,
+                    n_cols=n_cols,
+                    order=self.order,
+                    kernel=Cell,
+                )
+                i = 0
+                while i < nb:
+                    layout = kernel / layout
+                    i += 1
+                layout = layout << (1 / (nb + 1))
         else:
             bp = None
             nb = 1
+            layout = grid(
+                n_rows=n_rows,
+                n_cols=n_cols,
+                order=self.order,
+                kernel=Cell,
+            )
         return (
             layout.annotate({
                 i: {self.variable: level}
@@ -796,7 +874,7 @@ class GroupSpec:
                 order=self.order,
             ),
             bp,
-            nb - 1,
+            nb,
         )
 
 
@@ -810,7 +888,7 @@ class RowGroupSpec(GroupSpec):
         object.__setattr__(self, 'n_rows', 1)
         object.__setattr__(self, 'n_cols', -1)
         object.__setattr__(self, 'max_levels', max_levels)
-        object.__setattr__(self, 'order', 'row')
+        object.__setattr__(self, 'order', 'col')
 
 
 
@@ -824,7 +902,7 @@ class ColGroupSpec(GroupSpec):
         object.__setattr__(self, 'n_rows', -1)
         object.__setattr__(self, 'n_cols', 1)
         object.__setattr__(self, 'max_levels', max_levels)
-        object.__setattr__(self, 'order', 'col')
+        object.__setattr__(self, 'order', 'row')
 
 
 def reindex_annotations(*cells: AnnotatedLayout) -> Mapping[int, Mapping]:

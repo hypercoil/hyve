@@ -22,6 +22,7 @@ from .layout import (
 from .plot import unified_plotter
 from .transforms import (
     surf_from_archive,
+    surf_from_freesurfer,
     surf_from_gifti,
     surf_scalars_from_cifti,
     surf_scalars_from_gifti,
@@ -48,10 +49,10 @@ from .transforms import (
     plot_final_image,
     plot_to_html,
     plot_to_display,
-    pyplot_element,
     save_snapshots,
     save_figure,
     save_grid,
     svg_element,
     text_element,
+    pyplot_element,
 )

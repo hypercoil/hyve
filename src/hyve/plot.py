@@ -413,7 +413,7 @@ def _rgba_impl(
     if clim is not None:
         vmin, vmax = clim
     else:
-        vmin, vmax = scalars.min(), scalars.max()
+        vmin, vmax = np.nanmin(scalars), np.nanmax(scalars)
         hide_subthreshold = False
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
     mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
