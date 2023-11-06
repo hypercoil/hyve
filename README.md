@@ -12,7 +12,7 @@ This system is currently under development, and the API is accordingly subject t
 ``hyve`` can be installed from PyPI using ``pip``:
 
 ```bash
-pip install hyve==0.0.2.dev1
+pip install hyve==0.0.2
 ```
 
 The below examples also require installation of the ``hyve-examples`` package, which can be installed from PyPI using ``pip``:
@@ -43,7 +43,7 @@ from hyve.transforms import (
 plot_f = plotdef(
     surf_from_archive(),
     surf_scalars_from_cifti('parcellation'),
-    parcellate_colormap('network', 'parcellation'),
+    parcellate_colormap('parcellation', 'network'),
     vertex_to_face('parcellation'),
     plot_to_html(
         fname_spec=(
@@ -161,7 +161,7 @@ plot_f = plotdef(
     ),
     node_coor_from_parcels('parcellation'),
     build_network('vis'),
-    parcellate_colormap('network', 'parcellation', target='node'),
+    parcellate_colormap('parcellation', 'network', target='node'),
     plot_to_image(),
     save_snapshots(
         fname_spec=(
