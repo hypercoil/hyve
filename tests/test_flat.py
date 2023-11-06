@@ -68,18 +68,23 @@ def test_scalars():
     )
 
 
-@pytest.mark.parametrize('cmap', ['network', 'modal'])
-def test_parcellation(cmap):
+@pytest.mark.parametrize(
+    'cmap, cmap_name', [
+        ('network', 'network'),
+        ('modal', 'modal'),
+        ('network', 'bone')
+    ])
+def test_parcellation(cmap, cmap_name):
     plot_f = plotdef(
         surf_from_gifti(projection='flat'),
         surf_scalars_from_cifti('parcellation', plot=True),
-        parcellate_colormap(cmap, 'parcellation'),
+        parcellate_colormap('parcellation', cmap),
         vertex_to_face('parcellation'),
         plot_to_image(),
         save_snapshots(
             fname_spec=(
                 'scalars-{surfscalars}_hemisphere-{hemisphere}_'
-                f'cmap-{cmap}_projection-flat'
+                f'cmap-{cmap_name}_projection-flat'
             ),
         ),
     )
@@ -89,6 +94,7 @@ def test_parcellation(cmap):
         flat_left_mask=lh_mask,
         flat_right_mask=rh_mask,
         parcellation_cifti=get_null400_cifti(),
+        surf_scalars_cmap=cmap_name,
         hemisphere=['left', 'right'],
         views=['down'],
         output_dir='/tmp',

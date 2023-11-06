@@ -119,7 +119,7 @@ def test_allviews_parcellation():
             'parcellation',
             allow_multihemisphere=False,
         ),
-        parcellate_colormap('network', 'parcellation'),
+        parcellate_colormap('parcellation', 'network'),
         vertex_to_face('parcellation'),
         plot_to_image(),
         save_grid(

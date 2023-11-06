@@ -9,6 +9,7 @@ import pytest
 import numpy as np
 
 from hyve.flows import plotdef
+from hyve.layout import Cell, ColGroupSpec, RowGroupSpec
 from hyve.transforms import (
     surf_from_archive,
     surf_scalars_from_array,
@@ -18,8 +19,181 @@ from hyve.transforms import (
     planar_sweep_camera,
     auto_camera,
     plot_to_image,
+    save_figure,
     save_grid,
 )
+
+
+@pytest.mark.ci_unsupported
+def test_focused_view_autoselect_hemisphere_groupspec0():
+    plot_f = plotdef(
+        surf_from_archive(),
+        surf_scalars_from_array(
+            'gaussiannoise',
+            allow_multihemisphere=False,
+            is_masked=False,
+            apply_mask=True,
+        ),
+        plot_to_image(),
+        scalar_focus_camera(kind='peak'),
+        save_figure(
+            padding=4,
+            canvas_size=(2000, 100),
+            canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
+            group_spec = [
+                RowGroupSpec(
+                    variable='hemisphere',
+                ),
+                RowGroupSpec(variable='surfscalars'),
+            ],
+            fname_spec=(
+                'scalars-gaussiannoise_view-focused3_page-{page}'
+                #'scalars-gaussiannoise_view-focused2_page-{page}'
+            )
+        ),
+    )
+
+    array_left = np.random.randn(10, 32492)
+    array_right = np.random.randn(10, 32492)
+    plot_f(
+        template="fsLR",
+        load_mask=True,
+        gaussiannoise_array_left=array_left,
+        gaussiannoise_array_right=array_right,
+        surf_projection='veryinflated',
+        surf_scalars_cmap='RdYlBu',
+        surf_scalars_below_color='#333333',
+        window_size=(400, 250),
+        output_dir='/tmp',
+    )
+
+
+@pytest.mark.ci_unsupported
+def test_focused_view_autoselect_hemisphere_groupspec1():
+    plot_f = plotdef(
+        surf_from_archive(),
+        surf_scalars_from_array(
+            'gaussiannoise',
+            allow_multihemisphere=False,
+            is_masked=False,
+            apply_mask=True,
+        ),
+        plot_to_image(),
+        scalar_focus_camera(kind='peak'),
+        save_figure(
+            padding=4,
+            canvas_size=(200, 1000),
+            canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
+            group_spec = [
+                RowGroupSpec(
+                    variable='hemisphere',
+                    max_levels=1,
+                ),
+                ColGroupSpec(variable='surfscalars'),
+            ],
+            fname_spec=(
+                'scalars-gaussiannoise_view-focused_hemi-{hemisphere}_page-{page}'
+            )
+        ),
+    )
+
+    array_left = np.random.randn(10, 32492)
+    array_right = np.random.randn(10, 32492)
+    plot_f(
+        template="fsLR",
+        load_mask=True,
+        gaussiannoise_array_left=array_left,
+        gaussiannoise_array_right=array_right,
+        surf_projection='veryinflated',
+        surf_scalars_cmap='RdYlBu',
+        surf_scalars_below_color='#333333',
+        window_size=(400, 250),
+        output_dir='/tmp',
+    )
+
+
+@pytest.mark.ci_unsupported
+def test_panoptic_groupspec_nohb():
+    layout = Cell() | Cell() << (1 / 2)
+    layout = layout * layout * layout
+    annotations = {
+        0: dict(
+            hemisphere='left',
+            view='lateral',
+        ),
+        1: dict(
+            hemisphere='left',
+            view='medial',
+        ),
+        2: dict(
+            hemisphere='right',
+            view='lateral',
+        ),
+        3: dict(
+            hemisphere='right',
+            view='medial',
+        ),
+        4: dict(
+            view='dorsal',
+        ),
+        5: dict(
+            view='ventral',
+        ),
+        6: dict(
+            view='anterior',
+        ),
+        7: dict(
+            view='posterior',
+        ),
+    }
+    layout = layout.annotate(annotations)
+    plot_f = plotdef(
+        surf_from_archive(),
+        surf_scalars_from_array(
+            'gaussiannoise',
+            is_masked=False,
+            apply_mask=True,
+        ),
+        plot_to_image(),
+        save_figure(
+            canvas_size=(3200, 4800),
+            canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
+            layout_kernel=layout,
+            group_spec = [
+                ColGroupSpec(
+                    variable='surfscalars',
+                    max_levels=3,
+                ),
+            ],
+            fname_spec=(
+                'scalars-gaussiannoise_view-all_page-{page}'
+            ),
+        ),
+    )
+
+    array_left = np.random.randn(12, 32492)
+    array_right = np.random.randn(12, 32492)
+    plot_f(
+        template='fsLR',
+        load_mask=True,
+        gaussiannoise_array_left=array_left,
+        gaussiannoise_array_right=array_right,
+        surf_projection='veryinflated',
+        surf_scalars_cmap='RdYlBu',
+        surf_scalars_clim='robust',
+        surf_scalars_below_color='#333333',
+        window_size=(400, 300),
+        hemisphere=['left', 'right', None],
+        views={
+            'left': ('medial', 'lateral'),
+            'right': ('medial', 'lateral'),
+            'both': ('dorsal', 'ventral', 'anterior', 'posterior'),
+        },
+        output_dir='/tmp',
+    )
 
 
 @pytest.mark.ci_unsupported

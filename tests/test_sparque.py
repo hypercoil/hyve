@@ -91,7 +91,7 @@ def test_sparque(parcellation_name, parcellation_path, cmap):
     plot_f = plotdef(
         surf_from_archive(),
         transform,
-        parcellate_colormap(cmap, parcellation_name),
+        parcellate_colormap(parcellation_name, cmap),
         #vertex_to_face(parcellation_name),
         plot_to_image(),
         save_snapshots(
