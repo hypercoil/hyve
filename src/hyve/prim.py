@@ -6,8 +6,8 @@ Primitive functional atoms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Atomic functional primitives for building more complex functions.
 """
-from functools import reduce
 import inspect
+from functools import reduce
 from io import StringIO
 from itertools import chain
 from math import ceil
@@ -859,7 +859,11 @@ def add_points_overlay_f(
         layer_params, params = _move_params_to_dict(
             params,
             (
-                (f'{paramstr}_cmap', 'cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_cmap',
+                    'cmap',
+                    POINTS_SCALARS_CMAP_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
@@ -972,7 +976,11 @@ def add_network_overlay_f(
                 (f'{paramstr}_node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
                 (f'{paramstr}_node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
-                (f'{paramstr}_node_radius', 'radius', NODE_RADIUS_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_node_radius',
+                    'radius',
+                    NODE_RADIUS_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_node_radius_range',
                     'radius_range',
@@ -1002,7 +1010,11 @@ def add_network_overlay_f(
                 (f'{paramstr}_edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
                 (f'{paramstr}_edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
-                (f'{paramstr}_edge_radius', 'radius', EDGE_RADIUS_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_edge_radius',
+                    'radius',
+                    EDGE_RADIUS_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_edge_radius_range',
                     'radius_range',
@@ -1967,7 +1979,16 @@ def save_figure_f(
         # Build page-level metadata. This includes the page number as well as
         # any metadata that is constant across all snapshots on the page.
         page = f'{i + 1:{len(str(n_pages))}d}'
+        # print(snapshot_group)
+        # print([meta for (_, meta) in snapshot_group])
         page_entities = [meta for (_, (_, meta)) in snapshot_group]
+        if not page_entities:
+            # It's an empty page. This shouldn't happen, but it currently does
+            # because of the way we handle the layout splitting. We need to
+            # fix this in a more principled way, i.e. at the level of the
+            # layout splitting.
+            print(f'Page {page} is empty.')
+            continue
         page_entities = _seq_to_dict(page_entities, merge_type='union')
         page_entities = {
             k : set(v) - {None} for k, v in page_entities.items()

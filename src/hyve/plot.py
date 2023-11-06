@@ -1728,7 +1728,8 @@ def base_plotter(
     theme = theme or pv.themes.DocumentTheme()
 
     # by convention, None denotes both hemispheres
-    if hemisphere == 'both': hemisphere = None
+    if hemisphere == 'both':
+        hemisphere = None
     if plotter is None:
         plotter = pv.Plotter(
             window_size=window_size,
@@ -1808,7 +1809,8 @@ def base_plotmeta(
     metadata = {}
 
     # by convention, None denotes both hemispheres
-    if hemisphere == 'both': hemisphere = None
+    if hemisphere == 'both':
+        hemisphere = None
     if key_scalars == '__default__':
         key_scalars = _default_key_scalars(params)
     _, hemisphere_str = _cfg_hemispheres(

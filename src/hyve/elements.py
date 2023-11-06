@@ -34,8 +34,8 @@ from .const import (
     SCALAR_BAR_DEFAULT_LENGTH,
     SCALAR_BAR_DEFAULT_LIM_FONTSIZE_MULTIPLIER,
     SCALAR_BAR_DEFAULT_NAME,
-    SCALAR_BAR_DEFAULT_NAME_SUFFIX,
     SCALAR_BAR_DEFAULT_NAME_FONTSIZE_MULTIPLIER,
+    SCALAR_BAR_DEFAULT_NAME_SUFFIX,
     SCALAR_BAR_DEFAULT_NUM_SIG_FIGS,
     SCALAR_BAR_DEFAULT_ORIENTATION,
     SCALAR_BAR_DEFAULT_SPACING,
@@ -303,11 +303,11 @@ class UnknownBuilder(ElementBuilder):
     _orig_width: Optional[int] = None
 
     def __post_init__(self):
-        content_sanitised = re.sub('\<\?xml.*\n', '', self.content)
+        content_sanitised = re.sub('\\<\\?xml.*\n', '', self.content)
         object.__setattr__(
             self,
             'content',
-            re.sub('\<\!DOCTYPE.*\n', '', content_sanitised)
+            re.sub('\\<\\!DOCTYPE.*\n', '', content_sanitised)
         )
         if self._orig_height is None:
             object.__setattr__(self, '_orig_height', self.height)

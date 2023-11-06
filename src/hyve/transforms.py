@@ -854,15 +854,18 @@ def parcellate_colormap(
         ):
             surf_scalars = params.get('surf_scalars', ())
             surf_overlays = [
-                l.name for l in
+                layer for layer in
                 (params.get('surf_scalars_layers', None) or ())
+                if layer.name == parcellation_name
             ]
-            if parcellation_name in surf_scalars:
-                cmap = params.get('surf_scalars_cmap', cmap_name)
-            elif parcellation_name in surf_overlays:
+            if surf_overlays:
+                cmap = surf_overlays[0].cmap
+                if cmap is None:
+                    cmap = cmap_name
+            elif parcellation_name in surf_scalars:
                 cmap = params.get(
                     f'{sanitise(parcellation_name)}_cmap',
-                    cmap_name,
+                    params.get('surf_scalars_cmap', cmap_name),
                 )
             elif target == 'node' and (
                 (parcellation_name in surf.left.point_data)

@@ -136,7 +136,8 @@ DOCBUILDER = {
             """
             The path to a NIfTI file containing scalar-valued data to be
             resampled over a surface geometry. The resampled data will be
-            loaded into the surface's ``point_data`` attribute as {scalars_name}.
+            loaded into the surface's ``point_data`` attribute as
+            {scalars_name}.
             """
         ),
     },

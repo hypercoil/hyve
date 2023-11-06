@@ -12,7 +12,6 @@ from functools import cached_property, singledispatch
 from math import ceil
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
-
 BIG = 2**63 - 1
 
 
@@ -38,7 +37,10 @@ class CellLayoutFloat:
     anchor: 'CellLayout'
     floating: 'CellLayout'
 
-    def __lshift__(self, other: Tuple[Tuple[float, float], Tuple[float, float]]):
+    def __lshift__(
+        self,
+        other: Tuple[Tuple[float, float], Tuple[float, float]],
+    ):
         return float_layout(
             self.floating,
             self.anchor,
@@ -688,7 +690,6 @@ class AnnotatedLayout(CellLayout):
         to the query
         """
         assigned = self.assigned.copy()
-        matched = False
         candidates = []
         for index, annotation in self.annotations.items():
             if assigned[index]:
