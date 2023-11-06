@@ -121,7 +121,8 @@ def splice_on(
 
 
 def surf_from_archive(
-    allowed: Sequence[str] = ('templateflow', 'neuromaps')
+    allowed: Sequence[str] = ('templateflow', 'neuromaps'),
+    template: str = 'fsLR',
 ) -> callable:
     """
     Load a surface from a cloud-based data archive.
@@ -163,13 +164,13 @@ def surf_from_archive(
         @splice_on(f, occlusion=surf_from_archive_p.output)
         def f_transformed(
             *,
-            template: str = 'fsLR',
             load_mask: bool = True,
             surf_projection: Optional[Sequence[str]] = ('veryinflated',),
             **params: Mapping,
         ):
+            template_ = params.get('template', template)
             return compositor(f, transformer_f)(**params)(
-                template=template,
+                template=template_,
                 load_mask=load_mask,
                 projections=surf_projection,
             )
@@ -185,17 +186,28 @@ def surf_from_gifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        sanitised_projection = sanitise(projection)
+        paramstr_left_surf = f'{sanitised_projection}_left_surf'
+        paramstr_right_surf = f'{sanitised_projection}_right_surf'
+        paramstr_left_mask = f'{sanitised_projection}_left_mask'
+        paramstr_right_mask = f'{sanitised_projection}_right_mask'
         transformer_f = Partial(surf_from_gifti_p, projection=projection)
 
-        @splice_on(f, occlusion=surf_from_gifti_p.output)
-        def f_transformed(
-            *,
-            left_surf: Union[str, nb.gifti.gifti.GiftiImage],
-            right_surf: Union[str, nb.gifti.gifti.GiftiImage],
-            left_mask: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
-            right_mask: Optional[Union[str, nb.gifti.gifti.GiftiImage]] = None,
-            **params: Mapping,
-        ):
+        @splice_on(
+            f,
+            occlusion=surf_from_gifti_p.output,
+            expansion={
+                paramstr_left_surf: (Union[nb.GiftiImage, str], REQUIRED),
+                paramstr_right_surf: (Union[nb.GiftiImage, str], REQUIRED),
+                paramstr_left_mask: (Union[nb.GiftiImage, str], None),
+                paramstr_right_mask: (Union[nb.GiftiImage, str], None),
+            },
+        )
+        def f_transformed(**params: Mapping):
+            left_surf = params.pop(paramstr_left_surf)
+            right_surf = params.pop(paramstr_right_surf)
+            left_mask = params.pop(paramstr_left_mask, None)
+            right_mask = params.pop(paramstr_right_mask, None)
             return compositor(f, transformer_f)(**params)(
                 left_surf=left_surf,
                 right_surf=right_surf,
@@ -208,20 +220,28 @@ def surf_from_gifti(
 
 
 def surf_from_freesurfer(
-    projection: Optional[str] = None,
+    projection: str = 'unknown',
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        sanitised_projection = sanitise(projection)
+        paramstr_left_surf = f'{sanitised_projection}_left_surf'
+        paramstr_right_surf = f'{sanitised_projection}_right_surf'
         transformer_f = Partial(surf_from_freesurfer_p, projection=projection)
 
-        @splice_on(f, occlusion=surf_from_freesurfer_p.output)
-        def f_transformed(
-            left_surf: Union[str, Tuple[Tensor, Tensor]],
-            right_surf: Union[str, Tuple[Tensor, Tensor]],
-            **params: Mapping,
-        ):
+        @splice_on(
+            f,
+            occlusion=surf_from_freesurfer_p.output,
+            expansion={
+                paramstr_left_surf: (Union[nb.GiftiImage, str], REQUIRED),
+                paramstr_right_surf: (Union[nb.GiftiImage, str], REQUIRED),
+            },
+        )
+        def f_transformed(**params: Mapping):
+            left_surf = params.pop(paramstr_left_surf)
+            right_surf = params.pop(paramstr_right_surf)
             return compositor(f, transformer_f)(**params)(
                 left_surf=left_surf,
                 right_surf=right_surf,

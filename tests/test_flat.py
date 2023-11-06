@@ -52,10 +52,10 @@ def test_scalars():
         ),
     )
     plot_f(
-        left_surf=surf['left'],
-        right_surf=surf['right'],
-        left_mask=lh_mask,
-        right_mask=rh_mask,
+        flat_left_surf=surf['left'],
+        flat_right_surf=surf['right'],
+        flat_left_mask=lh_mask,
+        flat_right_mask=rh_mask,
         gm_density_nifti=tflow.get(
             template='MNI152NLin2009cAsym',
             suffix='probseg',
@@ -84,10 +84,10 @@ def test_parcellation(cmap):
         ),
     )
     plot_f(
-        left_surf=surf['left'],
-        right_surf=surf['right'],
-        left_mask=lh_mask,
-        right_mask=rh_mask,
+        flat_left_surf=surf['left'],
+        flat_right_surf=surf['right'],
+        flat_left_mask=lh_mask,
+        flat_right_mask=rh_mask,
         parcellation_cifti=get_null400_cifti(),
         hemisphere=['left', 'right'],
         views=['down'],

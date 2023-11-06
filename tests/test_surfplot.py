@@ -32,11 +32,6 @@ from hyve.transforms import (
 )
 
 
-def print_params(**params):
-    print(params)
-    assert 0
-
-
 def test_scalars():
     plot_f = plotdef(
         surf_from_archive(),
@@ -271,8 +266,8 @@ def test_freesurfer():
         ),
     )
     plot_f(
-        left_surf=geom_left,
-        right_surf=geom_right,
+        inflated_left_surf=geom_left,
+        inflated_right_surf=geom_right,
         curv_morph_left=morph_left,
         curv_morph_right=morph_right,
         surf_scalars_cmap='RdYlBu_r',

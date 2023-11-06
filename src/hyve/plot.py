@@ -1070,6 +1070,8 @@ def plot_surf_f(
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
     ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    # Consumed but not used
+    template: Optional[str] = None,
 ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
     # Sometimes by construction surf_scalars is an empty tuple or list, which
     # causes problems later on. So we convert it to None if it's empty.
