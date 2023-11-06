@@ -525,6 +525,14 @@ def make_cmap_f(
         return tuple(ret)
 
 
+# TODO: The surface version of this operation should really just scatter
+#       an RGBA array into the parcels, rather than having to do this.
+#       But to support that, we first would need to change our geometric
+#       primitive to recognise RGBA arrays. I think what would make sense
+#       could be to *always* search for an RGBA array first (requiring these
+#       to be suffixed with _rgba, or something similar, to avoid confusion
+#       with scalar arrays), and fall back to a scalar array (current
+#       behaviour) if none is found.
 def parcellate_colormap_f(
     surf: CortexTriSurface,
     cmap_name: str,
@@ -710,24 +718,13 @@ def add_surface_overlay_f(
                 ),
             ),
         )
-
-        params = inner_f(**params)
-
-        layer_params, params = _move_params_to_dict(params, (
-            ('surf_scalars_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
-            ('surf_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
-            (
-                'surf_scalars_below_color',
-                'below_color',
-                LAYER_BELOW_COLOR_DEFAULT_VALUE,
-            ),
-        ))
+        inner_f_params = {**params}
 
         layer_params, params = _move_params_to_dict(
             params,
             (
-                (f'{paramstr}_cmap', 'cmap', layer_params['cmap']),
-                (f'{paramstr}_clim', 'clim', layer_params['clim']),
+                (f'{paramstr}_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
                     'cmap_negative',
@@ -743,7 +740,7 @@ def add_surface_overlay_f(
                 (
                     f'{paramstr}_below_color',
                     'below_color',
-                    layer_params['below_color'],
+                    LAYER_BELOW_COLOR_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_blend_mode',
@@ -757,6 +754,19 @@ def add_surface_overlay_f(
                 ),
             ),
         )
+
+        params = inner_f(**inner_f_params)
+
+        result_params, params = _move_params_to_dict(params, (
+            ('surf_scalars_cmap', 'cmap', layer_params['cmap']),
+            ('surf_scalars_clim', 'clim', layer_params['clim']),
+            (
+                'surf_scalars_below_color',
+                'below_color',
+                layer_params['below_color'],
+            ),
+        ))
+        layer_params = {**layer_params, **result_params}
 
         hemi_params_p = _get_hemisphere_parameters(
             surf_scalars_cmap=layer_params['cmap'],
@@ -843,25 +853,14 @@ def add_points_overlay_f(
                 ),
             ),
         )
-
-        params = inner_f(**params)
-
-        layer_params, params = _move_params_to_dict(params, (
-            ('points_scalars_cmap', 'cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
-            ('points_scalars_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
-            (
-                'points_scalars_below_color',
-                'below_color',
-                LAYER_BELOW_COLOR_DEFAULT_VALUE,
-            ),
-        ))
+        inner_f_params = {**params}
 
         paramstr = sanitise(layer_name)
         layer_params, params = _move_params_to_dict(
             params,
             (
-                (f'{paramstr}_cmap', 'cmap', layer_params['cmap']),
-                (f'{paramstr}_clim', 'clim', layer_params['clim']),
+                (f'{paramstr}_cmap', 'cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
                     'cmap_negative',
@@ -877,7 +876,7 @@ def add_points_overlay_f(
                 (
                     f'{paramstr}_below_color',
                     'below_color',
-                    layer_params['below_color'],
+                    LAYER_BELOW_COLOR_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_blend_mode',
@@ -886,6 +885,19 @@ def add_points_overlay_f(
                 ),
             ),
         )
+
+        params = inner_f(**inner_f_params)
+
+        result_params, params = _move_params_to_dict(params, (
+            ('points_scalars_cmap', 'cmap', layer_params['cmap']),
+            ('points_scalars_clim', 'clim', layer_params['clim']),
+            (
+                'points_scalars_below_color',
+                'below_color',
+                layer_params['below_color'],
+            ),
+        ))
+        layer_params = {**layer_params, **result_params}
 
         layer = Layer(
             name=layer_name,
@@ -951,38 +963,20 @@ def add_network_overlay_f(
                 ('edge_radius_range', EDGE_RLIM_DEFAULT_VALUE),
             )
         )
-
-        params = inner_f(**params)
-
-        node_params, params = _move_params_to_dict(params, (
-            ('node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
-            ('node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
-            ('node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
-            ('node_radius', 'radius', NODE_RADIUS_DEFAULT_VALUE),
-            ('node_radius_range', 'radius_range', NODE_RLIM_DEFAULT_VALUE),
-            ('node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
-        ))
-        edge_params, params = _move_params_to_dict(params, (
-            ('edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
-            ('edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
-            ('edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
-            ('edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
-            ('edge_radius', 'radius', EDGE_RADIUS_DEFAULT_VALUE),
-            ('edge_radius_range', 'radius_range', EDGE_RLIM_DEFAULT_VALUE),
-        ))
+        inner_f_params = {**params}
 
         node_params, params = _move_params_to_dict(
             params,
             (
-                (f'{paramstr}_node_cmap', 'cmap', node_params['cmap']),
-                (f'{paramstr}_node_clim', 'clim', node_params['clim']),
-                (f'{paramstr}_node_color', 'color', node_params['color']),
-                (f'{paramstr}_node_alpha', 'alpha', node_params['alpha']),
-                (f'{paramstr}_node_radius', 'radius', node_params['radius']),
+                (f'{paramstr}_node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
+                (f'{paramstr}_node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
+                (f'{paramstr}_node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
+                (f'{paramstr}_node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_node_radius', 'radius', NODE_RADIUS_DEFAULT_VALUE),
                 (
                     f'{paramstr}_node_radius_range',
                     'radius_range',
-                    node_params['radius_range'],
+                    NODE_RLIM_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_node_cmap_negative',
@@ -1004,15 +998,15 @@ def add_network_overlay_f(
         edge_params, params = _move_params_to_dict(
             params,
             (
-                (f'{paramstr}_edge_cmap', 'cmap', edge_params['cmap']),
-                (f'{paramstr}_edge_clim', 'clim', edge_params['clim']),
-                (f'{paramstr}_edge_color', 'color', edge_params['color']),
-                (f'{paramstr}_edge_alpha', 'alpha', edge_params['alpha']),
-                (f'{paramstr}_edge_radius', 'radius', edge_params['radius']),
+                (f'{paramstr}_edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
+                (f'{paramstr}_edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
+                (f'{paramstr}_edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
+                (f'{paramstr}_edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_edge_radius', 'radius', EDGE_RADIUS_DEFAULT_VALUE),
                 (
                     f'{paramstr}_edge_radius_range',
                     'radius_range',
-                    edge_params['radius_range'],
+                    EDGE_RLIM_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_edge_cmap_negative',
@@ -1031,6 +1025,27 @@ def add_network_overlay_f(
                 ),
             ),
         )
+
+        params = inner_f(**inner_f_params)
+
+        result_node_params, params = _move_params_to_dict(params, (
+            ('node_cmap', 'cmap', node_params['cmap']),
+            ('node_clim', 'clim', node_params['clim']),
+            ('node_color', 'color', node_params['color']),
+            ('node_radius', 'radius', node_params['radius']),
+            ('node_radius_range', 'radius_range', node_params['radius_range']),
+            ('node_alpha', 'alpha', node_params['alpha']),
+        ))
+        result_edge_params, params = _move_params_to_dict(params, (
+            ('edge_cmap', 'cmap', edge_params['cmap']),
+            ('edge_clim', 'clim', edge_params['clim']),
+            ('edge_color', 'color', edge_params['color']),
+            ('edge_alpha', 'alpha', edge_params['alpha']),
+            ('edge_radius', 'radius', edge_params['radius']),
+            ('edge_radius_range', 'radius_range', edge_params['radius_range']),
+        ))
+        node_params = {**node_params, **result_node_params}
+        edge_params = {**edge_params, **result_edge_params}
 
         edge_layer = EdgeLayer(
             name=layer_name,
