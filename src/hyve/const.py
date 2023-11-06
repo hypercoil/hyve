@@ -344,7 +344,7 @@ DOCBUILDER = {
     },
     'node_cmap' : {
         'type': 'str or matplotlib colormap',
-        'default': 'viridis',
+        'default': None,
         'desc': descr(
             """
             The colormap to use for the nodes. If ``node_values`` is

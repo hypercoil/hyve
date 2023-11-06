@@ -160,17 +160,18 @@ def surf_from_archive(
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(surf_from_archive_p, archives=archives)
+        _template = template
 
         @splice_on(f, occlusion=surf_from_archive_p.output)
         def f_transformed(
             *,
             load_mask: bool = True,
             surf_projection: Optional[Sequence[str]] = ('veryinflated',),
+            template: str = _template,
             **params: Mapping,
         ):
-            template_ = params.get('template', template)
             return compositor(f, transformer_f)(**params)(
-                template=template_,
+                template=template,
                 load_mask=load_mask,
                 projections=surf_projection,
             )
@@ -731,7 +732,6 @@ def surf_scalars_from_nifti(
         'fsLR': F(mni152_to_fslr),
         'fsaverage': F(mni152_to_fsaverage),
     }
-    f_resample = templates[template]
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
@@ -740,7 +740,6 @@ def surf_scalars_from_nifti(
         transformer_f = Partial(
             surf_scalars_from_nifti_p,
             scalars=scalars,
-            f_resample=f_resample,
             method=method,
             null_value=null_value,
             threshold=threshold,
@@ -750,6 +749,7 @@ def surf_scalars_from_nifti(
             coerce_to_scalar=coerce_to_scalar,
             plot=plot,
         )
+        _template = template
 
         @splice_on(
             f,
@@ -763,6 +763,7 @@ def surf_scalars_from_nifti(
             *,
             surf: CortexTriSurface,
             surf_scalars: Sequence[str] = (),
+            template: str = _template,
             **params: Mapping,
         ):
             try:
@@ -772,9 +773,11 @@ def surf_scalars_from_nifti(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {paramstr}'
                 )
+            f_resample = templates[template]
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
                 surf=surf,
+                f_resample=f_resample,
                 surf_scalars=surf_scalars,
             )
 
@@ -783,8 +786,8 @@ def surf_scalars_from_nifti(
 
 
 def parcellate_colormap(
-    cmap_name: str,
     parcellation_name: str,
+    cmap_name: Optional[str] = None,
     target: Union[str, Sequence[str]] = ('surf_scalars', 'node'),
     template: Literal['fsLR', 'fsaverage'] = 'fsLR',
 ) -> callable:
@@ -816,41 +819,74 @@ def parcellate_colormap(
     """
     cmaps = {
         'modal': (
-            f'data/cmap/tpl-{template}_hemi-L_desc-modal_rgba.gii',
-            f'data/cmap/tpl-{template}_hemi-R_desc-modal_rgba.gii',
+            'data/cmap/tpl-{template}_hemi-L_desc-modal_rgba.gii',
+            'data/cmap/tpl-{template}_hemi-R_desc-modal_rgba.gii',
         ),
         'network': (
-            f'data/cmap/tpl-{template}_hemi-L_desc-network_rgba.gii',
-            f'data/cmap/tpl-{template}_hemi-R_desc-network_rgba.gii',
+            'data/cmap/tpl-{template}_hemi-L_desc-network_rgba.gii',
+            'data/cmap/tpl-{template}_hemi-R_desc-network_rgba.gii',
         ),
     }
-    cmap = tuple(pkgrf('hyve', hemi) for hemi in cmaps[cmap_name])
+    if cmap_name is None:
+        cmap_name = 'network'
+    elif cmap_name not in cmaps:
+        raise ValueError(
+            f'Unsupported colormap name: {cmap_name}. Must be one of '
+            f'{tuple(cmaps.keys())}'
+        )
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
         transformer_f = Partial(
             parcellate_colormap_p,
-            cmap_name=cmap_name,
             parcellation_name=parcellation_name,
-            cmap=cmap,
             target=target,
         )
+        _template = template
 
-        @splice_on(
-            f,
-            occlusion=(
-                'surf_scalars_cmap',
-                'surf_scalars_clim',
-                'surf_scalars_below_color',
-            ),
-        )
+        @splice_on(f)
         def f_transformed(
             *,
             surf: CortexTriSurface,
+            template: str = _template,
             **params: Mapping,
         ):
-            return compositor(f, transformer_f)(**params)(surf=surf)
+            surf_scalars = params.get('surf_scalars', ())
+            surf_overlays = [
+                l.name for l in
+                (params.get('surf_scalars_layers', None) or ())
+            ]
+            if parcellation_name in surf_scalars:
+                cmap = params.get('surf_scalars_cmap', cmap_name)
+            elif parcellation_name in surf_overlays:
+                cmap = params.get(
+                    f'{sanitise(parcellation_name)}_cmap',
+                    cmap_name,
+                )
+            elif target == 'node' and (
+                (parcellation_name in surf.left.point_data)
+                or (parcellation_name in surf.right.point_data)
+            ):
+                cmap = params.pop(
+                    f'{sanitise(parcellation_name)}_cmap',
+                    params.pop('surf_scalars_cmap', cmap_name),
+                )
+            else:
+                cmap = cmap_name
+            if cmap is None or cmap == (None, None):
+                cmap = cmap_name
+            if cmap not in cmaps:
+                return f(surf=surf, **params)
+            rgba = tuple(
+                pkgrf('hyve', hemi).format(template=template)
+                for hemi in cmaps[cmap]
+            )
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                cmap_name=cmap,
+                cmap=rgba,
+            )
 
         return f_transformed
     return transform
@@ -1595,16 +1631,17 @@ def plot_to_html(
         transformer_fi = add_postprocessor_p
         transformer_fo = Partial(
             save_html_p,
-            fname_spec=fname_spec,
             suffix=suffix,
             extension=extension,
         )
         _postprocessor = F(plot_to_html_buffer_f)
+        _fname_spec = fname_spec
 
         @splice_on(f, occlusion=('window_size',))
         def f_transformed(
             *,
             output_dir: str,
+            fname_spec: Optional[str] = _fname_spec,
             window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
             **params,
         ):
@@ -1620,7 +1657,10 @@ def plot_to_html(
                     window_size=window_size, **params
                 ),
             )
-            return _f_transformed(output_dir=output_dir)(
+            return _f_transformed(
+                output_dir=output_dir,
+                fname_spec=fname_spec,
+            )(
                 name='html_buffer',
                 postprocessor=postprocessor,
                 postprocessors=postprocessors,
@@ -1661,15 +1701,20 @@ def save_snapshots(
     ) -> callable:
         transformer_f = Partial(
             save_snapshots_p,
-            fname_spec=fname_spec,
             suffix=suffix,
             extension=extension,
         )
+        _fname_spec = fname_spec
 
         @splice_on(f)
-        def f_transformed(output_dir: str, **params):
+        def f_transformed(
+            output_dir: str,
+            fname_spec: Optional[str] = _fname_spec,
+            **params,
+        ):
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
+                fname_spec=fname_spec,
             )(**params)
 
         return f_transformed
@@ -1700,19 +1745,24 @@ def save_figure(
             group_spec=group_spec,
             padding=padding,
             canvas_color=canvas_color,
-            fname_spec=fname_spec,
             suffix=suffix,
             extension=extension,
         )
+        _fname_spec = fname_spec
 
         @splice_on(f, occlusion=('sbprocessor',))
-        def f_transformed(output_dir: str, **params):
+        def f_transformed(
+            output_dir: str,
+            fname_spec: Optional[str] = _fname_spec,
+            **params,
+        ):
             if scalar_bar_action == 'collect':
                 sbprocessor = _null_sbprocessor
             elif scalar_bar_action == 'overlay':
                 sbprocessor = overlay_scalar_bars
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
+                fname_spec=fname_spec,
             )(sbprocessor=sbprocessor, **params)
 
         return f_transformed
@@ -1755,15 +1805,21 @@ def save_grid(
             suffix=suffix,
             extension=extension,
         )
+        _fname_spec = fname_spec
 
         @splice_on(f, occlusion=('sbprocessor',))
-        def f_transformed(output_dir: str, **params):
+        def f_transformed(
+            output_dir: str,
+            fname_spec: Optional[str] = _fname_spec,
+            **params,
+        ):
             if scalar_bar_action == 'collect':
                 sbprocessor = _null_sbprocessor
             elif scalar_bar_action == 'overlay':
                 sbprocessor = overlay_scalar_bars
             return compositor(transformer_f, f)(
                 output_dir=output_dir,
+                fname_spec=fname_spec,
             )(sbprocessor=sbprocessor, **params)
 
         return f_transformed

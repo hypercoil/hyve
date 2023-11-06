@@ -63,7 +63,7 @@ def test_parcellation():
     plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
-        parcellate_colormap('network', 'parcellation'),
+        parcellate_colormap('parcellation', 'network'),
         vertex_to_face('parcellation'),
         plot_to_image(),
         save_snapshots(
@@ -88,7 +88,7 @@ def test_parcellation():
     plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
-        parcellate_colormap('network', 'parcellation'),
+        parcellate_colormap('parcellation', 'network'),
         plot_to_image(),
         save_snapshots(
             fname_spec=(
@@ -117,7 +117,7 @@ def test_parcellation_modal_cmap():
     plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_gifti('parcellation', plot=True),
-        parcellate_colormap('modal', 'parcellation'),
+        parcellate_colormap('parcellation', 'modal'),
         vertex_to_face('parcellation'),
         plot_to_image(),
         save_snapshots(
@@ -144,7 +144,7 @@ def test_parcellation_modal_cmap():
     plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
-        parcellate_colormap('modal', 'parcellation'),
+        parcellate_colormap('parcellation', 'modal'),
         plot_to_image(),
         save_snapshots(
             fname_spec=(
@@ -172,13 +172,9 @@ def test_parcellation_html():
     plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_cifti('parcellation', plot=True),
-        parcellate_colormap('network', 'parcellation'),
+        parcellate_colormap('parcellation', 'network'),
         vertex_to_face('parcellation'),
-        plot_to_html(
-            fname_spec=(
-                'scalars-{surfscalars}_hemisphere-{hemisphere}_cmap-network'
-            ),
-        ),
+        plot_to_html(),
     )
     plot_f(
         template="fsLR",
@@ -190,6 +186,9 @@ def test_parcellation_html():
         hemisphere=['left', 'right'],
         window_size=(800, 800),
         output_dir='/tmp',
+        fname_spec=(
+            'scalars-{surfscalars}_hemisphere-{hemisphere}_cmap-network'
+        ),
     )
 
 @pytest.mark.ci_unsupported
@@ -201,11 +200,7 @@ def test_parcellated_scalars():
         parcellate_surf_scalars('gmdensity', 'parcellation'),
         vertex_to_face('gmdensityParcellated', interpolation='mode'),
         plot_to_image(),
-        save_snapshots(
-            fname_spec=(
-                'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
-            ),
-        ),
+        save_snapshots(),
     )
     plot_f(
         template="fsLR",
@@ -222,6 +217,9 @@ def test_parcellated_scalars():
         surf_scalars_below_color=(0, 0, 0, 0),
         hemisphere=['left', 'right'],
         output_dir='/tmp',
+        fname_spec=(
+            'scalars-{surfscalars}_hemisphere-{hemisphere}_view-{view}_parcellation-null'
+        ),
     )
 
     parcellated = np.random.rand(400)
