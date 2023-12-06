@@ -36,6 +36,11 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
+    "hyve-examples",
+    "coverage[toml]",
+    "pytest",
+    "pytest-cov",
+    "ruff",
     "seaborn",
 ]
 

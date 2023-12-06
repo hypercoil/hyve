@@ -14,11 +14,6 @@ def clean(session):
 @nox.session(python=["3.10", "3.11"])
 def tests(session):
     session.install('.[test]')
-    session.install('hyve-examples')
-    session.install('coverage[toml]')
-    session.install('pytest')
-    session.install('pytest-cov')
-    session.install('ruff')
     session.run(
         'pytest',
         '--cov', 'hyve',

@@ -82,8 +82,8 @@ def get_cifti_brain_model_axis(
     cifti: nb.Cifti2Image,
 ) -> Tuple[Sequence[str], Sequence[str]]:
     return tuple(
-        a
-        for a in tuple(cifti.header.get_axis(i) for i in range(cifti.ndim))
+        (i, a)
+        for (i, a) in tuple((i, cifti.header.get_axis(i)) for i in range(cifti.ndim))
         if isinstance(a, nb.cifti2.cifti2_axes.BrainModelAxis)
     )[0]
 
@@ -602,7 +602,7 @@ class CortexTriSurface:
 
         if is_path_like(cifti):
             cifti = nb.load(cifti)
-        model_axis = get_cifti_brain_model_axis(cifti)
+        model_ax_idx, model_axis = get_cifti_brain_model_axis(cifti)
 
         offset = 0
         for struc, slc, _ in model_axis.iter_structures():
@@ -611,7 +611,7 @@ class CortexTriSurface:
                 start, stop = slc.start, slc.stop
                 start = start if start is not None else 0
                 stop = (
-                    stop if stop is not None else offset + self.mask_size[hemi]
+                    stop if stop is not None else cifti.shape[model_ax_idx]
                 )
                 slices[hemi] = slice(start, stop)
                 offset = stop
