@@ -604,7 +604,6 @@ class CortexTriSurface:
             cifti = nb.load(cifti)
         model_ax_idx, model_axis = get_cifti_brain_model_axis(cifti)
 
-        offset = 0
         for struc, slc, _ in model_axis.iter_structures():
             hemi = names_dict.get(struc, None)
             if hemi is not None:
@@ -614,7 +613,6 @@ class CortexTriSurface:
                     stop if stop is not None else cifti.shape[model_ax_idx]
                 )
                 slices[hemi] = slice(start, stop)
-                offset = stop
 
         # Hmm, why are we casting to float32 here? No harm, but it's not
         # obvious why we're doing it instead of something more principled.
