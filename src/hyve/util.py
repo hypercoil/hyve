@@ -334,9 +334,9 @@ def _relabel_parcels_hemi(
     null_value: int = 0,
 ) -> np.ndarray:
     data = data.astype(np.int32)
-    data[data == null_value] = -1
+    null_mask = (data == null_value)
     _, data = np.unique(data, return_inverse=True)
-    data[data == -1] = null_value - 1
+    data[null_mask] = null_value - 1
     return data + 1
 
 
@@ -367,11 +367,6 @@ def relabel_parcels(
     right_data : np.ndarray
         Array of parcel values for the right hemisphere, with contiguous parcel
         values starting at the maximum value in left_data, plus 1.
-
-    Notes
-    -----
-    What utter wickedness is this?! This function was written almost entirely
-    by GitHub Copilot.
     """
     if left_data.squeeze().ndim == 2:
         return left_data, right_data

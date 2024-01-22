@@ -27,7 +27,6 @@ def plotdef(*pparams: Sequence[callable]) -> callable:
         )
     )
     plot_f = emulate_assignment()(plot_f)
-    # TODO: build docstring here when it's done
     return splice_docstring(
         f=plot_f,
         template=docbuilder(),
