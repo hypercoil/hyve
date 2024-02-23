@@ -393,7 +393,7 @@ def auto_focus(
     hw = half_width(plotter, slack=slack)
     hw = np.asarray(hw)
     hw[hw == 0] = 1
-    scalar = np.nanmin(hw / np.abs(vector))
+    scalar = np.nanmin(hw / np.abs(vector + np.finfo(np.float32).eps))
     vector = vector * scalar + focal_point
     return vector, focal_point
 
