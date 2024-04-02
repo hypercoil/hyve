@@ -3,7 +3,7 @@ Interactive and static 3D visualisation for functional brain mapping
 
 ``hyve`` (``hypercoil`` visualisation engine) is a Python package for interactive and static 3D visualisation of functional brain mapping data. It was originally designed to be used in conjunction with the [``hypercoil``](https://github.com/hypercoil/) project for differentiable programming in the context of functional brain mapping, but can be used independently.
 
-This system is currently under development, and the API is accordingly subject to sweeping changes without notice. Documentation is also extremely sparse, but will be added in the near future. To get a sense of how the package might look and feel when it is more mature, you can take a look at the test cases in the ``tests`` directory.
+This system is currently under development, and the API is accordingly subject to sweeping changes without notice. In particular, before using this system, be aware of the *major* limitations that exist, detailed under the *v1.0.0* header here (and soon to be added as issues). Documentation is also extremely sparse, but will be added in the near future. To get a sense of how the package might look and feel when it is more mature, you can take a look at the test cases in the ``tests`` directory.
 
 ``hyve`` allows for the visualisation of 3D data in a variety of formats, including volumetric data, surface meshes, and 3-dimensional network renderings. It is built using a rudimentary quasi-functional programming paradigm, allowing users to compose new plotting utilities for their data by chaining together functional primitives. The system is designed to be modular and extensible, and can be easily extended to support new data types and visualisation techniques. It is built on top of the ``pyvista`` library and therefore uses VTK as its rendering backend. The system is also capable of combining visualisations as panels of a SVG figure.
 
@@ -293,7 +293,18 @@ plot_f(
 
 ## Feature roadmap
 
-Among others, the following significant features are planned for future releases:
+### v1.0.0
+
+Several critical features are missing from the alpha version of ``hyve``. We will do our best to be responsive to issues that arise as a consequence of the inevitable breaking API changes that arise as this functionality is implemented. In particular, the following features are significant enough that the API cannot be considered stable until they are implemented:
+
+- Disambiguation and filtering of graphical elements according to metadata. Currently, the layout system does not support matching metadata in any graphical elements other than snapshots. For instance, scalar bars cannot be routed according to grouping specifications. This can be implemented by first making snapshots a graphical raster element and then modifying the code to match metadata for any elements. This is a critical feature that is necessary for creating many publication-ready figures with multiple panels and plot elements: currently, most figures must be edited manually because there is no control over, for instance, what scalar bars are placed in the SVG.
+- Uniform backend for all geometric primitives and topo-transforms. Currently, the way that different geometric primitives are handled is inconsistent--networks (correctly) have a ``ggplot``-like API that allows mapping different variables to different visual properties, while surfaces and volumes are still missing this functionality. Additionally, the handling and filtering of data by hemisphere should be lifted into a topo-transform, so that it can be applied to any geometric primitive. Finally, the naming of aesthetic mappings (e.g., ``radius``, ``rlim``, and ``rmap``; ``color``, ``clim``, and ``cmap``) should be made more principled. This is a critical feature that is necessary before we extend the library to support new geometric primitives.
+- Improving reusability of plot protocols. Currently, plot protocols created by ``hyve.plotdef`` have many parameters fixed at the time of creation, which undermines their reusability. This should be changed by having the parameterisation of primitives spliced into protocols at the time of creation set default values to arguments, while allowing the user to override these defaults at the time of calling the protocol.
+- Reconcile and formalise the relationship between the argument mapper (of the core visualisation loop) and the overlay system. Currently the system cannot handle this situation reasonably, and often not at all. This issue arises only when both are used in conjunction with one another, which we haven't seen much need for yet--but for which the need certainly exists. The user should be provided a way of controlling the desired behaviour when, for instance, vector-valued data are passed to multiple overlays--is an "outer" or "inner" join desired?
+
+### Future releases
+
+Among others, the following features are planned for future releases:
 
 - More 3D visual primitives, including contours, reconstructed regional surfaces, and voxel block volumes.
 - Support for grouping semantics in figure parameterisations, allowing users to specify that certain parameters should be applied to multiple elements at once according to shared metadata (e.g., same hemisphere), or that the same layout should be applied groupwise in a single figure (e.g., to visualise multiple parcellations or surface projections).
