@@ -695,6 +695,17 @@ class AnnotatedLayout(CellLayout):
             assigned=self.assigned,
         )
 
+    def set_assigned(
+        self, index: int, asgt: bool = True
+    ) ->  'AnnotatedLayout':
+        assigned = self.assigned.copy()
+        assigned[index] = asgt
+        return AnnotatedLayout(
+            layout=self.layout,
+            annotations=self.annotations,
+            assigned=assigned,
+        )
+
     def match_and_assign(
         self,
         query: Mapping,
@@ -862,11 +873,12 @@ class GroupSpec:
                     order=self.order,
                     kernel=Cell,
                 )
-                i = 0
+                i = 1
                 while i < nb:
                     layout = kernel | layout
                     i += 1
-                layout = layout << (1 / (nb + 1))
+                if i > 1:
+                    layout = layout << (1 / (nb + 1))
             else:
                 bp = self.max_levels // n_cols
                 nb = ceil(n_rows / (bp + 1))
@@ -876,11 +888,12 @@ class GroupSpec:
                     order=self.order,
                     kernel=Cell,
                 )
-                i = 0
+                i = 1
                 while i < nb:
                     layout = kernel / layout
                     i += 1
-                layout = layout << (1 / (nb + 1))
+                if i > 1:
+                    layout = layout << (1 / (nb + 1))
         else:
             bp = None
             nb = 1
