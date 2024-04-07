@@ -1803,6 +1803,7 @@ def save_figure_f(
     layout_kernel: CellLayout = Cell(),
     sort_by: Optional[Sequence[str]] = None,
     group_spec: Optional[Sequence[GroupSpec]] = None,
+    default_elements: Optional[Union[str, Sequence[str]]] = ('snapshots',),
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'svg',
@@ -2072,6 +2073,7 @@ def save_grid_f(
     sort_by: Optional[Sequence[str]] = None,
     group_spec: Optional[Sequence[GroupSpec]] = None,
     annotations: Optional[Mapping[int, Mapping]] = None,
+    default_elements: Optional[Union[str, Sequence[str]]] = ('snapshots',),
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'svg',
@@ -2086,7 +2088,9 @@ def save_grid_f(
         kernel=lambda: layout_kernel,
     )
     if annotations is not None:
-        layout = AnnotatedLayout(layout, annotations=annotations)
+        layout = layout.annotate(
+            annotations, default_elements=default_elements
+        )
     save_figure_f(
         snapshots=snapshots,
         canvas_size=canvas_size,
@@ -2094,6 +2098,7 @@ def save_grid_f(
         layout_kernel=layout,
         sort_by=sort_by,
         group_spec=group_spec,
+        default_elements=default_elements,
         fname_spec=fname_spec,
         suffix=suffix,
         extension=extension,
