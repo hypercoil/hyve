@@ -1879,11 +1879,8 @@ def save_figure_f(
             f.write(canvas.__str__())
 
     # Step 0: Configure inputs
-    try:
-        n_scenes = len(snapshots)
-    except TypeError:
-        n_scenes = 1
-        snapshots = (snapshots,)
+    n_scenes = len(snapshots)
+    snapshots, global_results = snapshots[:-1], snapshots[-1]
     if sort_by is not None:
 
         def sort_func(snapshot):
@@ -2006,7 +2003,7 @@ def save_figure_f(
         cells = list(page.partition(*canvas_size, padding=padding))
         # Build page-level metadata. This includes the page number as well as
         # any metadata that is constant across all snapshots on the page.
-        page = f'{i + 1:{len(str(n_pages))}d}'
+        pagenum = f'{i + 1:{len(str(n_pages))}d}'
         # print(snapshot_group)
         # print([meta for (_, meta) in snapshot_group])
         page_entities = [meta for (_, (_, meta)) in snapshot_group]
@@ -2015,7 +2012,7 @@ def save_figure_f(
             # because of the way we handle the layout splitting. We need to
             # fix this in a more principled way, i.e. at the level of the
             # layout splitting.
-            print(f'Page {page} is empty.')
+            print(f'Page {pagenum} is empty.')
             continue
         page_entities = _seq_to_dict(page_entities, merge_type='union')
         page_entities = {
@@ -2025,55 +2022,53 @@ def save_figure_f(
         page_entities = {
             k : list(v)[0] for k, v in page_entities.items() if len(v) == 1
         }
-        page_entities['page'] = page
+        page_entities['page'] = pagenum
         # Time to handle any additional plot elements that need to be added
         # to the canvas. This includes things like colorbars, legends, etc.
         # We can only semantically add these if we have an annotated layout.
-        elements_asgt = {}
+        # elements_asgt = {}
         if hasattr(layout, 'annotations'):
-            elements_fields = list(
-                set(
-                    sum(
-                        [
-                            list(cmeta.get('elements', {}).keys())
-                            for (_, (_, cmeta)) in snapshot_group
-                        ],
-                        [],
-                    )
-                )
+            global_scope_cells = tuple(
+                i for i, e in enumerate(page.assigned) if not e
             )
-            if elements_fields:
-                queries = [{'elements': cfield} for cfield in elements_fields]
-                # Each assignment should not "fill" a slot since we might want
-                # to assign multiple elements fields to a single cell. Because
-                # layout is not mutable, this shouldn't be a problem.
-                elements_asgt = [
-                    layout.match_and_assign(query=q) for q in queries
-                ]
-                _, elements_asgt = zip(*elements_asgt)
-                elements_asgt = {
-                    k: v
-                    for k, v in zip(elements_fields, elements_asgt)
-                    if v < len(cells)
-                }
-                elements = [
-                    cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
-                ]
-                elements = _seq_to_dict(elements, merge_type='union')
-        for cell_idx in set(elements_asgt.values()):
-            if cell_idx >= len(cells):
-                continue
-            elements_cell = [
-                k for k, v in elements_asgt.items() if v == cell_idx
-            ]
-            builders_cell = list(chain(*[
-                elements[k] for k in elements_cell
-            ]))
-            cellimg = tile_plot_elements(
-                builders=builders_cell,
-                max_dimension=cells[cell_idx].cell_dim,
-            )
-            snapshot_group.append((cell_idx, (cellimg, {})))
+            # if elements_fields:
+            #     queries = [{'elements': cfield} for cfield in elements_fields]
+            #     # Each assignment should not "fill" a slot since we might want
+            #     # to assign multiple elements fields to a single cell. Because
+            #     # layout is not mutable, this shouldn't be a problem.
+            #     elements_asgt = [
+            #         layout.match_and_assign(query=q) for q in queries
+            #     ]
+            #     _, elements_asgt = zip(*elements_asgt)
+            #     elements_asgt = {
+            #         k: v
+            #         for k, v in zip(elements_fields, elements_asgt)
+            #         if v < len(cells)
+            #     }
+            #     elements = [
+            #         cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
+            #     ]
+            #     elements = _seq_to_dict(elements, merge_type='union')
+            # assert 0
+        else:
+            global_scope_cells = ()
+        # for cell_idx in set(elements_asgt.values()):
+        #     if cell_idx >= len(cells):
+        #         continue
+        #     elements_cell = [
+        #         k for k, v in elements_asgt.items() if v == cell_idx
+        #     ]
+        #     builders_cell = list(chain(*[
+        #         elements[k] for k in elements_cell
+        #     ]))
+        #     cellimg = tile_plot_elements(
+        #         builders=builders_cell,
+        #         max_dimension=cells[cell_idx].cell_dim,
+        #     )
+        #     snapshot_group.append((cell_idx, (cellimg, {})))
+        snapshot_group = snapshot_group + [
+            (i, global_results) for i in global_scope_cells
+        ]
 
         write_f(
             writer=writer,
@@ -2344,9 +2339,7 @@ def automap_unified_plotter_f(
         )
         for i in range(n_replicates)
     ]
-    # TODO: we're sticking the 2D plot elements into the metadata here as a
-    #       hack to access them later, but this is not really where they
-    #       belong.
+    # meta_orig = [({**m[0]},) for m in metadata]
     for cmeta, celements in zip(metadata, elements):
         len_cmeta = len(next(iter(cmeta[0].values())))
         meta_asgts = [
