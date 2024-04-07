@@ -1810,6 +1810,7 @@ def save_figure_f(
     padding: int = 0,
     canvas_color: Any = (1, 1, 1, 1),
 ) -> None: # Union[Tuple[Image.Image], Image.Image]:
+
     # Helper function: write a single snapshot group to a file.
     def writer(snapshot_group, fname):
         _canvas_color = colors.to_hex(canvas_color)
@@ -1826,18 +1827,40 @@ def save_figure_f(
                 transform=[],
             )
         ]
-        for i, (cimg, cmeta) in snapshot_group:
+        # print(len(snapshot_group))
+        # print(tuple(i for i, _ in snapshot_group))
+        for i, results in snapshot_group:
             panel = cells[i]
-            if not isinstance(cimg, svg.SVG):
-                builder = RasterBuilder(
-                    content=cimg,
+            celements = tuple(
+                v
+                for k, v in results['elements'].items()
+                if k in page_elements[i]
+            )
+            if not celements:
+                continue
+            elif isinstance(celements[0], tuple):
+                celements = sum(celements, ())
+            celements = tuple(
+                e
+                if isinstance(e, ElementBuilder)
+                else RasterBuilder(
+                    content=e,
                     bounding_box_height=panel.cell_dim[1],
                     bounding_box_width=panel.cell_dim[0],
                     fmt='png',
                 )
-                cgroup = build_raster(**builder).elements[0]
-            else:
-                cgroup = cimg.elements[0]
+                for e in celements
+            )
+            # print(tuple(
+            #     (i, k)
+            #     for k, v in results['elements'].items()
+            #     if k in page_elements[i]
+            # ))
+            cgroup = tile_plot_elements(
+                builders=celements,
+                max_dimension=panel.cell_dim,
+            )
+            cgroup = cgroup.elements[0]
             ctransform = cgroup.transform or []
             transform = [svg.Translate(*panel.cell_loc)]
             cgroup = svg.G(
