@@ -1884,12 +1884,12 @@ def save_figure_f(
     if sort_by is not None:
 
         def sort_func(snapshot):
-            _, cmeta = snapshot
+            cmeta = snapshot['metadata']
             return tuple(cmeta[cfield] for cfield in sort_by)
 
         snapshots = sorted(snapshots, key=sort_func)
 
-    meta = [meta for (_, meta) in snapshots]
+    meta = [e['metadata'] for e in snapshots]
 
     # Step 1: Apply any grouping modulators to the provided layout template.
     if group_spec:
@@ -1942,6 +1942,38 @@ def save_figure_f(
             # drop={'elements'},
         )
         assert len(cell_indices) == len(meta)
+        unassigned_cells = tuple(
+            i for i, e in enumerate(layout.assigned) if not e
+        )
+        outstanding_queries = {
+            i: {
+                q: w
+                for q, w in layout.annotations[i].items()
+                if (
+                    q is not 'elements' and
+                    tuple(
+                        layout.annotations[i].get('elements', ('snapshots',))
+                    ) != ('snapshots',)
+                )
+            }
+            for i in unassigned_cells
+        }
+        outstanding_queries = {
+            k: v for k, v in outstanding_queries.items() if v
+        }
+        for i, query in outstanding_queries.items():
+            for j, e in enumerate(meta):
+                query_result = tuple(
+                    query.get(key, None)
+                    for key in e.keys()
+                )
+                if all(
+                    (r == value or r is None or r in value)
+                    for r, value in zip(query_result, e.values())
+                ):
+                    cell_indices += [i]
+                    snapshots += [snapshots[j]]
+                    layout = layout.set_assigned(i, True)
         index_map = dict(zip(cell_indices, snapshots))
         # Now, we use the breakpoint to split the layout into pages.
         pages = ()
@@ -2001,12 +2033,15 @@ def save_figure_f(
     # Step 3: Write to the canvas
     for i, (page, snapshot_group) in enumerate(zip(pages, snapshots)):
         cells = list(page.partition(*canvas_size, padding=padding))
+        page_elements = {
+            k: v['elements'] for k, v in page.annotations.items()
+        }
         # Build page-level metadata. This includes the page number as well as
         # any metadata that is constant across all snapshots on the page.
         pagenum = f'{i + 1:{len(str(n_pages))}d}'
         # print(snapshot_group)
         # print([meta for (_, meta) in snapshot_group])
-        page_entities = [meta for (_, (_, meta)) in snapshot_group]
+        page_entities = [e[1]['metadata'] for e in snapshot_group]
         if not page_entities:
             # It's an empty page. This shouldn't happen, but it currently does
             # because of the way we handle the layout splitting. We need to
