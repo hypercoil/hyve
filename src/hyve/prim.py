@@ -1893,38 +1893,36 @@ def save_figure_f(
 
     # Step 1: Apply any grouping modulators to the provided layout template.
     if group_spec:
+        #assert 0
         group_layouts, group_spec, bp, nb = tuple(
             zip(*[spec(meta) for spec in group_spec])
         )
         bp, nb = bp[0], nb[0]
         bp_factor = 1
-        if group_layouts[0].layout.split_orientation == 'v':
-            if group_spec[0].n_rows == 1:
-                for spec in group_spec[1:]:
-                    if spec.order == 'row' and spec.n_rows > 1:
-                        break
-                    bp_factor *= spec.n_cols
-                    if spec.n_rows > 1:
-                        break
-        else:
-            if group_spec[0].n_cols == 1:
-                for spec in group_spec[1:]:
-                    if spec.order == 'col' and spec.n_cols > 1:
-                        break
-                    bp_factor *= spec.n_rows
-                    if spec.n_cols > 1:
-                        break
-
-        if bp is not None:
-            bp = (bp + 1) * bp_factor - 1
-        group_layouts = reduce(
-            (lambda x, y: x * y),
-            group_layouts,
-        )
         if not hasattr(layout_kernel, 'annotations'):
-            layout_kernel = layout_kernel.annotate({})
-        layout = group_layouts * layout_kernel
+            layout_kernel = layout_kernel.annotate(
+                {}, default_elements=default_elements
+            )
+        layout = layout_kernel
+        accum_bp = (bp is not None and len(layout) > 1)
+        for group_layout in group_layouts[::-1]:
+            if accum_bp:
+                kernel_bps = tuple(layout.layout.breakpoints)
+                if (
+                    kernel_bps[0].split_orientation
+                    == group_layout.layout.split_orientation
+                ):
+                    bp_factor = (len(kernel_bps) + 1)
+                else:
+                    accum_bp = False
+            layout = group_layout * layout
+        if bp is not None:
+            bp = bp * bp_factor
     else:
+        if not hasattr(layout_kernel, 'annotations'):
+            layout_kernel = layout_kernel.annotate(
+                {}, default_elements=default_elements
+            )
         layout = layout_kernel
         bp = None
         nb = 0
