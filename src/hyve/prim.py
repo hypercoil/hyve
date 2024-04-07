@@ -1241,7 +1241,7 @@ def add_postprocessor_f(
     name: str,
     postprocessor: Callable,
     auxwriter: Optional[Callable] = None,
-    postprocessors: Optional[Sequence[Callable]] = None,
+    postprocessors: Optional[Mapping[str, Tuple[Callable, Callable]]] = None,
 ) -> Sequence[Callable]:
     if postprocessors is None:
         postprocessors = {}
@@ -1255,7 +1255,7 @@ def add_postprocessor_f(
 #       parameter, which specifies whether to close the plotter after the
 #       primitive is executed, when another downstream primitive like
 #       `plot_to_image` is called. It would probably be better to either
-#       handling the close operation in a base postprocessor that is
+#       handle the close operation in a base postprocessor that is
 #       pre-transformed into the postprocessor chain, or to automatically
 #       splice the close parameter into the postprocessor chain.
 def transform_postprocessor_f(
@@ -1265,12 +1265,12 @@ def transform_postprocessor_f(
     aux_transformer: Optional[Callable] = None,
     auxwriter: Optional[Callable] = None,
     auxwriter_params: Optional[Mapping] = None,
-    postprocessors: Optional[Sequence[Callable]] = None,
+    postprocessors: Optional[Mapping[str, Tuple[Callable, Callable]]] = None,
     composition_order: Literal['pre', 'post'] = 'pre',
 ) -> Sequence[Callable]:
     notfound = False
     if postprocessors is None:
-        notfound = True
+        postprocessors = {}
     postprocessor, _auxwriter = postprocessors.get(name, (None, None))
     if postprocessor is None:
         notfound = True
@@ -1725,7 +1725,7 @@ def plot_to_html_buffer_f(
 
 
 def save_snapshots_f(
-    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    snapshots: Sequence[Mapping],
     output_dir: str,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -1735,7 +1735,9 @@ def save_snapshots_f(
         img = Image.fromarray(img)
         img.save(fname)
 
-    for cimg, cmeta in snapshots:
+    for retval in snapshots:
+        cimg = retval['elements']['snapshots']
+        cmeta = retval['metadata']
         write_f(
             writer=writer,
             argument=cimg,
@@ -1748,7 +1750,7 @@ def save_snapshots_f(
 
 
 def save_html_f(
-    html_buffer: Sequence[Tuple[StringIO, Mapping[str, str]]],
+    html_buffer: Sequence[Mapping],
     output_dir: str,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -1758,7 +1760,9 @@ def save_html_f(
         with open(fname, 'w', encoding='utf-8') as f:
             f.write(buffer.read())
 
-    for chtml, cmeta in html_buffer:
+    for retval in html_buffer:
+        chtml = retval['elements']['html_buffer']
+        cmeta = retval['metadata']
         write_f(
             writer=writer,
             argument=chtml,
@@ -1793,7 +1797,7 @@ def plot_to_display_f(
 
 
 def save_figure_f(
-    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    snapshots: Sequence[Mapping],
     canvas_size: Tuple[int, int],
     output_dir: str,
     layout_kernel: CellLayout = Cell(),
@@ -2059,7 +2063,7 @@ def save_figure_f(
 
 
 def save_grid_f(
-    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    snapshots: Sequence[Mapping],
     canvas_size: Tuple[int, int],
     n_rows: int,
     n_cols: int,
@@ -2337,7 +2341,42 @@ def automap_unified_plotter_f(
         k: tuple(_flatten_to_depth([_dict_to_seq(val) for val in v], 1))
         for k, v in zip(postprocessor_names, zip(*metadata))
     }
-    output = {k: tuple(zip(output[k], metadata[k])) for k in output.keys()}
+    gelements = {} # initialise global elements
+    gmetadata = {}
+    for postproc, meta in metadata.items():
+        gelements[postproc] = {}
+        unique_elements = set(
+            sum(tuple(list(e['elements'].keys()) for e in meta), [])
+        )
+        for celement in unique_elements:
+            cvalues = sum([e['elements'][celement] for e in meta], ())
+            if all([v == cvalues[0] for v in cvalues[1:]]):
+                gelements[postproc][celement] = cvalues[0]
+        unique_meta = {
+            k: tuple(set(v))
+            for k, v in _seq_to_dict([
+                {k: v for k, v in e.items() if k != 'elements'}
+                for e in meta
+            ]).items()
+        }
+        gmetadata[postproc] = {
+            k: v[0] for k, v in unique_meta.items() if len(v) == 1
+        }
+    output = {
+        postproc: [
+            {
+                'elements': {postproc: out, **meta['elements']},
+                'metadata': {
+                    k: v for k, v in meta.items() if k != 'elements'
+                },
+            }
+            for out, meta in zip(output[postproc], metadata[postproc])
+        ] + [{
+            'elements': gelements[postproc],
+            'metadata': gmetadata[postproc],
+        }]
+        for postproc in output.keys()
+    }
 
     return output
 
