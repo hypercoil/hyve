@@ -643,6 +643,13 @@ class AnnotatedLayout(CellLayout):
                 )
             return root_layout, floating_layouts
 
+    def copy(self):
+        return self.__class__(
+            layout=self.layout.copy(),
+            annotations=self.annotations.copy(),
+            assigned=self.assigned.copy(),
+        )
+
     def partition(
         self,
         width: int,

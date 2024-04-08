@@ -1882,6 +1882,8 @@ def save_figure_f(
     n_scenes = len(snapshots)
     snapshots, global_results = snapshots[:-1], snapshots[-1]
     if sort_by is not None:
+        if isinstance(sort_by, str):
+            sort_by = (sort_by,)
 
         def sort_func(snapshot):
             cmeta = snapshot['metadata']
@@ -1890,6 +1892,7 @@ def save_figure_f(
         snapshots = sorted(snapshots, key=sort_func)
 
     meta = [e['metadata'] for e in snapshots]
+    single_page_kernel = False
 
     # Step 1: Apply any grouping modulators to the provided layout template.
     if group_spec:
@@ -1923,6 +1926,7 @@ def save_figure_f(
             layout_kernel = layout_kernel.annotate(
                 {}, default_elements=default_elements
             )
+            single_page_kernel = True
         layout = layout_kernel
         bp = None
         nb = 0
@@ -1930,7 +1934,9 @@ def save_figure_f(
     # Step 2: Determine the layout of cells on the canvas
     # Case a: layout is an annotated CellLayout. Here we assume that the
     #         provided layout specifies the layout of all pages together.
-    if getattr(layout, 'annotations', None) is not None:
+    if (
+        getattr(layout, 'annotations', None) is not None
+    ) and (not single_page_kernel):
         # It's an annotated layout, so we'll match the annotations
         # to the snapshot metadata to 'semantically' assign snapshots
         # to cells.
@@ -2036,7 +2042,7 @@ def save_figure_f(
         }
         # Build page-level metadata. This includes the page number as well as
         # any metadata that is constant across all snapshots on the page.
-        pagenum = f'{i + 1:{len(str(n_pages))}d}'
+        pagenum = f'{(i + 1):0{len(str(n_pages))}d}'
         # print(snapshot_group)
         # print([meta for (_, meta) in snapshot_group])
         page_entities = [e[1]['metadata'] for e in snapshot_group]
