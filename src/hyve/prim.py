@@ -94,36 +94,37 @@ from .elements import (
     RasterBuilder,
     TextBuilder,
     UnknownBuilder,
-    build_raster,
     tile_plot_elements,
 )
+from .geom import (
+    CortexTriSurface,
+    EdgeLayer,
+    Layer,
+    NetworkData,
+    NetworkDataCollection,
+    NodeLayer,
+    PointData,
+    PointDataCollection,
+    hemisphere_select_fit,
+    hemisphere_slack_fit,
+    plot_network_f,
+    plot_points_f,
+    plot_surf_f,
+)
 from .layout import (
-    AnnotatedLayout,
     Cell,
     CellLayout,
     GroupSpec,
     grid,
 )
 from .plot import (
-    EdgeLayer,
-    Layer,
-    NodeLayer,
-    _get_hemisphere_parameters,
+    #_get_hemisphere_parameters,
     _null_auxwriter,
     _null_op,
-    hemisphere_slack_fit,
-    plot_network_f,
-    plot_points_f,
-    plot_surf_f,
     plotted_entities,
     unified_plotter,
 )
-from .surf import CortexTriSurface
 from .util import (
-    NetworkData,
-    NetworkDataCollection,
-    PointData,
-    PointDataCollection,
     auto_focus,
     cortex_cameras,
     filter_adjacency_data,
@@ -2290,10 +2291,10 @@ def splice_on(f):
 @splice_on(plot_surf_f)
 @splice_on(plot_points_f)
 @splice_on(plot_network_f)
+@splice_on(hemisphere_select_fit)
 @splice_on(hemisphere_slack_fit)
 def automap_unified_plotter_f(
     *,
-    hemisphere: Optional[Literal['left', 'right']] = None,
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,

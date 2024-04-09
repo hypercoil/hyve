@@ -44,6 +44,11 @@ from .const import (
     Tensor,
 )
 from .elements import ElementBuilder
+from .geom import (
+    CortexTriSurface,
+    NetworkDataCollection,
+    PointDataCollection,
+)
 from .layout import Cell, CellLayout, GroupSpec
 from .plot import _null_sbprocessor, overlay_scalar_bars
 from .prim import (
@@ -91,10 +96,7 @@ from .prim import (
     transform_postprocessor_p,
     vertex_to_face_p,
 )
-from .surf import CortexTriSurface
 from .util import (
-    NetworkDataCollection,
-    PointDataCollection,
     sanitise,
 )
 
