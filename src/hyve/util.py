@@ -13,7 +13,6 @@ from typing import (
     Any,
     Dict,
     Literal,
-    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -239,16 +238,18 @@ def scale_image_preserve_aspect_ratio(
     return img.resize((new_width, new_height))
 
 
-def robust_clim(
+def scalar_percentile(
     data: Tensor,
-    percent: float = 5.0,
+    percent: Union[float, Tuple[float, float]] = DEFAULT_ROBUST_LIM_PCT,
     bgval: Optional[float] = 0.0,
 ) -> Tuple[float, float]:
+    if isinstance(percent, float):
+        percent = (percent, 100 - percent)
     if bgval is not None:
         data = data[~np.isclose(data, bgval)]
     return (
-        np.nanpercentile(data, percent),
-        np.nanpercentile(data, 100 - percent),
+        np.nanpercentile(data, percent[0]),
+        np.nanpercentile(data, percent[1]),
     )
 
 
@@ -460,3 +461,24 @@ def source_over(
     Assumes premultiplied alpha.
     """
     return src + dst * (1.0 - src[..., 3:])
+
+
+@dataclasses.dataclass(frozen=True)
+class LinearScalarMapper:
+    norm: Optional[Tuple[float, float]] = None
+
+    def __call__(
+        self,
+        X: Tensor,
+        vmin: float,
+        vmax: float,
+    ) -> Tensor:
+        X = np.clip(X, vmin, vmax)
+        if self.norm is None:
+            return X
+        return (
+            (X - vmin) /
+            (vmax - vmin) *
+            (self.norm[1] - self.norm[0]) +
+            self.norm[0]
+        )
