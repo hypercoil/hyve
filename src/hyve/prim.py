@@ -1736,17 +1736,18 @@ def save_snapshots_f(
         img.save(fname)
 
     for retval in snapshots:
-        cimg = retval['elements']['snapshots']
+        cimg = retval['elements'].get('snapshots', None)
         cmeta = retval['metadata']
-        write_f(
-            writer=writer,
-            argument=cimg,
-            entities=cmeta,
-            output_dir=output_dir,
-            fname_spec=fname_spec,
-            suffix=suffix,
-            extension=extension,
-        )
+        if cimg is not None:
+            write_f(
+                writer=writer,
+                argument=cimg,
+                entities=cmeta,
+                output_dir=output_dir,
+                fname_spec=fname_spec,
+                suffix=suffix,
+                extension=extension,
+            )
 
 
 def save_html_f(
@@ -1761,17 +1762,18 @@ def save_html_f(
             f.write(buffer.read())
 
     for retval in html_buffer:
-        chtml = retval['elements']['html_buffer']
+        chtml = retval['elements'].get('html_buffer', None)
         cmeta = retval['metadata']
-        write_f(
-            writer=writer,
-            argument=chtml,
-            entities=cmeta,
-            output_dir=output_dir,
-            fname_spec=fname_spec,
-            suffix=suffix,
-            extension=extension,
-        )
+        if chtml is not None:
+            write_f(
+                writer=writer,
+                argument=chtml,
+                entities=cmeta,
+                output_dir=output_dir,
+                fname_spec=fname_spec,
+                suffix=suffix,
+                extension=extension,
+            )
 
 
 def plot_to_display_f(
@@ -2351,6 +2353,16 @@ def automap_unified_plotter_f(
     except ValueError:
         n_replicates = 1
 
+    metadata = [
+        plotted_entities(
+            **{
+                k: (v[i % len(v)] if k in repl_vars else v)
+                for k, v in params.items()
+            },
+            entity_writers=auxwriters,
+        )
+        for i in range(n_replicates)
+    ]
     output = [
         unified_plotter(
             **{
@@ -2368,16 +2380,6 @@ def automap_unified_plotter_f(
         k: tuple(_flatten_to_depth(v, 1))
         for k, v in zip(postprocessor_names, zip(*output))
     }
-    metadata = [
-        plotted_entities(
-            **{
-                k: (v[i % len(v)] if k in repl_vars else v)
-                for k, v in params.items()
-            },
-            entity_writers=auxwriters,
-        )
-        for i in range(n_replicates)
-    ]
     # meta_orig = [({**m[0]},) for m in metadata]
     for cmeta, celements in zip(metadata, elements):
         len_cmeta = len(next(iter(cmeta[0].values())))
