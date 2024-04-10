@@ -7,7 +7,7 @@ Point clouds
 Point cloud geometry data containers and geometric primitives.
 """
 import dataclasses
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
 import pyvista as pv
 
@@ -15,6 +15,18 @@ from .base import Layer, layer_rgba
 from ..elements import ScalarBarBuilder
 from ..const import (
     Tensor,
+    LAYER_ALIM_DEFAULT_VALUE,
+    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_ALPHA_DEFAULT_VALUE,
+    LAYER_AMAP_DEFAULT_VALUE,
+    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_COLOR_DEFAULT_VALUE,
+    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+    POINTS_DEFAULT_STYLE,
     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
@@ -156,6 +168,8 @@ class PointDataCollection:
         self,
         plotter: pv.Plotter,
         layers: Sequence[Layer],
+        points_alpha: Optional[float] = 1.0,
+        style: Union[Mapping, Literal['__default__']] = '__default__',
         copy_actors: bool = False,
     ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
         # We could implement blend modes for points, but it's not clear
@@ -177,23 +191,31 @@ class PointDataCollection:
             )
             for layer in layers
         ]
+        if style == '__default__':
+            base_style = POINTS_DEFAULT_STYLE
+        else:
+            base_style = {**POINTS_DEFAULT_STYLE, **style}
+        scalar_bar_builders = ()
         for layer in layers:
             dataset = self.get_dataset(layer.name)
             color_array = dataset.points.point_data[layer.color]
+            alpha_array = dataset.points.point_data.get('alpha', None)
             layer = dataclasses.replace(layer, color=None)
-            rgba, scalar_bar_builders = layer_rgba(layer, color_array)
+            rgba, new_builders = layer_rgba(
+                layer, color_array, alpha_array
+            )
+            style = {**{'point_size': dataset.point_size}, **base_style}
+            if (points_alpha is None):
+                rgba = rgba[:, :3]
             plotter.add_points(
                 points=dataset.points.points,
-                render_points_as_spheres=False,
-                style='points_gaussian',
-                emissive=False,
                 scalars=rgba,
-                opacity=layer.alpha,
-                point_size=dataset.point_size,
-                ambient=1.0,
+                opacity=points_alpha,
                 rgb=True,
+                **style,
                 copy_mesh=copy_actors,
             )
+            scalar_bar_builders += new_builders
         return plotter, scalar_bar_builders
 
     def __getitem__(self, key: int):
@@ -224,10 +246,40 @@ def plot_points_f(
     copy_actors: bool = False,
     *,
     points: Optional[PointDataCollection] = None,
-    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
     points_alpha: float = 1.0,
+    points_style: Union[Mapping, Literal['__default__']] = '__default__',
+    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
+    points_scalars_color: Optional[str] = LAYER_COLOR_DEFAULT_VALUE,
     points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
-    points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_cmap_negative: Optional[
+        Any
+    ] = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_clim: Optional[
+        Tuple[float, float]
+    ] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_clim_negative: Optional[
+        Tuple[float, float]
+    ] = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_clim_percentile: bool = (
+        LAYER_CLIM_PERCENTILE_DEFAULT_VALUE
+    ),
+    points_scalars_alpha: float = LAYER_ALPHA_DEFAULT_VALUE,
+    points_scalars_amap: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_DEFAULT_VALUE,
+    points_scalars_amap_negative: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_alim: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_DEFAULT_VALUE,
+    points_scalars_alim_negative: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_alim_percentile: bool = (
+        LAYER_ALIM_PERCENTILE_DEFAULT_VALUE
+    ),
+    points_scalars_nan_override: Any = LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     points_scalars_below_color: str = (
         POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE
     ),
@@ -246,17 +298,27 @@ def plot_points_f(
         if points_scalars is not None:
             base_layer = Layer(
                 name=points_scalars,
+                color=points_scalars_color or points_scalars,
                 cmap=points_scalars_cmap,
+                cmap_negative=points_scalars_cmap_negative,
                 clim=points_scalars_clim,
-                cmap_negative=None,
-                color=None,
-                alpha=points_alpha,
+                clim_negative=points_scalars_clim_negative,
+                clim_percentile=points_scalars_clim_percentile,
+                alpha=points_scalars_alpha,
+                amap=points_scalars_amap,
+                amap_negative=points_scalars_amap_negative,
+                alim=points_scalars_alim,
+                alim_negative=points_scalars_alim_negative,
+                alim_percentile=points_scalars_alim_percentile,
                 below_color=points_scalars_below_color,
+                nan_override=points_scalars_nan_override,
             )
             points_scalars_layers = [base_layer] + list(points_scalars_layers)
         plotter, new_builders = points.paint(
             plotter=plotter,
             layers=points_scalars_layers,
+            points_alpha=points_alpha,
+            style=points_style,
             copy_actors=copy_actors,
         )
         scalar_bar_builders = scalar_bar_builders + new_builders
@@ -267,10 +329,40 @@ def plot_points_aux_f(
     metadata: Mapping[str, Sequence[str]],
     *,
     points: Optional[PointDataCollection] = None,
-    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
     points_alpha: float = 1.0,
+    points_style: Union[Mapping, Literal['__default__']] = '__default__',
+    points_scalars: Optional[str] = POINTS_SCALARS_DEFAULT_VALUE,
+    points_scalars_color: Optional[str] = LAYER_COLOR_DEFAULT_VALUE,
     points_scalars_cmap: Any = POINTS_SCALARS_CMAP_DEFAULT_VALUE,
-    points_scalars_clim: Optional[Tuple] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_cmap_negative: Optional[
+        Any
+    ] = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_clim: Optional[
+        Tuple[float, float]
+    ] = POINTS_SCALARS_CLIM_DEFAULT_VALUE,
+    points_scalars_clim_negative: Optional[
+        Tuple[float, float]
+    ] = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_clim_percentile: bool = (
+        LAYER_CLIM_PERCENTILE_DEFAULT_VALUE
+    ),
+    points_scalars_alpha: float = LAYER_ALPHA_DEFAULT_VALUE,
+    points_scalars_amap: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_DEFAULT_VALUE,
+    points_scalars_amap_negative: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_alim: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_DEFAULT_VALUE,
+    points_scalars_alim_negative: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    points_scalars_alim_percentile: bool = (
+        LAYER_ALIM_PERCENTILE_DEFAULT_VALUE
+    ),
+    points_scalars_nan_override: Any = LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     points_scalars_below_color: str = (
         POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE
     ),

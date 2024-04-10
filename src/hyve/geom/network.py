@@ -7,7 +7,7 @@ Networks
 Network geometry data containers and geometric primitives.
 """
 import dataclasses
-from typing import Any, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 import pyvista as pv
@@ -33,6 +33,8 @@ from ..const import (
     EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_RMAP_DEFAULT_VALUE,
     NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    NETWORK_EDGE_DEFAULT_STYLE,
+    NETWORK_NODE_DEFAULT_STYLE,
     NODE_ALIM_DEFAULT_VALUE,
     NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
     NODE_ALPHA_DEFAULT_VALUE,
@@ -232,10 +234,20 @@ class NetworkDataCollection:
         plotter: pv.Plotter,
         layers: Sequence[NodeLayer],
         num_edge_radius_bins: int = 10,
+        node_style: Union[Mapping, Literal['__default__']] = '__default__',
+        edge_style: Union[Mapping, Literal['__default__']] = '__default__',
         copy_actors: bool = False,
     ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
         # TODO: See if we're better off merging the nodes and edges into a
         #       single mesh, or if there's any reason to keep them separate.
+        if node_style == '__default__':
+            node_style = NETWORK_NODE_DEFAULT_STYLE
+        else:
+            node_style = {**NETWORK_NODE_DEFAULT_STYLE, **node_style}
+        if edge_style == '__default__':
+            edge_style = NETWORK_EDGE_DEFAULT_STYLE
+        else:
+            edge_style = {**NETWORK_EDGE_DEFAULT_STYLE, **edge_style}
         scalar_bar_builders = ()
         for layer in layers:
             network = self.get_dataset(layer.name)
@@ -249,6 +261,7 @@ class NetworkDataCollection:
                 glyph,
                 scalars=f'{layer.name}_rgba',
                 rgb=True,
+                **node_style,
                 # shouldn't do anything here, but just in case
                 copy_mesh=copy_actors,
             )
@@ -265,6 +278,7 @@ class NetworkDataCollection:
                     glyphs,
                     scalars=f'{edge_layer.name}_rgba',
                     rgb=True,
+                    **edge_style,
                     copy_mesh=copy_actors,
                 )
                 if new_builder[0].name == layer_builders[0].name:
@@ -483,6 +497,8 @@ def plot_network_f(
     copy_actors: bool = False,
     *,
     networks: Optional[NetworkDataCollection] = None,
+    node_style: Union[Mapping, Literal['__default__']] = '__default__',
+    edge_style: Union[Mapping, Literal['__default__']] = '__default__',
     node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
     node_rmap: Optional[
         Union[callable, Tuple[float, float]]
@@ -562,6 +578,8 @@ def plot_network_f(
             plotter=plotter,
             layers=network_layers,
             num_edge_radius_bins=num_edge_radius_bins,
+            node_style=node_style,
+            edge_style=edge_style,
             copy_actors=copy_actors,
         )
         scalar_bar_builders = scalar_bar_builders + new_builders
@@ -572,6 +590,8 @@ def plot_network_aux_f(
     metadata: Mapping[str, Sequence[str]],
     *,
     networks: Optional[NetworkDataCollection] = None,
+    node_style: Union[Mapping, Literal['__default__']] = '__default__',
+    edge_style: Union[Mapping, Literal['__default__']] = '__default__',
     node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
     node_rmap: Optional[
         Union[callable, Tuple[float, float]]
