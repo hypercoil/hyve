@@ -61,6 +61,9 @@ class _LayerBase:
     name: Optional[str]
     # long_name: Optional[str] = None
     color: Optional[Any] = LAYER_COLOR_DEFAULT_VALUE
+    #TODO: color_negative and alpha_negative aren't sure what they are
+    #      supposed to be. We need to decide and appropriately refactor
+    #      before we can expose them or remove them.
     color_negative: Optional[Any] = LAYER_COLOR_NEGATIVE_DEFAULT_VALUE
     cmap: Optional[Any] = DEFAULT_CMAP
     cmap_negative: Optional[Any] = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE

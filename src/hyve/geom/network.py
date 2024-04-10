@@ -307,7 +307,11 @@ def build_edges_mesh(
     else:
         scalars = edge_values[layer.color].values
         color = None
-    flayer = dataclasses.replace(layer, color=color)
+    if isinstance(layer.alpha, str):
+        alpha = edge_values[layer.alpha].values
+    else:
+        alpha = layer.alpha
+    flayer = dataclasses.replace(layer, color=color, alpha=alpha)
     rgba, scalar_bar_builders = layer_rgba(flayer, scalars)
     if edges_noalpha:
         # We shouldn't have to do this, but for some reason either VTK or
@@ -422,10 +426,10 @@ def build_nodes_mesh(
     else:
         scalars = node_values[layer.color].values
         color = None
-    if not isinstance(layer.alpha, str):
-        alpha = layer.alpha
+    if isinstance(layer.alpha, str):
+        alpha = node_values[layer.alpha].values
     else:
-        alpha = None
+        alpha = layer.alpha
     flayer = dataclasses.replace(layer, alpha=alpha, color=color)
     rgba, scalar_bar_builders = layer_rgba(flayer, scalars)
     if isinstance(layer.alpha, str):
