@@ -2298,6 +2298,7 @@ def automap_unified_plotter_f(
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    parallel_projection: bool = False,
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     use_single_plotter: bool = True,
     sbprocessor: Optional[callable] = None,

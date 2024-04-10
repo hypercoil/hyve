@@ -328,6 +328,7 @@ def base_plotter(
     plotter: Optional[pv.Plotter] = None,
     off_screen: bool = True,
     copy_actors: bool = False,
+    parallel_projection: bool = False,
     theme: Optional[Any] = None,
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     return_builders: bool = False,
@@ -357,6 +358,13 @@ def base_plotter(
 
     if key_scalars == '__default__':
         key_scalars = _default_key_scalars(params)
+
+    if parallel_projection:
+        plotter.enable_parallel_projection()
+        plotter.enable_image_style()
+    else:
+        plotter.disable_parallel_projection()
+        # plotter.disable_image_style()
 
     params = {**locals(), **params}
     for transform in topo_transforms or ():
