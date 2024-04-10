@@ -20,22 +20,33 @@ from .base import (
 from ..elements import ScalarBarBuilder
 from ..const import (
     Tensor,
+    EDGE_ALIM_DEFAULT_VALUE,
+    EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_ALPHA_DEFAULT_VALUE,
+    EDGE_AMAP_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
+    EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_CMAP_DEFAULT_VALUE,
     EDGE_COLOR_DEFAULT_VALUE,
     EDGE_RADIUS_DEFAULT_VALUE,
     EDGE_RLIM_DEFAULT_VALUE,
+    EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_RMAP_DEFAULT_VALUE,
     NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    NODE_ALIM_DEFAULT_VALUE,
+    NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
     NODE_ALPHA_DEFAULT_VALUE,
+    NODE_AMAP_DEFAULT_VALUE,
     NODE_CLIM_DEFAULT_VALUE,
+    NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
     NODE_CMAP_DEFAULT_VALUE,
     NODE_COLOR_DEFAULT_VALUE,
     NODE_RADIUS_DEFAULT_VALUE,
     NODE_RMAP_DEFAULT_VALUE,
     NODE_RLIM_DEFAULT_VALUE,
+    NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
 )
+from ..util import scalar_percentile
 
 RADIUS_GLYPH_SCALAR_EDGE = 0.01
 
@@ -55,8 +66,10 @@ class EdgeLayer(_LayerBase):
     radius_negative: Optional[Union[float, str]] = None
     rlim: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE
     rlim_negative: Optional[Tuple[float, float]] = None
-    rlim_percentile: bool = False
-    rmap: Optional[Union[callable, Tuple[float, float]]] = None
+    rlim_percentile: bool = EDGE_RLIM_PERCENTILE_DEFAULT_VALUE
+    rmap: Optional[
+        Union[callable, Tuple[float, float]]
+    ] = EDGE_RMAP_DEFAULT_VALUE
     rmap_negative: Optional[Union[callable, Tuple[float, float]]] = None
     alpha: Union[float, str] = EDGE_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
@@ -77,8 +90,10 @@ class NodeLayer(_LayerBase):
     radius_negative: Optional[Union[float, str]] = None
     rlim: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE
     rlim_negative: Optional[Tuple[float, float]] = None
-    rlim_percentile: bool = False
-    rmap: Optional[Union[callable, Tuple[float, float]]] = None
+    rlim_percentile: bool = NODE_RLIM_PERCENTILE_DEFAULT_VALUE
+    rmap: Optional[
+        Union[callable, Tuple[float, float]]
+    ] = NODE_RMAP_DEFAULT_VALUE
     rmap_negative: Optional[Union[callable, Tuple[float, float]]] = None
     alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
@@ -377,9 +392,20 @@ def build_edges_meshes(
         'This is likely a bug. Please report it at '
         'https://github.com/hypercoil/hyve/issues.'
     )
-    #TODO: If colour is mapped by percentile, we should override it *before*
-    # we loop over the bins, not after: the colour mapping should be
-    # consistent across all bins.
+    if layer.clim_percentile:
+        try:
+            clim = scalar_percentile(
+                edge_values[layer.color].values,
+                layer.clim,
+            )
+        except KeyError:
+            clim = layer.clim
+        clim_percentile = False
+        layer = dataclasses.replace(
+            layer,
+            clim=clim,
+            clim_percentile=clim_percentile,
+        )
 
     edges = pv.PolyData()
     for i in range(num_radius_bins):
@@ -457,24 +483,36 @@ def plot_network_f(
     copy_actors: bool = False,
     *,
     networks: Optional[NetworkDataCollection] = None,
-    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
     node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
     node_rmap: Optional[
         Union[callable, Tuple[float, float]]
     ] = NODE_RMAP_DEFAULT_VALUE,
     node_rlim: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
+    node_rlim_percentile: bool = NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
     node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
     node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
+    node_clim_percentile: bool = NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
     node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
-    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
-    edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
-    edge_rmap: Optional[
+    node_amap: Optional[
         Union[callable, Tuple[float, float]]
-    ] = EDGE_RMAP_DEFAULT_VALUE,
+    ] = NODE_AMAP_DEFAULT_VALUE,
+    node_alim: Tuple[float, float] = NODE_ALIM_DEFAULT_VALUE,
+    node_alim_percentile: bool = NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
+    edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
+    edge_rmap: Tuple[float, float] = EDGE_RMAP_DEFAULT_VALUE,
     edge_rlim: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
+    edge_rlim_percentile: bool = EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
     edge_cmap: Any = EDGE_CMAP_DEFAULT_VALUE,
     edge_clim: Tuple[float, float] = EDGE_CLIM_DEFAULT_VALUE,
-    edge_alpha: Union[float, str] = 1.0,
+    edge_clim_percentile: bool = EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
+    edge_alpha: Union[float, str] = EDGE_ALPHA_DEFAULT_VALUE,
+    edge_amap: Optional[
+        Union[callable, Tuple[float, float]]
+    ] = EDGE_AMAP_DEFAULT_VALUE,
+    edge_alim: Tuple[float, float] = EDGE_ALIM_DEFAULT_VALUE,
+    edge_alim_percentile: bool = EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
     num_edge_radius_bins: int = 10,
     network_layers: Optional[Sequence[NodeLayer]] = None,
 ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
@@ -489,11 +527,16 @@ def plot_network_f(
                     name=network_name,
                     cmap=edge_cmap,
                     clim=edge_clim,
+                    clim_percentile=edge_clim_percentile,
                     color=edge_color,
                     radius=edge_radius,
                     rmap=edge_rmap,
                     rlim=edge_rlim,
+                    rlim_percentile=edge_rlim_percentile,
                     alpha=edge_alpha,
+                    amap=edge_amap,
+                    alim=edge_alim,
+                    alim_percentile=edge_alim_percentile,
                 )]
             else:
                 base_edge_layers = []
@@ -502,11 +545,16 @@ def plot_network_f(
                     name=network_name,
                     cmap=node_cmap,
                     clim=node_clim,
+                    clim_percentile=node_clim_percentile,
                     color=node_color,
                     radius=node_radius,
                     rmap=node_rmap,
                     rlim=node_rlim,
+                    rlim_percentile=node_rlim_percentile,
                     alpha=node_alpha,
+                    amap=node_amap,
+                    alim=node_alim,
+                    alim_percentile=node_alim_percentile,
                     edge_layers=base_edge_layers,
                 )
             network_layers = [base_layer]
@@ -524,20 +572,36 @@ def plot_network_aux_f(
     metadata: Mapping[str, Sequence[str]],
     *,
     networks: Optional[NetworkDataCollection] = None,
-    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
     node_radius: Union[float, str] = NODE_RADIUS_DEFAULT_VALUE,
-    node_rmap: Optional[Union[callable, Tuple[float, float]]] = None,
+    node_rmap: Optional[
+        Union[callable, Tuple[float, float]]
+    ] = NODE_RMAP_DEFAULT_VALUE,
     node_rlim: Tuple[float, float] = NODE_RLIM_DEFAULT_VALUE,
+    node_rlim_percentile: bool = NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    node_color: Optional[str] = NODE_COLOR_DEFAULT_VALUE,
     node_cmap: Any = NODE_CMAP_DEFAULT_VALUE,
     node_clim: Tuple[float, float] = NODE_CLIM_DEFAULT_VALUE,
+    node_clim_percentile: bool = NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
     node_alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE,
-    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
+    node_amap: Optional[
+        Union[callable, Tuple[float, float]]
+    ] = NODE_AMAP_DEFAULT_VALUE,
+    node_alim: Tuple[float, float] = NODE_ALIM_DEFAULT_VALUE,
+    node_alim_percentile: bool = NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
     edge_radius: Union[float, str] = EDGE_RADIUS_DEFAULT_VALUE,
-    edge_rmap: Tuple[float, float] = None,
+    edge_rmap: Tuple[float, float] = EDGE_RMAP_DEFAULT_VALUE,
     edge_rlim: Tuple[float, float] = EDGE_RLIM_DEFAULT_VALUE,
+    edge_rlim_percentile: bool = EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    edge_color: Optional[str] = EDGE_COLOR_DEFAULT_VALUE,
     edge_cmap: Any = EDGE_CMAP_DEFAULT_VALUE,
     edge_clim: Tuple[float, float] = EDGE_CLIM_DEFAULT_VALUE,
-    edge_alpha: Union[float, str] = 1.0,
+    edge_clim_percentile: bool = EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
+    edge_alpha: Union[float, str] = EDGE_ALPHA_DEFAULT_VALUE,
+    edge_amap: Optional[
+        Union[callable, Tuple[float, float]]
+    ] = EDGE_AMAP_DEFAULT_VALUE,
+    edge_alim: Tuple[float, float] = EDGE_ALIM_DEFAULT_VALUE,
+    edge_alim_percentile: bool = EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
     num_edge_radius_bins: int = 10,
     network_layers: Optional[Sequence[NodeLayer]] = None,
 ) -> Mapping[str, Sequence[str]]:
