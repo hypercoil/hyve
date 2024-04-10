@@ -58,7 +58,7 @@ class EdgeLayer(_LayerBase):
     rlim_percentile: bool = False
     rmap: Optional[Union[callable, Tuple[float, float]]] = None
     rmap_negative: Optional[Union[callable, Tuple[float, float]]] = None
-    alpha: float = EDGE_ALPHA_DEFAULT_VALUE
+    alpha: Union[float, str] = EDGE_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
 
 
@@ -80,7 +80,7 @@ class NodeLayer(_LayerBase):
     rlim_percentile: bool = False
     rmap: Optional[Union[callable, Tuple[float, float]]] = None
     rmap_negative: Optional[Union[callable, Tuple[float, float]]] = None
-    alpha: float = NODE_ALPHA_DEFAULT_VALUE
+    alpha: Union[float, str] = NODE_ALPHA_DEFAULT_VALUE
     below_color: Optional[Any] = NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE
     edge_layers: Sequence[EdgeLayer] = dataclasses.field(default_factory=list)
 

@@ -39,6 +39,19 @@ from ..const import (
     template_dict,
     DEFAULT_CMAP,
     DEFAULT_COLOR,
+    LAYER_ALIM_DEFAULT_VALUE,
+    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_ALPHA_DEFAULT_VALUE,
+    LAYER_ALPHA_NEGATIVE_DEFAULT_VALUE,
+    LAYER_AMAP_DEFAULT_VALUE,
+    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_COLOR_DEFAULT_VALUE,
+    LAYER_COLOR_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
@@ -337,10 +350,10 @@ class ProjectedPolyData(pv.PolyData):
                 scalar_array = np.empty(self.n_points)
             cmap = dst.cmap
             color = None if cmap else DEFAULT_COLOR
-        if dst.alpha_scalars is not None:
+        if isinstance(dst.alpha, str):
             alpha_array = self.__getattribute__(
                 data_domain
-            )[dst.alpha_scalars]
+            )[dst.alpha]
         else:
             alpha_array = None
         dst = Layer(
@@ -377,16 +390,16 @@ class ProjectedPolyData(pv.PolyData):
             scalar_array = self.__getattribute__(
                 data_domain
             )[layer.name]
-            if layer.alpha_scalars is not None:
+            if isinstance(layer.alpha, str):
                 alpha_array = self.__getattribute__(
                     data_domain
-                )[layer.alpha_scalars]
+                )[layer.alpha]
         except KeyError:
             raise ValueError(
                 'All layers must be defined over the same data '
                 'domain. The base layer is defined over '
                 f'{data_domain}, but either the layer {layer.name} or '
-                'the alpha scalars {layer.alpha_scalars} was not '
+                'the alpha scalars {layer.alpha} (if string) was not '
                 f'found in {data_domain}. In particular, ensure that '
                 'that, if you have mapped any layer to faces, all '
                 'other layers are also mapped to faces.'
@@ -403,7 +416,7 @@ class ProjectedPolyData(pv.PolyData):
         self,
         plotter: pv.Plotter,
         layers: Sequence[Layer],
-        surf_noalpha: bool = False,
+        surf_alpha: Optional[Union[str, float]],
         copy_actors: bool = False,
     ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
         rgba, scalar_bar_builders, extra_params = compose_layers(self, layers)
@@ -412,7 +425,7 @@ class ProjectedPolyData(pv.PolyData):
         # HTML adds transparency even if we set alpha to 1 when we use
         # explicit RGBA to colour the mesh. Dropping the alpha channel
         # fixes this.
-        if surf_noalpha:
+        if (surf_alpha is None):
             rgba = rgba[:, :3]
 
         name = '-'.join([str(layer.name) for layer in layers])
@@ -1622,7 +1635,7 @@ class CortexTriSurface:
             eval_alpha = False
             if layer.clim_percentile:
                 eval_colour = True
-            if layer.alim_percentile:
+            if layer.alim_percentile and isinstance(layer.alpha, str):
                 eval_alpha = True
                 alpha_arrays = []
             if layer.clim_percentile or layer.alim_percentile:
@@ -1637,7 +1650,7 @@ class CortexTriSurface:
                             scalar_array = hemi_surf.cell_data[layer.name]
                         if eval_alpha:
                             alpha_array = (
-                                hemi_surf.cell_data[layer.alpha_scalars]
+                                hemi_surf.cell_data[layer.alpha]
                             )
                     except (KeyError, TypeError):
                         try:
@@ -1647,7 +1660,7 @@ class CortexTriSurface:
                                 )
                             if eval_alpha:
                                 alpha_array = (
-                                    hemi_surf.point_data[layer.alpha_scalars]
+                                    hemi_surf.point_data[layer.alpha]
                                 )
                         except (KeyError, TypeError):
                             pass
@@ -1681,12 +1694,26 @@ def plot_surf_f(
     *,
     surf: Optional['CortexTriSurface'] = None,
     surf_projection: str = 'pial',
-    surf_alpha: float = 1.0,
+    surf_color: Optional[str] = 'white',
+    surf_alpha: Optional[float] = None,
     surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
     surf_scalars_boundary_color: str = 'black',
     surf_scalars_boundary_width: int = 0,
+    surf_scalars_color: Any = LAYER_COLOR_DEFAULT_VALUE,
+    surf_scalars_color_negative: Any = LAYER_COLOR_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_cmap_negative: Any = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_clim_negative: Any = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_clim_percentile: bool = LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_alpha: Union[float, str] = LAYER_ALPHA_DEFAULT_VALUE,
+    surf_scalars_alpha_negative: Union[float, str] = LAYER_ALPHA_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_amap: Union[callable, Tuple[float, float]] = LAYER_AMAP_DEFAULT_VALUE,
+    surf_scalars_amap_negative: Union[callable, Tuple[float, float]] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim: Optional[Tuple[float, float]] = LAYER_ALIM_DEFAULT_VALUE,
+    surf_scalars_alim_negative: Optional[Tuple[float, float]] = LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim_percentile: bool = LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_nan_override: Any = LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     surf_scalars_layers: Union[
         Optional[Sequence[Layer]],
@@ -1719,16 +1746,32 @@ def plot_surf_f(
             if hemi_layers is None:
                 hemi_layers = []
 
-            base_layer = Layer(
-                name=surf_scalars,
-                cmap=hemi_cmap,
-                clim=hemi_clim,
-                cmap_negative=None,
-                color=None,
-                alpha=surf_alpha,
-                below_color=surf_scalars_below_color,
-            )
-            hemi_layers = [base_layer] + list(hemi_layers)
+            base_layers = []
+            if surf_color is not None:
+                base_layers += [
+                    Layer(
+                        name=None,
+                        cmap=None,
+                        clim=None,
+                        cmap_negative=None,
+                        color=surf_color,
+                        alpha=surf_alpha,
+                        below_color=None,
+                    )
+                ]
+            if surf_scalars is not None:
+                base_layers += [
+                    Layer(
+                        name=surf_scalars,
+                        cmap=hemi_cmap,
+                        clim=hemi_clim,
+                        cmap_negative=None,
+                        color=None,
+                        alpha=surf_scalars_alpha,
+                        below_color=surf_scalars_below_color,
+                    )
+                ]
+            hemi_layers = list(base_layers) + list(hemi_layers)
             hemi_layers = surf.scalar_percentile(
                 layers=hemi_layers,
                 hemispheres=hemispheres,
@@ -1736,7 +1779,7 @@ def plot_surf_f(
             plotter, new_builders = hemi_surf.paint(
                 plotter=plotter,
                 layers=hemi_layers,
-                surf_noalpha=(surf_alpha == 1.0), #TODO: This is clearly wrong
+                surf_alpha=surf_alpha,
                 copy_actors=copy_actors,
             )
             if (

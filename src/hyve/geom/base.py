@@ -60,7 +60,6 @@ class _LayerBase:
     """Base class for layers."""
     name: Optional[str]
     # long_name: Optional[str] = None
-    alpha_scalars: Optional[str] = None
     color: Optional[Any] = LAYER_COLOR_DEFAULT_VALUE
     color_negative: Optional[Any] = LAYER_COLOR_NEGATIVE_DEFAULT_VALUE
     cmap: Optional[Any] = DEFAULT_CMAP
@@ -71,7 +70,7 @@ class _LayerBase:
     )
     clim_percentile: bool = LAYER_CLIM_PERCENTILE_DEFAULT_VALUE
     below_color: Optional[Any] = LAYER_BELOW_COLOR_DEFAULT_VALUE
-    alpha: float = LAYER_ALPHA_DEFAULT_VALUE
+    alpha: Union[float, str] = LAYER_ALPHA_DEFAULT_VALUE
     alpha_negative: Optional[float] = LAYER_ALPHA_NEGATIVE_DEFAULT_VALUE
     alim: Optional[Tuple[float, float]] = LAYER_ALIM_DEFAULT_VALUE
     alim_negative: Optional[Tuple[float, float]] = (
@@ -180,16 +179,16 @@ def _rgba_impl(
         norm = colors.Normalize(vmin=vmin, vmax=vmax)
         mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
         rgba = mapper.to_rgba(scalars)
-    if alpha is not None:
-        rgba[:, 3] *= alpha
-    elif alpha_scalars is not None:
+    if alpha_scalars is not None:
         alpha_scalars, _ = _property_vector(
             alpha_scalars,
             lim=alim,
             percentile=alim_percentile,
-            mapper=amap,
+            mapper=amap if amap is not None else (0, 1),
         )
         rgba[:, 3] = alpha_scalars
+    elif alpha is not None:
+        rgba[:, 3] *= alpha
     if nan_override is not None:
         rgba = np.where(
             np.isnan(scalars[..., None]),
