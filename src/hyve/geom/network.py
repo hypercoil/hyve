@@ -110,6 +110,23 @@ class NetworkData:
     edges: Optional[pd.DataFrame] = None
     lh_mask: Optional[Tensor] = None
 
+    def select(self, condition: callable) -> 'NetworkData':
+        mask = condition(self.coor, self.nodes, self.lh_mask)
+        if self.edges is not None:
+            src_mask = mask[self.edges.index.get_level_values('src')]
+            dst_mask = mask[self.edges.index.get_level_values('dst')]
+            edge_mask = src_mask & dst_mask
+            edges = self.edges[edge_mask]
+        else:
+            edges = None
+        return self.__class__(
+            self.name,
+            self.coor[mask],
+            self.nodes[mask],
+            edges,
+            self.lh_mask[mask],
+        )
+
     def translate(
         self,
         translation: Sequence[float],
@@ -254,8 +271,9 @@ class NetworkDataCollection:
             node_coor = network.coor
             node_values = network.nodes
             edge_values = network.edges
+            node_coor = pd.DataFrame(node_coor, index=node_values.index)
             glyph, new_builder = build_nodes_mesh(
-                node_values, node_coor, layer
+                node_values, node_coor.values, layer
             )
             plotter.add_mesh(
                 glyph,
@@ -315,18 +333,18 @@ class NetworkDataCollection:
 
 def build_edges_mesh(
     edge_values: pd.DataFrame,
-    node_coor: np.ndarray,
+    node_coor: pd.DataFrame,
     layer: EdgeLayer,
     radius: float,
     edges_noalpha: bool = False,
 ) -> Tuple[pv.PolyData, Sequence[ScalarBarBuilder]]:
     edge_values = edge_values.reset_index()
-    # DataFrame indices begin at 1 after we filter them, but we need them to
-    # begin at 0 for indexing into node_coor.
-    target = edge_values.dst.values - 1
-    source = edge_values.src.values - 1
-    midpoints = (node_coor[target] + node_coor[source]) / 2
-    orientations = node_coor[target] - node_coor[source]
+    target = edge_values.dst.values
+    source = edge_values.src.values
+    midpoints = (
+        node_coor.loc[target].values + node_coor.loc[source].values
+    ) / 2
+    orientations = node_coor.loc[target].values - node_coor.loc[source].values
     norm = np.linalg.norm(orientations, axis=-1)
 
     edges = pv.PolyData(midpoints)

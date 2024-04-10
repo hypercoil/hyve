@@ -88,7 +88,7 @@ class PointData:
         # underpin this with ``scipy.sparse`` or something equivalent.
         # TODO: This is currently unsafe for point data with different keys.
         #       It's fine for our purposes since this is only accessed when we
-        #       recombine point data that was split by a condition. However,
+        #       recombine point data that were split by a condition. However,
         #       we should probably raise a more appropriate error if nothing
         #       else.
         points = pv.PointSet(np.concatenate([

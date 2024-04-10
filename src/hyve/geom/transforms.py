@@ -190,23 +190,53 @@ def hemisphere_select_transform_surf(f: callable) -> callable:
 
 
 def hemisphere_select_transform_network(f: callable) -> callable:
-    #TODO: Does nothing for now, but we should add hemisphere selection
     def _hemisphere_select_transform_network(
         fit_params: Optional[Mapping[str, Any]] = None,
         **params,
     ) -> Mapping[str, Any]:
         result = f(fit_params=fit_params, **params)
+        hemispheres_str = fit_params.get('hemispheres_str', 'both')
+        networks = params.get('networks', None)
+        if networks is not None:
+            condition = None
+            if hemispheres_str == 'left':
+                if any([ds.lh_mask is None for ds in networks]):
+                    condition = lambda coor, _, __: coor[:, 0] < 0
+                else:
+                    condition = lambda _, __, lh_mask: lh_mask
+            elif hemispheres_str == 'right':
+                if any([ds.lh_mask is None for ds in networks]):
+                    condition = lambda coor, _, __: coor[:, 0] > 0
+                else:
+                    condition = lambda _, __, lh_mask: ~lh_mask
+            if condition is not None:
+                networks = networks.__class__(
+                    ds.select(condition=condition) for ds in networks
+                )
+                result['networks'] = networks
         return result
     return _hemisphere_select_transform_network
 
 
 def hemisphere_select_transform_points(f: callable) -> callable:
-    #TODO: Does nothing for now, but we should add hemisphere selection
     def _hemisphere_select_transform_points(
         fit_params: Optional[Mapping[str, Any]] = None,
         **params,
     ) -> Mapping[str, Any]:
         result = f(fit_params=fit_params, **params)
+        hemispheres_str = fit_params.get('hemispheres_str', 'both')
+        points = params.get('points', None)
+        if points is not None:
+            condition = None
+            if hemispheres_str == 'left':
+                condition = lambda coor, _: coor[:, 0] < 0
+            elif hemispheres_str == 'right':
+                condition = lambda coor, _: coor[:, 0] > 0
+            if condition is not None:
+                points = points.__class__(
+                    ds.select(condition=condition) for ds in points
+                )
+                result['points'] = points
         return result
     return _hemisphere_select_transform_points
 
