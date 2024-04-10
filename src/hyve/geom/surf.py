@@ -1700,14 +1700,12 @@ def plot_surf_f(
     surf_scalars_boundary_color: str = 'black',
     surf_scalars_boundary_width: int = 0,
     surf_scalars_color: Any = LAYER_COLOR_DEFAULT_VALUE,
-    surf_scalars_color_negative: Any = LAYER_COLOR_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
     surf_scalars_cmap_negative: Any = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
     surf_scalars_clim_negative: Any = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_clim_percentile: bool = LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
     surf_scalars_alpha: Union[float, str] = LAYER_ALPHA_DEFAULT_VALUE,
-    surf_scalars_alpha_negative: Union[float, str] = LAYER_ALPHA_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_amap: Union[callable, Tuple[float, float]] = LAYER_AMAP_DEFAULT_VALUE,
     surf_scalars_amap_negative: Union[callable, Tuple[float, float]] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_alim: Optional[Tuple[float, float]] = LAYER_ALIM_DEFAULT_VALUE,
@@ -1763,12 +1761,20 @@ def plot_surf_f(
                 base_layers += [
                     Layer(
                         name=surf_scalars,
+                        color=surf_scalars_color,
                         cmap=hemi_cmap,
+                        cmap_negative=surf_scalars_cmap_negative,
                         clim=hemi_clim,
-                        cmap_negative=None,
-                        color=None,
+                        clim_negative=surf_scalars_clim_negative,
+                        clim_percentile=surf_scalars_clim_percentile,
                         alpha=surf_scalars_alpha,
+                        amap=surf_scalars_amap,
+                        amap_negative=surf_scalars_amap_negative,
+                        alim=surf_scalars_alim,
+                        alim_negative=surf_scalars_alim_negative,
+                        alim_percentile=surf_scalars_alim_percentile,
                         below_color=surf_scalars_below_color,
+                        nan_override=surf_scalars_nan_override,
                     )
                 ]
             hemi_layers = list(base_layers) + list(hemi_layers)
@@ -1806,17 +1812,31 @@ def plot_surf_aux_f(
     *,
     surf: Optional['CortexTriSurface'] = None,
     surf_projection: str = 'pial',
-    surf_alpha: float = 1.0,
+    surf_color: Optional[str] = 'white',
+    surf_alpha: Optional[float] = None,
     surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
     surf_scalars_boundary_color: str = 'black',
     surf_scalars_boundary_width: int = 0,
+    surf_scalars_color: Any = LAYER_COLOR_DEFAULT_VALUE,
     surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_cmap_negative: Any = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_clim_negative: Any = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_clim_percentile: bool = LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_alpha: Union[float, str] = LAYER_ALPHA_DEFAULT_VALUE,
+    surf_scalars_amap: Union[callable, Tuple[float, float]] = LAYER_AMAP_DEFAULT_VALUE,
+    surf_scalars_amap_negative: Union[callable, Tuple[float, float]] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim: Optional[Tuple[float, float]] = LAYER_ALIM_DEFAULT_VALUE,
+    surf_scalars_alim_negative: Optional[Tuple[float, float]] = LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim_percentile: bool = LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_nan_override: Any = LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     surf_scalars_layers: Union[
         Optional[Sequence[Layer]],
         Tuple[Optional[Sequence[Layer]]]
     ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    # Consumed but not used
+    template: Optional[str] = None,
 ) -> Mapping[str, Sequence[str]]:
     metadata['surfscalars'] = [surf_scalars or None]
     metadata['projection'] = [surf_projection or None]
