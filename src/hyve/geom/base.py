@@ -151,7 +151,7 @@ def _property_vector(
 
 
 def _rgba_impl(
-    scalars: Tensor,
+    color_scalars: Tensor,
     alpha_scalars: Optional[Tensor] = None,
     color: Optional[str] = None,
     clim: Optional[Tuple[float, float]] = None,
@@ -169,19 +169,19 @@ def _rgba_impl(
     scalar_bar_builder: Optional[ScalarBarBuilder] = None,
 ) -> Tuple[Tensor, Optional[ScalarBarBuilder]]:
     if color is not None:
-        rgba = np.tile(colors.to_rgba(color), (len(scalars), 1))
+        rgba = np.tile(colors.to_rgba(color), (len(color_scalars), 1))
         vmin, vmax, mapper = None, None, None
     else:
         if clim_percentile:
-            clim = scalar_percentile(scalars, clim)
+            clim = scalar_percentile(color_scalars, clim)
         if clim is not None:
             vmin, vmax = clim
         else:
-            vmin, vmax = np.nanmin(scalars), np.nanmax(scalars)
+            vmin, vmax = np.nanmin(color_scalars), np.nanmax(color_scalars)
             hide_subthreshold = False
         norm = colors.Normalize(vmin=vmin, vmax=vmax)
         mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
-        rgba = mapper.to_rgba(scalars)
+        rgba = mapper.to_rgba(color_scalars)
     if alpha_scalars is not None:
         alpha_scalars, _ = _property_vector(
             alpha_scalars,
@@ -194,16 +194,16 @@ def _rgba_impl(
         rgba[:, 3] *= alpha
     if nan_override is not None:
         rgba = np.where(
-            np.isnan(scalars[..., None]),
+            np.isnan(color_scalars[..., None]),
             np.asarray(nan_override),
             rgba,
         )
     if vmin is not None:
         if below_color is not None:
-            rgba[scalars < vmin] = colors.to_rgba(below_color)
+            rgba[color_scalars < vmin] = colors.to_rgba(below_color)
         elif hide_subthreshold:
             # Set alpha to 0 for sub-threshold values
-            rgba[scalars < vmin, 3] = 0
+            rgba[color_scalars < vmin, 3] = 0
     if mapper is not None:
         scalar_bar_builder = ScalarBarBuilder(**{
             **scalar_bar_builder,
@@ -218,7 +218,7 @@ def _rgba_impl(
 
 
 def scalars_to_rgba(
-    scalars: Optional[Tensor] = None,
+    color_scalars: Optional[Tensor] = None,
     alpha_scalars: Optional[Tensor] = None,
     color: Optional[str] = LAYER_COLOR_DEFAULT_VALUE,
     color_negative: Optional[str] = LAYER_COLOR_NEGATIVE_DEFAULT_VALUE,
@@ -291,11 +291,11 @@ def scalars_to_rgba(
             amap_negative = amap
         if alim_negative is None:
             alim_negative = alim
-        scalars_negative = -scalars.copy()
-        scalars = scalars.copy()
-        neg_idx = (scalars_negative > 0)
-        scalars_negative[~neg_idx] = 0
-        scalars[neg_idx] = 0
+        color_scalars_negative = -color_scalars.copy()
+        color_scalars = color_scalars.copy()
+        neg_idx = (color_scalars_negative > 0)
+        color_scalars_negative[~neg_idx] = 0
+        color_scalars[neg_idx] = 0
         if scalar_bar_builder is not None:
             scalar_bar_builder_negative = ScalarBarBuilder(**{
                 **scalar_bar_builder,
@@ -306,7 +306,7 @@ def scalars_to_rgba(
                 **{'name_suffix': ' (+)'}
             })
         rgba_neg, scalar_bar_builder_negative = _rgba_impl(
-            scalars=scalars_negative,
+            color_scalars=color_scalars_negative,
             alpha_scalars=alpha_scalars,
             color=color_negative,
             clim=clim_negative,
@@ -323,7 +323,7 @@ def scalars_to_rgba(
         )
 
     rgba, scalar_bar_builder = _rgba_impl(
-        scalars=scalars,
+        color_scalars=color_scalars,
         alpha_scalars=alpha_scalars,
         color=color,
         clim=clim,
@@ -345,7 +345,7 @@ def scalars_to_rgba(
 
 def layer_rgba(
     layer: Layer,
-    scalar_array: Tensor,
+    color_scalar_array: Tensor,
     alpha_scalar_array: Optional[Tensor] = None,
 ) -> Tuple[Tensor, Sequence[ScalarBarBuilder]]:
     cmap = layer.cmap or DEFAULT_CMAP
@@ -354,7 +354,7 @@ def layer_rgba(
     else:
         scalar_bar_builder = None
     rgba, scalar_bar_builders = scalars_to_rgba(
-        scalars=scalar_array,
+        color_scalars=color_scalar_array,
         alpha_scalars=alpha_scalar_array,
         cmap=cmap,
         cmap_negative=layer.cmap_negative,

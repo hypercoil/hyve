@@ -168,10 +168,20 @@ class PointDataCollection:
         # this regime.
         # TODO: Check out pyvista.StructuredGrid. Could be the right
         #       data structure for this.
+        layers = [
+            layer
+            if layer.color is not None
+            else dataclasses.replace(
+                layer,
+                color=layer.name,
+            )
+            for layer in layers
+        ]
         for layer in layers:
             dataset = self.get_dataset(layer.name)
-            scalar_array = dataset.points.point_data[layer.name]
-            rgba, scalar_bar_builders = layer_rgba(layer, scalar_array)
+            color_array = dataset.points.point_data[layer.color]
+            layer = dataclasses.replace(layer, color=None)
+            rgba, scalar_bar_builders = layer_rgba(layer, color_array)
             plotter.add_points(
                 points=dataset.points.points,
                 render_points_as_spheres=False,

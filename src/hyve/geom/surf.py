@@ -333,23 +333,23 @@ class ProjectedPolyData(pv.PolyData):
         **params,
     ) -> None:
         dst = layers[0]
-        if dst.name is not None:
+        try:
             cmap = dst.cmap or DEFAULT_CMAP
             color = None
             try:
-                scalar_array = self.cell_data[dst.name]
+                color_array = self.cell_data[dst.color]
             except KeyError:
-                scalar_array = self.point_data[dst.name]
+                color_array = self.point_data[dst.color]
                 data_domain = 'point_data'
-        else:
+        except KeyError:
+            cmap = None
+            color = color or DEFAULT_COLOR
             try:
                 self.cell_data[layers[1].name]
-                scalar_array = np.empty(self.n_cells)
+                color_array = np.empty(self.n_cells)
             except (KeyError, IndexError):
                 data_domain = 'point_data'
-                scalar_array = np.empty(self.n_points)
-            cmap = dst.cmap
-            color = None if cmap else DEFAULT_COLOR
+                color_array = np.empty(self.n_points)
         if isinstance(dst.alpha, str):
             alpha_array = self.__getattribute__(
                 data_domain
@@ -376,7 +376,7 @@ class ProjectedPolyData(pv.PolyData):
             hide_subthreshold=dst.hide_subthreshold,
             scalar_bar_style=dst.scalar_bar_style,
         )
-        return dst, (scalar_array, alpha_array), {'data_domain': data_domain}
+        return dst, (color_array, alpha_array), {'data_domain': data_domain}
 
     def layer_to_tensors(
         self,
@@ -387,13 +387,20 @@ class ProjectedPolyData(pv.PolyData):
         Convert a layer to RGBA colors.
         """
         try:
-            scalar_array = self.__getattribute__(
+            color_array = self.__getattribute__(
                 data_domain
-            )[layer.name]
+            )[layer.color]
             if isinstance(layer.alpha, str):
                 alpha_array = self.__getattribute__(
                     data_domain
                 )[layer.alpha]
+            else:
+                alpha_array = None
+            layer = dataclasses.replace(
+                layer,
+                color=None,
+                alpha=None,
+            )
         except KeyError:
             raise ValueError(
                 'All layers must be defined over the same data '
@@ -406,7 +413,7 @@ class ProjectedPolyData(pv.PolyData):
             )
         rgba, scalar_bar_builders = layer_rgba(
             layer=layer,
-            scalar_array=scalar_array,
+            color_scalar_array=color_array,
             alpha_scalar_array=alpha_array,
         )
 
@@ -419,6 +426,15 @@ class ProjectedPolyData(pv.PolyData):
         surf_alpha: Optional[Union[str, float]],
         copy_actors: bool = False,
     ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+        layers = [
+            layer
+            if layer.color is not None
+            else dataclasses.replace(
+                layer,
+                color=layer.name,
+            )
+            for layer in layers
+        ]
         rgba, scalar_bar_builders, extra_params = compose_layers(self, layers)
         data_domain = extra_params.get('data_domain', 'cell_data')
         # We shouldn't have to do this, but for some reason exporting to
