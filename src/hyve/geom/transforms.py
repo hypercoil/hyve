@@ -92,52 +92,53 @@ def hemisphere_select_meta(
     }
 
 
+def hemisphere_select_assign_parameters(
+    *,
+    surf_scalars_cmap: Any,
+    surf_scalars_clim: Any,
+    surf_scalars_layers: Any,
+    subgeom_params: Optional[SubgeometryParameters] = None,
+) -> Tuple[Mapping[str, Any], Mapping[str, Any]]:
+    left = {}
+    right = {}
+
+    def assign_tuple(arg, name):
+        left[name], right[name] = arg
+
+    def assign_scalar(arg, name):
+        left[name] = right[name] = arg
+
+    def conditional_assign(condition, arg, name):
+        if arg is not None and condition(arg):
+            assign_tuple(arg, name)
+        else:
+            assign_scalar(arg, name)
+
+    conditional_assign(
+        lambda x: len(x) == 2,
+        surf_scalars_cmap,
+        'surf_scalars_cmap',
+    )
+    conditional_assign(
+        lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
+        surf_scalars_clim,
+        'surf_scalars_clim',
+    )
+    conditional_assign(
+        lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
+        surf_scalars_layers,
+        'surf_scalars_layers',
+    )
+    if subgeom_params is None:
+        subgeom_params = {}
+    if subgeom_params.get('left') is not None:
+        left = {**subgeom_params.params.pop('left'), **left}
+    if subgeom_params.get('right') is not None:
+        right = {**subgeom_params.params.pop('right'), **right}
+    return SubgeometryParameters(left=left, right=right, **subgeom_params)
+
+
 def hemisphere_select_fit_surf(f: callable) -> callable:
-
-    def _assign_hemisphere_parameters(
-        *,
-        surf_scalars_cmap: Any,
-        surf_scalars_clim: Any,
-        surf_scalars_layers: Any,
-        subgeom_params: Optional[SubgeometryParameters] = None,
-    ) -> Tuple[Mapping[str, Any], Mapping[str, Any]]:
-        left = {}
-        right = {}
-
-        def assign_tuple(arg, name):
-            left[name], right[name] = arg
-
-        def assign_scalar(arg, name):
-            left[name] = right[name] = arg
-
-        def conditional_assign(condition, arg, name):
-            if arg is not None and condition(arg):
-                assign_tuple(arg, name)
-            else:
-                assign_scalar(arg, name)
-
-        conditional_assign(
-            lambda x: len(x) == 2,
-            surf_scalars_cmap,
-            'surf_scalars_cmap',
-        )
-        conditional_assign(
-            lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
-            surf_scalars_clim,
-            'surf_scalars_clim',
-        )
-        conditional_assign(
-            lambda x: len(x) == 2 and isinstance(x[0], (tuple, list)),
-            surf_scalars_layers,
-            'surf_scalars_layers',
-        )
-        if subgeom_params is None:
-            subgeom_params = {}
-        if subgeom_params.get('left') is not None:
-            left = {**subgeom_params.params.pop('left'), **left}
-        if subgeom_params.get('right') is not None:
-            right = {**subgeom_params.params.pop('right'), **right}
-        return SubgeometryParameters(left=left, right=right, **subgeom_params)
 
     def _hemisphere_select_fit_surf(
         surf: Optional[CortexTriSurface] = None,
@@ -146,7 +147,7 @@ def hemisphere_select_fit_surf(f: callable) -> callable:
     ) -> Mapping[str, Any]:
         fit_params = f(**params)
 
-        surf_hemi_params = _assign_hemisphere_parameters(
+        surf_hemi_params = hemisphere_select_assign_parameters(
             surf_scalars_cmap=params.get('surf_scalars_cmap'),
             surf_scalars_clim=params.get('surf_scalars_clim'),
             surf_scalars_layers=params.get('surf_scalars_layers'),

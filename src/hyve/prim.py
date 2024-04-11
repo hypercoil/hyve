@@ -48,27 +48,46 @@ from PIL import Image
 
 from .const import (
     DEFAULT_WINDOW_SIZE,
+    EDGE_ALIM_DEFAULT_VALUE,
+    EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_ALPHA_DEFAULT_VALUE,
+    EDGE_AMAP_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
+    EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_CMAP_DEFAULT_VALUE,
     EDGE_COLOR_DEFAULT_VALUE,
     EDGE_RADIUS_DEFAULT_VALUE,
     EDGE_RLIM_DEFAULT_VALUE,
+    EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    EDGE_RMAP_DEFAULT_VALUE,
     EMPIRICAL_DPI,
+    LAYER_ALIM_DEFAULT_VALUE,
+    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
     LAYER_ALPHA_DEFAULT_VALUE,
+    LAYER_AMAP_DEFAULT_VALUE,
+    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_BELOW_COLOR_DEFAULT_VALUE,
     LAYER_BLEND_MODE_DEFAULT_VALUE,
     LAYER_CLIM_DEFAULT_VALUE,
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
+    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    NODE_ALIM_DEFAULT_VALUE,
+    NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
     NODE_ALPHA_DEFAULT_VALUE,
+    NODE_AMAP_DEFAULT_VALUE,
     NODE_CLIM_DEFAULT_VALUE,
+    NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
     NODE_CMAP_DEFAULT_VALUE,
     NODE_COLOR_DEFAULT_VALUE,
     NODE_RADIUS_DEFAULT_VALUE,
     NODE_RLIM_DEFAULT_VALUE,
+    NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    NODE_RMAP_DEFAULT_VALUE,
     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
@@ -111,6 +130,7 @@ from .geom import (
     plot_points_f,
     plot_surf_f,
 )
+from .geom.transforms import hemisphere_select_assign_parameters
 from .layout import (
     Cell,
     CellLayout,
@@ -711,12 +731,45 @@ def add_surface_overlay_f(
             params,
             (
                 ('surf_scalars', SURF_SCALARS_DEFAULT_VALUE),
+                ('surf_scalars_color', LAYER_COLOR_DEFAULT_VALUE),
                 ('surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+                (
+                    'surf_scalars_cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
                 ('surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE),
+                (
+                    'surf_scalars_clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'surf_scalars_clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                ('surf_scalars_alpha', LAYER_ALPHA_DEFAULT_VALUE),
+                ('surf_scalars_amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    'surf_scalars_amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                ('surf_scalars_alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    'surf_scalars_alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'surf_scalars_alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    'surf_scalars_nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     'surf_scalars_below_color',
                     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
                 ),
+                ('surf_scalars_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE),
             ),
         )
         inner_f_params = {**params}
@@ -724,20 +777,47 @@ def add_surface_overlay_f(
         layer_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
-                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
                     'cmap_negative',
                     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_clim_negative',
                     'clim_negative',
                     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (
+                    f'{paramstr}_clim_percentile',
+                    'clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
-                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+                (f'{paramstr}_amap', 'amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_amap_negative',
+                    'amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (f'{paramstr}_alim', 'alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_alim_negative',
+                    'alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_alim_percentile',
+                    'alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_nan_override',
+                    'nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_below_color',
                     'below_color',
@@ -758,23 +838,69 @@ def add_surface_overlay_f(
 
         params = inner_f(**inner_f_params)
 
-        result_params, params = _move_params_to_dict(params, (
-            ('surf_scalars_cmap', 'cmap', layer_params['cmap']),
-            ('surf_scalars_clim', 'clim', layer_params['clim']),
-            (
-                'surf_scalars_below_color',
-                'below_color',
-                layer_params['below_color'],
-            ),
-        ))
+        result_params, params = _move_params_to_dict(
+            params, (
+                ('surf_scalars_color', 'color', layer_params['color']),
+                ('surf_scalars_cmap', 'cmap', layer_params['cmap']),
+                (
+                    'surf_scalars_cmap_negative',
+                    'cmap_negative',
+                    layer_params['cmap_negative'],
+                ),
+                ('surf_scalars_clim', 'clim', layer_params['clim']),
+                (
+                    'surf_scalars_clim_negative',
+                    'clim_negative',
+                    layer_params['clim_negative'],
+                ),
+                (
+                    'surf_scalars_clim_percentile',
+                    'clim_percentile',
+                    layer_params['clim_percentile'],
+                ),
+                ('surf_scalars_alpha', 'alpha', layer_params['alpha']),
+                ('surf_scalars_amap', 'amap', layer_params['amap']),
+                (
+                    'surf_scalars_amap_negative',
+                    'amap_negative',
+                    layer_params['amap_negative'],
+                ),
+                ('surf_scalars_alim', 'alim', layer_params['alim']),
+                (
+                    'surf_scalars_alim_negative',
+                    'alim_negative',
+                    layer_params['alim_negative'],
+                ),
+                (
+                    'surf_scalars_alim_percentile',
+                    'alim_percentile',
+                    layer_params['alim_percentile'],
+                ),
+                (
+                    'surf_scalars_nan_override',
+                    'nan_override',
+                    layer_params['nan_override'],
+                ),
+                (
+                    'surf_scalars_below_color',
+                    'below_color',
+                    layer_params['below_color'],
+                ),
+                (
+                    'surf_scalars_blend_mode',
+                    'blend_mode',
+                    layer_params['blend_mode'],
+                ),
+            )
+        )
         layer_params = {**layer_params, **result_params}
 
-        hemi_params_p = _get_hemisphere_parameters(
+        hemi_params_p = hemisphere_select_assign_parameters(
             surf_scalars_cmap=layer_params['cmap'],
             surf_scalars_clim=layer_params['clim'],
             surf_scalars_layers=None,
         )
-        hemi_params_n = _get_hemisphere_parameters(
+        hemi_params_n = hemisphere_select_assign_parameters(
             surf_scalars_cmap=layer_params['cmap_negative'],
             surf_scalars_clim=layer_params['clim_negative'],
             surf_scalars_layers=None,
@@ -842,12 +968,45 @@ def add_points_overlay_f(
         points_scalars_layers = params.pop('points_scalars_layers', None)
         if points_scalars_layers is None:
             points_scalars_layers = []
+        #params_orig = {**params}
         store, params = _copy_dict_from_params(
             params,
             (
                 ('points_scalars', POINTS_SCALARS_DEFAULT_VALUE),
+                ('points_scalars_color', LAYER_COLOR_DEFAULT_VALUE),
                 ('points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+                (
+                    'points_scalars_cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
                 ('points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE),
+                (
+                    'points_scalars_clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'points_scalars_clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                ('points_scalars_alpha', LAYER_ALPHA_DEFAULT_VALUE),
+                ('points_scalars_amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    'points_scalars_amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                ('points_scalars_alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    'points_scalars_alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'points_scalars_alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    'points_scalars_nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     'points_scalars_below_color',
                     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
@@ -856,32 +1015,58 @@ def add_points_overlay_f(
         )
         inner_f_params = {**params}
 
-        paramstr = sanitise(layer_name)
         layer_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap',
                     'cmap',
                     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
                 ),
-                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
                     'cmap_negative',
                     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_clim_negative',
                     'clim_negative',
                     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (
+                    f'{paramstr}_clim_percentile',
+                    'clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
-                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+                (f'{paramstr}_amap', 'amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_amap_negative',
+                    'amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (f'{paramstr}_alim', 'alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_alim_negative',
+                    'alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_alim_percentile',
+                    'alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_nan_override',
+                    'nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_below_color',
                     'below_color',
-                    LAYER_BELOW_COLOR_DEFAULT_VALUE,
+                    POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_blend_mode',
@@ -893,25 +1078,78 @@ def add_points_overlay_f(
 
         params = inner_f(**inner_f_params)
 
-        result_params, params = _move_params_to_dict(params, (
-            ('points_scalars_cmap', 'cmap', layer_params['cmap']),
-            ('points_scalars_clim', 'clim', layer_params['clim']),
-            (
-                'points_scalars_below_color',
-                'below_color',
-                layer_params['below_color'],
-            ),
-        ))
+        result_params, params = _move_params_to_dict(
+            params, (
+                ('points_scalars_color', 'color', layer_params['color']),
+                ('points_scalars_cmap', 'cmap', layer_params['cmap']),
+                (
+                    'points_scalars_cmap_negative',
+                    'cmap_negative',
+                    layer_params['cmap_negative'],
+                ),
+                ('points_scalars_clim', 'clim', layer_params['clim']),
+                (
+                    'points_scalars_clim_negative',
+                    'clim_negative',
+                    layer_params['clim_negative'],
+                ),
+                (
+                    'points_scalars_clim_percentile',
+                    'clim_percentile',
+                    layer_params['clim_percentile'],
+                ),
+                ('points_scalars_alpha', 'alpha', layer_params['alpha']),
+                ('points_scalars_amap', 'amap', layer_params['amap']),
+                (
+                    'points_scalars_amap_negative',
+                    'amap_negative',
+                    layer_params['amap_negative'],
+                ),
+                ('points_scalars_alim', 'alim', layer_params['alim']),
+                (
+                    'points_scalars_alim_negative',
+                    'alim_negative',
+                    layer_params['alim_negative'],
+                ),
+                (
+                    'points_scalars_alim_percentile',
+                    'alim_percentile',
+                    layer_params['alim_percentile'],
+                ),
+                (
+                    'points_scalars_nan_override',
+                    'nan_override',
+                    layer_params['nan_override'],
+                ),
+                (
+                    'points_scalars_below_color',
+                    'below_color',
+                    layer_params['below_color'],
+                ),
+                (
+                    'points_scalars_blend_mode',
+                    'blend_mode',
+                    layer_params['blend_mode'],
+                ),
+            )
+        )
         layer_params = {**layer_params, **result_params}
 
         layer = Layer(
             name=layer_name,
-            cmap=layer_params['cmap'],
-            clim=layer_params['clim'],
-            cmap_negative=layer_params['cmap_negative'],
-            clim_negative=layer_params['clim_negative'],
-            alpha=layer_params['alpha'],
             color=layer_params['color'],
+            cmap=layer_params['cmap'],
+            cmap_negative=layer_params['cmap_negative'],
+            clim=layer_params['clim'],
+            clim_negative=layer_params['clim_negative'],
+            clim_percentile=layer_params['clim_percentile'],
+            alpha=layer_params['alpha'],
+            amap=layer_params['amap'],
+            amap_negative=layer_params['amap_negative'],
+            alim=layer_params['alim'],
+            alim_negative=layer_params['alim_negative'],
+            alim_percentile=layer_params['alim_percentile'],
+            nan_override=layer_params['nan_override'],
             below_color=layer_params['below_color'],
             blend_mode=layer_params['blend_mode'],
         )
@@ -954,18 +1192,30 @@ def add_network_overlay_f(
         store, params = _copy_dict_from_params(
             params,
             (
+                ('node_color', NODE_COLOR_DEFAULT_VALUE),
                 ('node_cmap', NODE_CMAP_DEFAULT_VALUE),
                 ('node_clim', NODE_CLIM_DEFAULT_VALUE),
-                ('node_color', NODE_COLOR_DEFAULT_VALUE),
+                ('node_clim_percentile', NODE_CLIM_PERCENTILE_DEFAULT_VALUE),
                 ('node_radius', NODE_RADIUS_DEFAULT_VALUE),
-                ('node_radius_range', NODE_RLIM_DEFAULT_VALUE),
+                ('node_rmap', NODE_RMAP_DEFAULT_VALUE),
+                ('node_rlim', NODE_RLIM_DEFAULT_VALUE),
+                ('node_rlim_percentile', NODE_RLIM_PERCENTILE_DEFAULT_VALUE),
                 ('node_alpha', NODE_ALPHA_DEFAULT_VALUE),
+                ('node_amap', NODE_AMAP_DEFAULT_VALUE),
+                ('node_alim', NODE_ALIM_DEFAULT_VALUE),
+                ('node_alim_percentile', NODE_ALIM_PERCENTILE_DEFAULT_VALUE),
+                ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
                 ('edge_cmap', EDGE_CMAP_DEFAULT_VALUE),
                 ('edge_clim', EDGE_CLIM_DEFAULT_VALUE),
-                ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
-                ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                ('edge_clim_percentile', EDGE_CLIM_PERCENTILE_DEFAULT_VALUE),
                 ('edge_radius', EDGE_RADIUS_DEFAULT_VALUE),
-                ('edge_radius_range', EDGE_RLIM_DEFAULT_VALUE),
+                ('edge_rmap', EDGE_RMAP_DEFAULT_VALUE),
+                ('edge_rlim', EDGE_RLIM_DEFAULT_VALUE),
+                ('edge_rlim_percentile', EDGE_RLIM_PERCENTILE_DEFAULT_VALUE),
+                ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                ('edge_amap', EDGE_AMAP_DEFAULT_VALUE),
+                ('edge_alim', EDGE_ALIM_DEFAULT_VALUE),
+                ('edge_alim_percentile', EDGE_ALIM_PERCENTILE_DEFAULT_VALUE),
             )
         )
         inner_f_params = {**params}
@@ -973,29 +1223,37 @@ def add_network_overlay_f(
         node_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
                 (f'{paramstr}_node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
-                (f'{paramstr}_node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_node_clim_percentile',
+                    'clim_percentile',
+                    NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_node_amap', 'amap', NODE_AMAP_DEFAULT_VALUE),
+                (f'{paramstr}_node_alim', 'alim', NODE_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_node_alim_percentile',
+                    'alim_percentile',
+                    NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_node_radius',
                     'radius',
                     NODE_RADIUS_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_node_rmap', 'rmap', NODE_RMAP_DEFAULT_VALUE),
                 (
-                    f'{paramstr}_node_radius_range',
-                    'radius_range',
+                    f'{paramstr}_node_rlim',
+                    'rlim',
                     NODE_RLIM_DEFAULT_VALUE,
                 ),
                 (
-                    f'{paramstr}_node_cmap_negative',
-                    'cmap_negative',
-                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-                ),
-                (
-                    f'{paramstr}_node_clim_negative',
-                    'clim_negative',
-                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                    f'{paramstr}_node_rlim_percentile',
+                    'rlim_percentile',
+                    NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_node_below_color',
@@ -1007,29 +1265,33 @@ def add_network_overlay_f(
         edge_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
                 (f'{paramstr}_edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
-                (f'{paramstr}_edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_edge_clim_percentile',
+                    'clim_percentile',
+                    EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_edge_amap', 'amap', EDGE_AMAP_DEFAULT_VALUE),
+                (f'{paramstr}_edge_alim', 'alim', EDGE_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_edge_alim_percentile',
+                    'alim_percentile',
+                    EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_edge_radius',
                     'radius',
                     EDGE_RADIUS_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_edge_rmap', 'rmap', EDGE_RMAP_DEFAULT_VALUE),
+                (f'{paramstr}_edge_rlim', 'rlim', EDGE_RLIM_DEFAULT_VALUE),
                 (
-                    f'{paramstr}_edge_radius_range',
-                    'radius_range',
-                    EDGE_RLIM_DEFAULT_VALUE,
-                ),
-                (
-                    f'{paramstr}_edge_cmap_negative',
-                    'cmap_negative',
-                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-                ),
-                (
-                    f'{paramstr}_edge_clim_negative',
-                    'clim_negative',
-                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                    f'{paramstr}_edge_rlim_percentile',
+                    'rlim_percentile',
+                    EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_edge_below_color',
@@ -1041,48 +1303,106 @@ def add_network_overlay_f(
 
         params = inner_f(**inner_f_params)
 
-        result_node_params, params = _move_params_to_dict(params, (
-            ('node_cmap', 'cmap', node_params['cmap']),
-            ('node_clim', 'clim', node_params['clim']),
-            ('node_color', 'color', node_params['color']),
-            ('node_radius', 'radius', node_params['radius']),
-            ('node_radius_range', 'radius_range', node_params['radius_range']),
-            ('node_alpha', 'alpha', node_params['alpha']),
-        ))
-        result_edge_params, params = _move_params_to_dict(params, (
-            ('edge_cmap', 'cmap', edge_params['cmap']),
-            ('edge_clim', 'clim', edge_params['clim']),
-            ('edge_color', 'color', edge_params['color']),
-            ('edge_alpha', 'alpha', edge_params['alpha']),
-            ('edge_radius', 'radius', edge_params['radius']),
-            ('edge_radius_range', 'radius_range', edge_params['radius_range']),
-        ))
+        result_node_params, params = _move_params_to_dict(
+            params, (
+                ('node_color', 'color', node_params['color']),
+                ('node_cmap', 'cmap', node_params['cmap']),
+                ('node_clim', 'clim', node_params['clim']),
+                (
+                    'node_clim_percentile',
+                    'clim_percentile',
+                    node_params['clim_percentile'],
+                ),
+                ('node_alpha', 'alpha', node_params['alpha']),
+                ('node_amap', 'amap', node_params['amap']),
+                ('node_alim', 'alim', node_params['alim']),
+                (
+                    'node_alim_percentile',
+                    'alim_percentile',
+                    node_params['alim_percentile'],
+                ),
+                ('node_radius', 'radius', node_params['radius']),
+                ('node_rmap', 'rmap', node_params['rmap']),
+                ('node_rlim', 'rlim', node_params['rlim']),
+                (
+                    'node_rlim_percentile',
+                    'rlim_percentile',
+                    node_params['rlim_percentile'],
+                ),
+                (
+                    'node_below_color',
+                    'below_color',
+                    node_params['below_color'],
+                ),
+            )
+        )
+        result_edge_params, params = _move_params_to_dict(
+            params, (
+                ('edge_color', 'color', edge_params['color']),
+                ('edge_cmap', 'cmap', edge_params['cmap']),
+                ('edge_clim', 'clim', edge_params['clim']),
+                (
+                    'edge_clim_percentile',
+                    'clim_percentile',
+                    edge_params['clim_percentile'],
+                ),
+                ('edge_alpha', 'alpha', edge_params['alpha']),
+                ('edge_amap', 'amap', edge_params['amap']),
+                ('edge_alim', 'alim', edge_params['alim']),
+                (
+                    'edge_alim_percentile',
+                    'alim_percentile',
+                    edge_params['alim_percentile'],
+                ),
+                ('edge_radius', 'radius', edge_params['radius']),
+                ('edge_rmap', 'rmap', edge_params['rmap']),
+                ('edge_rlim', 'rlim', edge_params['rlim']),
+                (
+                    'edge_rlim_percentile',
+                    'rlim_percentile',
+                    edge_params['rlim_percentile'],
+                ),
+                (
+                    'edge_below_color',
+                    'below_color',
+                    edge_params['below_color'],
+                ),
+            )
+        )
         node_params = {**node_params, **result_node_params}
         edge_params = {**edge_params, **result_edge_params}
 
         edge_layer = EdgeLayer(
             name=layer_name,
+            color=edge_params['color'],
             cmap=edge_params['cmap'],
             clim=edge_params['clim'],
-            cmap_negative=edge_params['cmap_negative'],
-            clim_negative=edge_params['clim_negative'],
-            color=edge_params['color'],
+            clim_percentile=edge_params['clim_percentile'],
             alpha=edge_params['alpha'],
-            below_color=edge_params['below_color'],
+            amap=edge_params['amap'],
+            alim=edge_params['alim'],
+            alim_percentile=edge_params['alim_percentile'],
             radius=edge_params['radius'],
-            radius_range=edge_params['radius_range'],
+            rmap=edge_params['rmap'],
+            rlim=edge_params['rlim'],
+            rlim_percentile=edge_params['rlim_percentile'],
+            below_color=edge_params['below_color'],
         )
         node_layer = NodeLayer(
             name=layer_name,
+            color=node_params['color'],
             cmap=node_params['cmap'],
             clim=node_params['clim'],
-            cmap_negative=node_params['cmap_negative'],
-            clim_negative=node_params['clim_negative'],
-            color=node_params['color'],
+            clim_percentile=node_params['clim_percentile'],
             alpha=node_params['alpha'],
-            below_color=node_params['below_color'],
+            amap=node_params['amap'],
+            alim=node_params['alim'],
+            alim_percentile=node_params['alim_percentile'],
             radius=node_params['radius'],
-            radius_range=node_params['radius_range'],
+            rmap=node_params['rmap'],
+            rlim=node_params['rlim'],
+            rlim_percentile=node_params['rlim_percentile'],
+            below_color=node_params['below_color'],
             edge_layers=[edge_layer],
         )
 
