@@ -395,12 +395,14 @@ class ProjectedPolyData(pv.PolyData):
                 alpha_array = self.__getattribute__(
                     data_domain
                 )[layer.alpha]
+                alpha_repl = None
             else:
                 alpha_array = None
+                alpha_repl = layer.alpha
             layer = dataclasses.replace(
                 layer,
                 color=None,
-                alpha=None,
+                alpha=alpha_repl,
             )
         except KeyError:
             raise ValueError(

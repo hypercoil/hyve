@@ -315,7 +315,7 @@ class UnknownBuilder(ElementBuilder):
             object.__setattr__(self, '_orig_width', self.width)
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, RasterBuilder):
+        if not isinstance(other, UnknownBuilder):
             return False
         return all(
             self[key] == other[key]

@@ -111,6 +111,7 @@ from .const import (
 from .elements import (
     ElementBuilder,
     RasterBuilder,
+    ScalarBarBuilder,
     TextBuilder,
     UnknownBuilder,
     tile_plot_elements,
@@ -2154,15 +2155,49 @@ def save_figure_f(
         # print(tuple(i for i, _ in snapshot_group))
         for i, results in snapshot_group:
             panel = cells[i]
+            celements_names = tuple(
+                e for e in page_elements[i] if isinstance(e, str)
+            )
+            celements_with_filters = {
+                tuple(e.keys())[0]: j
+                for j, e in enumerate(page_elements[i])
+                if not isinstance(e, str)
+            }
+            celements_names = celements_names + tuple(
+                celements_with_filters.keys()
+            )
             celements = tuple(
                 v
                 for k, v in results['elements'].items()
-                if k in page_elements[i]
+                if k in celements_names
             )
             if not celements:
                 continue
             elif isinstance(celements[0], tuple):
                 celements = sum(celements, ())
+            # TODO: We want something more general than this. Currently, this
+            #       works because scalar bar elements are the only side effect
+            #       elements that are not explicitly requested by the user.
+            if 'scalar_bar' in celements_with_filters:
+                scalar_bar_names = page_elements[i][
+                    celements_with_filters['scalar_bar']
+                ]['scalar_bar']
+                if not isinstance(scalar_bar_names, tuple):
+                    scalar_bar_names = (scalar_bar_names,)
+                _others = [
+                    e
+                    for e in celements
+                    if not isinstance(e, ScalarBarBuilder)
+                ]
+                _scalar_bars = [
+                    e
+                    for e in celements
+                    if isinstance(e, ScalarBarBuilder)
+                    and e.name in scalar_bar_names
+                ]
+                celements = tuple(_others + _scalar_bars)
+                if not celements: # We need to check again because we may have
+                    continue      # removed all elements in the previous step.
             celements = tuple(
                 e
                 if isinstance(e, ElementBuilder)
@@ -2735,7 +2770,9 @@ def automap_unified_plotter_f(
         for celement in unique_elements:
             cvalues = sum([e['elements'][celement] for e in meta], ())
             if all([v == cvalues[0] for v in cvalues[1:]]):
-                gelements[postproc][celement] = cvalues[0]
+                gelements[postproc][celement] = (cvalues[0],)
+            else:
+                gelements[postproc][celement] = cvalues
         unique_meta = {
             k: tuple(set(v))
             for k, v in _seq_to_dict([
