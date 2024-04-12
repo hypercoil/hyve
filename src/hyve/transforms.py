@@ -124,7 +124,10 @@ def splice_on(
 
 def surf_from_archive(
     allowed: Sequence[str] = ('templateflow', 'neuromaps'),
+    *,
     template: str = 'fsLR',
+    load_mask: bool = True,
+    surf_projection: Optional[Sequence[str]] = ('veryinflated',),
 ) -> callable:
     """
     Load a surface from a cloud-based data archive.
@@ -163,12 +166,14 @@ def surf_from_archive(
     ) -> callable:
         transformer_f = Partial(surf_from_archive_p, archives=archives)
         _template = template
+        _load_mask = load_mask
+        _surf_projection = surf_projection
 
         @splice_on(f, occlusion=surf_from_archive_p.output)
         def f_transformed(
             *,
-            load_mask: bool = True,
-            surf_projection: Optional[Sequence[str]] = ('veryinflated',),
+            load_mask: bool = _load_mask,
+            surf_projection: Optional[Sequence[str]] = _surf_projection,
             template: str = _template,
             **params: Mapping,
         ):
@@ -183,13 +188,22 @@ def surf_from_archive(
 
 
 def surf_from_gifti(
-    projection: str = 'very_inflated',
+    projection: str = 'unknownprojection',
+    *,
+    left_surf: Optional[Union[nb.GiftiImage, str]] = None,
+    right_surf: Optional[Union[nb.GiftiImage, str]] = None,
+    left_mask: Optional[Union[nb.GiftiImage, str]] = None,
+    right_mask: Optional[Union[nb.GiftiImage, str]] = None,
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
         sanitised_projection = sanitise(projection)
+        _left_surf = left_surf
+        _right_surf = right_surf
+        _left_mask = left_mask
+        _right_mask = right_mask
         paramstr_left_surf = f'{sanitised_projection}_left_surf'
         paramstr_right_surf = f'{sanitised_projection}_right_surf'
         paramstr_left_mask = f'{sanitised_projection}_left_mask'
@@ -200,17 +214,21 @@ def surf_from_gifti(
             f,
             occlusion=surf_from_gifti_p.output,
             expansion={
-                paramstr_left_surf: (Union[nb.GiftiImage, str], REQUIRED),
-                paramstr_right_surf: (Union[nb.GiftiImage, str], REQUIRED),
-                paramstr_left_mask: (Union[nb.GiftiImage, str], None),
-                paramstr_right_mask: (Union[nb.GiftiImage, str], None),
+                paramstr_left_surf: (
+                    Union[nb.GiftiImage, str], _left_surf or REQUIRED
+                ),
+                paramstr_right_surf: (
+                    Union[nb.GiftiImage, str], _right_surf or REQUIRED
+                ),
+                paramstr_left_mask: (Union[nb.GiftiImage, str], _left_mask),
+                paramstr_right_mask: (Union[nb.GiftiImage, str], _right_mask),
             },
         )
         def f_transformed(**params: Mapping):
-            left_surf = params.pop(paramstr_left_surf)
-            right_surf = params.pop(paramstr_right_surf)
-            left_mask = params.pop(paramstr_left_mask, None)
-            right_mask = params.pop(paramstr_right_mask, None)
+            left_surf = params.pop(paramstr_left_surf, _left_surf)
+            right_surf = params.pop(paramstr_right_surf, _right_surf)
+            left_mask = params.pop(paramstr_left_mask, _left_mask)
+            right_mask = params.pop(paramstr_right_mask, _right_mask)
             return compositor(f, transformer_f)(**params)(
                 left_surf=left_surf,
                 right_surf=right_surf,
@@ -223,7 +241,7 @@ def surf_from_gifti(
 
 
 def surf_from_freesurfer(
-    projection: str = 'unknown',
+    projection: str = 'unknownprojection',
 ) -> callable:
     def transform(
         f: callable,
@@ -256,6 +274,7 @@ def surf_from_freesurfer(
 
 def surf_scalars_from_cifti(
     scalars: str,
+    *,
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
@@ -304,24 +323,37 @@ def surf_scalars_from_cifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr = f'{sanitise(scalars)}_cifti'
+        paramstr = sanitise(scalars)
+        paramstr_ext = f'{paramstr}_cifti'
+        _is_masked = is_masked
+        _apply_mask = apply_mask
+        _null_value = null_value
+        _select = select
+        _exclude = exclude
+        _allow_multihemisphere = allow_multihemisphere
+        _coerce_to_scalar = coerce_to_scalar
+        _plot = plot
         transformer_f = Partial(
             surf_scalars_from_cifti_p,
             scalars=scalars,
-            is_masked=is_masked,
-            apply_mask=apply_mask,
-            null_value=null_value,
-            select=select,
-            exclude=exclude,
-            allow_multihemisphere=allow_multihemisphere,
-            coerce_to_scalar=coerce_to_scalar,
-            plot=plot,
         )
 
         @splice_on(
             f,
             occlusion=surf_scalars_from_cifti_p.output,
-            expansion={paramstr: (Union[nb.Cifti2Image, str], REQUIRED)},
+            expansion={
+                paramstr_ext: (Union[nb.Cifti2Image, str], REQUIRED),
+                f'{paramstr}_is_masked': (bool, _is_masked),
+                f'{paramstr}_apply_mask': (bool, _apply_mask),
+                f'{paramstr}_null_value': (Optional[float], _null_value),
+                f'{paramstr}_select': (Optional[Sequence[int]], _select),
+                f'{paramstr}_exclude': (Optional[Sequence[int]], _exclude),
+                f'{paramstr}_allow_multihemisphere': (
+                    bool, _allow_multihemisphere
+                ),
+                f'{paramstr}_coerce_to_scalar': (bool, _coerce_to_scalar),
+                f'{paramstr}_plot': (bool, _plot),
+            },
         )
         def f_transformed(
             *,
@@ -329,17 +361,37 @@ def surf_scalars_from_cifti(
             **params: Mapping,
         ):
             try:
-                cifti = params.pop(paramstr)
+                cifti = params.pop(paramstr_ext)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {paramstr}'
+                    f'keyword-only argument: {paramstr_ext}'
                 )
             surf_scalars = params.pop('surf_scalars', ())
+            is_masked = params.pop(f'{paramstr}_is_masked', _is_masked)
+            apply_mask = params.pop(f'{paramstr}_apply_mask', _apply_mask)
+            null_value = params.pop(f'{paramstr}_null_value', _null_value)
+            select = params.pop(f'{paramstr}_select', _select)
+            exclude = params.pop(f'{paramstr}_exclude', _exclude)
+            allow_multihemisphere = params.pop(
+                f'{paramstr}_allow_multihemisphere', _allow_multihemisphere
+            )
+            coerce_to_scalar = params.pop(
+                f'{paramstr}_coerce_to_scalar', _coerce_to_scalar
+            )
+            plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 cifti=cifti,
                 surf=surf,
                 surf_scalars=surf_scalars,
+                is_masked=is_masked,
+                apply_mask=apply_mask,
+                null_value=null_value,
+                select=select,
+                exclude=exclude,
+                allow_multihemisphere=allow_multihemisphere,
+                coerce_to_scalar=coerce_to_scalar,
+                plot=plot,
             )
 
         return f_transformed
@@ -348,6 +400,7 @@ def surf_scalars_from_cifti(
 
 def surf_scalars_from_gifti(
     scalars: str,
+    *,
     is_masked: bool = True,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
@@ -396,19 +449,20 @@ def surf_scalars_from_gifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr_left = f'{sanitise(scalars)}_gifti_left'
-        paramstr_right = f'{sanitise(scalars)}_gifti_right'
+        paramstr = sanitise(scalars)
+        paramstr_left = f'{paramstr}_gifti_left'
+        paramstr_right = f'{paramstr}_gifti_right'
+        _is_masked = is_masked
+        _apply_mask = apply_mask
+        _null_value = null_value
+        _select = select
+        _exclude = exclude
+        _allow_multihemisphere = allow_multihemisphere
+        _coerce_to_scalar = coerce_to_scalar
+        _plot = plot
         transformer_f = Partial(
             surf_scalars_from_gifti_p,
             scalars=scalars,
-            is_masked=is_masked,
-            apply_mask=apply_mask,
-            null_value=null_value,
-            select=select,
-            exclude=exclude,
-            allow_multihemisphere=allow_multihemisphere,
-            coerce_to_scalar=coerce_to_scalar,
-            plot=plot,
         )
 
         @splice_on(
@@ -417,6 +471,16 @@ def surf_scalars_from_gifti(
             expansion={
                 paramstr_left: (Union[nb.GiftiImage, str], REQUIRED),
                 paramstr_right: (Union[nb.GiftiImage, str], REQUIRED),
+                f'{paramstr}_is_masked': (bool, _is_masked),
+                f'{paramstr}_apply_mask': (bool, _apply_mask),
+                f'{paramstr}_null_value': (Optional[float], _null_value),
+                f'{paramstr}_select': (Optional[Sequence[int]], _select),
+                f'{paramstr}_exclude': (Optional[Sequence[int]], _exclude),
+                f'{paramstr}_allow_multihemisphere': (
+                    bool, _allow_multihemisphere
+                ),
+                f'{paramstr}_coerce_to_scalar': (bool, _coerce_to_scalar),
+                f'{paramstr}_plot': (bool, _plot),
             },
         )
         def f_transformed(
@@ -432,12 +496,32 @@ def surf_scalars_from_gifti(
                     f'keyword-only argument: either {paramstr_left} or '
                     f'{paramstr_right}'
                 )
+            is_masked = params.pop(f'{paramstr}_is_masked', _is_masked)
+            apply_mask = params.pop(f'{paramstr}_apply_mask', _apply_mask)
+            null_value = params.pop(f'{paramstr}_null_value', _null_value)
+            select = params.pop(f'{paramstr}_select', _select)
+            exclude = params.pop(f'{paramstr}_exclude', _exclude)
+            allow_multihemisphere = params.pop(
+                f'{paramstr}_allow_multihemisphere', _allow_multihemisphere
+            )
+            coerce_to_scalar = params.pop(
+                f'{paramstr}_coerce_to_scalar', _coerce_to_scalar
+            )
+            plot = params.pop(f'{paramstr}_plot', _plot)
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 left_gifti=left_gifti,
                 right_gifti=right_gifti,
                 surf=surf,
                 surf_scalars=surf_scalars,
+                is_masked=is_masked,
+                apply_mask=apply_mask,
+                null_value=null_value,
+                select=select,
+                exclude=exclude,
+                allow_multihemisphere=allow_multihemisphere,
+                coerce_to_scalar=coerce_to_scalar,
+                plot=plot,
             )
 
         return f_transformed
@@ -446,6 +530,7 @@ def surf_scalars_from_gifti(
 
 def surf_scalars_from_freesurfer(
     scalars: str,
+    *,
     is_masked: bool = False,
     apply_mask: bool = False,
     null_value: Optional[float] = 0.0,
@@ -457,17 +542,18 @@ def surf_scalars_from_freesurfer(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr_left = f'{sanitise(scalars)}_morph_left'
-        paramstr_right = f'{sanitise(scalars)}_morph_right'
+        paramstr = sanitise(scalars)
+        paramstr_left = f'{paramstr}_morph_left'
+        paramstr_right = f'{paramstr}_morph_right'
+        _is_masked = is_masked
+        _apply_mask = apply_mask
+        _null_value = null_value
+        _allow_multihemisphere = allow_multihemisphere
+        _coerce_to_scalar = coerce_to_scalar
+        _plot = plot
         transformer_f = Partial(
             surf_scalars_from_freesurfer_p,
             scalars=scalars,
-            is_masked=is_masked,
-            apply_mask=apply_mask,
-            null_value=null_value,
-            allow_multihemisphere=allow_multihemisphere,
-            coerce_to_scalar=coerce_to_scalar,
-            plot=plot,
         )
 
         @splice_on(
@@ -476,6 +562,14 @@ def surf_scalars_from_freesurfer(
             expansion={
                 paramstr_left: (Union[str, Tuple[Tensor, Tensor]], REQUIRED),
                 paramstr_right: (Union[str, Tuple[Tensor, Tensor]], REQUIRED),
+                f'{paramstr}_is_masked': (bool, _is_masked),
+                f'{paramstr}_apply_mask': (bool, _apply_mask),
+                f'{paramstr}_null_value': (Optional[float], _null_value),
+                f'{paramstr}_allow_multihemisphere': (
+                    bool, _allow_multihemisphere
+                ),
+                f'{paramstr}_coerce_to_scalar': (bool, _coerce_to_scalar),
+                f'{paramstr}_plot': (bool, _plot),
             },
         )
         def f_transformed(
@@ -491,12 +585,28 @@ def surf_scalars_from_freesurfer(
                     f'keyword-only argument: either {paramstr_left} or '
                     f'{paramstr_right}'
                 )
+            is_masked = params.pop(f'{paramstr}_is_masked', _is_masked)
+            apply_mask = params.pop(f'{paramstr}_apply_mask', _apply_mask)
+            null_value = params.pop(f'{paramstr}_null_value', _null_value)
+            allow_multihemisphere = params.pop(
+                f'{paramstr}_allow_multihemisphere', _allow_multihemisphere
+            )
+            coerce_to_scalar = params.pop(
+                f'{paramstr}_coerce_to_scalar', _coerce_to_scalar
+            )
+            plot = params.pop(f'{paramstr}_plot', _plot)
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 left_morph=left_morph,
                 right_morph=right_morph,
                 surf=surf,
                 surf_scalars=surf_scalars,
+                is_masked=is_masked,
+                apply_mask=apply_mask,
+                null_value=null_value,
+                allow_multihemisphere=allow_multihemisphere,
+                coerce_to_scalar=coerce_to_scalar,
+                plot=plot,
             )
 
         return f_transformed
@@ -505,6 +615,7 @@ def surf_scalars_from_freesurfer(
 
 def surf_scalars_from_array(
     scalars: str,
+    *,
     left_slice: Optional[slice] = None,
     right_slice: Optional[slice] = None,
     default_slices: bool = True,
@@ -521,32 +632,46 @@ def surf_scalars_from_array(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr = f'{sanitise(scalars)}_array'
-        paramstr_left = f'{sanitise(scalars)}_array_left'
-        paramstr_right = f'{sanitise(scalars)}_array_right'
+        paramstr = sanitise(scalars)
+        paramstr_both = f'{paramstr}_array'
+        paramstr_left = f'{paramstr}_array_left'
+        paramstr_right = f'{paramstr}_array_right'
+        _left_slice = left_slice
+        _right_slice = right_slice
+        _default_slices = default_slices
+        _is_masked = is_masked
+        _apply_mask = apply_mask
+        _null_value = null_value
+        _select = select
+        _exclude = exclude
+        _allow_multihemisphere = allow_multihemisphere
+        _coerce_to_scalar = coerce_to_scalar
+        _plot = plot
         transformer_f = Partial(
             surf_scalars_from_array_p,
             scalars=scalars,
-            left_slice=left_slice,
-            right_slice=right_slice,
-            default_slices=default_slices,
-            is_masked=is_masked,
-            apply_mask=apply_mask,
-            null_value=null_value,
-            select=select,
-            exclude=exclude,
-            allow_multihemisphere=allow_multihemisphere,
-            coerce_to_scalar=coerce_to_scalar,
-            plot=plot,
         )
 
         @splice_on(
             f,
             occlusion=surf_scalars_from_array_p.output,
             expansion={
-                paramstr: (Tensor, None),
+                paramstr_both: (Tensor, None),
                 paramstr_left: (Tensor, None),
                 paramstr_right: (Tensor, None),
+                f'{paramstr}_left_slice': (Optional[slice], _left_slice),
+                f'{paramstr}_right_slice': (Optional[slice], _right_slice),
+                f'{paramstr}_default_slices': (bool, _default_slices),
+                f'{paramstr}_is_masked': (bool, _is_masked),
+                f'{paramstr}_apply_mask': (bool, _apply_mask),
+                f'{paramstr}_null_value': (Optional[float], _null_value),
+                f'{paramstr}_select': (Optional[Sequence[int]], _select),
+                f'{paramstr}_exclude': (Optional[Sequence[int]], _exclude),
+                f'{paramstr}_allow_multihemisphere': (
+                    bool, _allow_multihemisphere
+                ),
+                f'{paramstr}_coerce_to_scalar': (bool, _coerce_to_scalar),
+                f'{paramstr}_plot': (bool, _plot),
             },
         )
         def f_transformed(
@@ -556,13 +681,30 @@ def surf_scalars_from_array(
         ):
             left_array = params.pop(paramstr_left, None)
             right_array = params.pop(paramstr_right, None)
-            array = params.pop(paramstr, None)
+            array = params.pop(paramstr_both, None)
             if left_array is None and right_array is None and array is None:
                 raise TypeError(
                     'Transformed plot function missing one or more required '
-                    f'keyword-only argument(s): either {paramstr} or '
+                    f'keyword-only argument(s): either {paramstr_both} or '
                     f'{paramstr_left} and/or {paramstr_right}'
                 )
+            left_slice = params.pop(f'{paramstr}_left_slice', _left_slice)
+            right_slice = params.pop(f'{paramstr}_right_slice', _right_slice)
+            default_slices = params.pop(
+                f'{paramstr}_default_slices', _default_slices
+            )
+            is_masked = params.pop(f'{paramstr}_is_masked', _is_masked)
+            apply_mask = params.pop(f'{paramstr}_apply_mask', _apply_mask)
+            null_value = params.pop(f'{paramstr}_null_value', _null_value)
+            select = params.pop(f'{paramstr}_select', _select)
+            exclude = params.pop(f'{paramstr}_exclude', _exclude)
+            allow_multihemisphere = params.pop(
+                f'{paramstr}_allow_multihemisphere', _allow_multihemisphere
+            )
+            coerce_to_scalar = params.pop(
+                f'{paramstr}_coerce_to_scalar', _coerce_to_scalar
+            )
+            plot = params.pop(f'{paramstr}_plot', _plot)
             surf_scalars = params.pop('surf_scalars', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
@@ -570,6 +712,17 @@ def surf_scalars_from_array(
                 array=array,
                 left_array=left_array,
                 right_array=right_array,
+                left_slice=left_slice,
+                right_slice=right_slice,
+                default_slices=default_slices,
+                is_masked=is_masked,
+                apply_mask=apply_mask,
+                null_value=null_value,
+                select=select,
+                exclude=exclude,
+                allow_multihemisphere=allow_multihemisphere,
+                coerce_to_scalar=coerce_to_scalar,
+                plot=plot,
             )
 
         return f_transformed
@@ -580,6 +733,7 @@ def surf_scalars_from_array(
 #      expressions.
 def points_scalars_from_nifti(
     scalars: str,
+    *,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
     plot: bool = True,
@@ -588,19 +742,25 @@ def points_scalars_from_nifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr = f'{sanitise(scalars)}_nifti'
+        paramstr = sanitise(scalars)
+        paramstr_ext = f'{paramstr}_nifti'
+        _null_value = null_value
+        _point_size = point_size
+        _plot = plot
         transformer_f = Partial(
             points_scalars_from_nifti_p,
             scalars=scalars,
-            null_value=null_value,
-            point_size=point_size,
-            plot=plot,
         )
 
         @splice_on(
             f,
             occlusion=points_scalars_from_nifti_p.output,
-            expansion={paramstr: (Union[nb.Nifti1Image, str], REQUIRED)},
+            expansion={
+                paramstr_ext: (Union[nb.Nifti1Image, str], REQUIRED),
+                f'{paramstr}_null_value': (Optional[float], _null_value),
+                f'{paramstr}_point_size': (Optional[float], _point_size),
+                f'{paramstr}_plot': (bool, _plot),
+            },
         )
         def f_transformed(
             *,
@@ -609,16 +769,22 @@ def points_scalars_from_nifti(
             **params: Mapping,
         ):
             try:
-                nifti = params.pop(paramstr)
+                nifti = params.pop(paramstr_ext)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {paramstr}'
+                    f'keyword-only argument: {paramstr_ext}'
                 )
+            null_value = params.pop(f'{paramstr}_null_value', _null_value)
+            point_size = params.pop(f'{paramstr}_point_size', _point_size)
+            plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
                 points=points,
                 points_scalars=points_scalars,
+                null_value=null_value,
+                point_size=point_size,
+                plot=plot,
             )
 
         return f_transformed
@@ -627,6 +793,7 @@ def points_scalars_from_nifti(
 
 def points_scalars_from_array(
     scalars: str,
+    *,
     point_size: float = 1.0,
     plot: bool = True,
 ) -> callable:
@@ -634,13 +801,14 @@ def points_scalars_from_array(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr_coor = f'{sanitise(scalars)}_coor'
-        paramstr_values = f'{sanitise(scalars)}_values'
+        paramstr = sanitise(scalars)
+        paramstr_coor = f'{paramstr}_coor'
+        paramstr_values = f'{paramstr}_values'
+        _point_size = point_size
+        _plot = plot
         transformer_f = Partial(
             points_scalars_from_array_p,
             scalars=scalars,
-            point_size=point_size,
-            plot=plot,
         )
 
         @splice_on(
@@ -649,6 +817,8 @@ def points_scalars_from_array(
             expansion={
                 paramstr_coor: (Tensor, REQUIRED),
                 paramstr_values: (Tensor, REQUIRED),
+                f'{paramstr}_point_size': (float, _point_size),
+                f'{paramstr}_plot': (bool, _plot),
             },
         )
         def f_transformed(
@@ -671,11 +841,15 @@ def points_scalars_from_array(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {paramstr_values}'
                 )
+            point_size = params.pop(f'{paramstr}_point_size', _point_size)
+            plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 coor=coor,
                 values=values,
                 points=points,
                 points_scalars=points_scalars,
+                point_size=point_size,
+                plot=plot,
             )
 
         return f_transformed
@@ -684,6 +858,7 @@ def points_scalars_from_array(
 
 def surf_scalars_from_nifti(
     scalars: str,
+    *,
     template: str = 'fsLR',
     method: Literal['nearest', 'linear'] = 'linear',
     null_value: Optional[float] = 0.0,
@@ -738,27 +913,42 @@ def surf_scalars_from_nifti(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr = f'{sanitise(scalars)}_nifti'
+        paramstr = sanitise(scalars)
+        paramstr_ext = f'{paramstr}_nifti'
         transformer_f = Partial(
             surf_scalars_from_nifti_p,
             scalars=scalars,
-            method=method,
-            null_value=null_value,
-            threshold=threshold,
-            select=select,
-            exclude=exclude,
-            allow_multihemisphere=allow_multihemisphere,
-            coerce_to_scalar=coerce_to_scalar,
-            plot=plot,
         )
         _template = template
+        _method = method
+        _null_value = null_value
+        _threshold = threshold
+        _select = select
+        _exclude = exclude
+        _allow_multihemisphere = allow_multihemisphere
+        _coerce_to_scalar = coerce_to_scalar
+        _plot = plot
 
         @splice_on(
             f,
             occlusion=surf_scalars_from_nifti_p.output,
-            expansion={paramstr: (Union[nb.Nifti1Image, str], REQUIRED)},
+            expansion={
+                paramstr_ext: (Union[nb.Nifti1Image, str], REQUIRED),
+                f'{paramstr}_method': (Literal['nearest', 'linear'], _method),
+                f'{paramstr}_null_value': (Optional[float], _null_value),
+                f'{paramstr}_threshold': (Optional[float], _threshold),
+                f'{paramstr}_select': (Optional[Sequence[int]], _select),
+                f'{paramstr}_exclude': (Optional[Sequence[int]], _exclude),
+                f'{paramstr}_allow_multihemisphere': (
+                    bool, _allow_multihemisphere
+                ),
+                f'{paramstr}_coerce_to_scalar': (bool, _coerce_to_scalar),
+                f'{paramstr}_plot': (bool, _plot),
+            },
             doc_subs={
-                paramstr: ('surf_scalars_nifti', {'scalars_name': scalars})
+                paramstr_ext: (
+                    'surf_scalars_nifti', {'scalars_name': scalars}
+                )
             },
         )
         def f_transformed(
@@ -769,18 +959,38 @@ def surf_scalars_from_nifti(
             **params: Mapping,
         ):
             try:
-                nifti = params.pop(paramstr)
+                nifti = params.pop(paramstr_ext)
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
-                    f'keyword-only argument: {paramstr}'
+                    f'keyword-only argument: {paramstr_ext}'
                 )
             f_resample = templates[template]
+            method = params.pop(f'{paramstr}_method', _method)
+            null_value = params.pop(f'{paramstr}_null_value', _null_value)
+            threshold = params.pop(f'{paramstr}_threshold', _threshold)
+            select = params.pop(f'{paramstr}_select', _select)
+            exclude = params.pop(f'{paramstr}_exclude', _exclude)
+            allow_multihemisphere = params.pop(
+                f'{paramstr}_allow_multihemisphere', _allow_multihemisphere
+            )
+            coerce_to_scalar = params.pop(
+                f'{paramstr}_coerce_to_scalar', _coerce_to_scalar
+            )
+            plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
                 surf=surf,
                 f_resample=f_resample,
                 surf_scalars=surf_scalars,
+                method=method,
+                null_value=null_value,
+                threshold=threshold,
+                select=select,
+                exclude=exclude,
+                allow_multihemisphere=allow_multihemisphere,
+                coerce_to_scalar=coerce_to_scalar,
+                plot=plot,
             )
 
         return f_transformed
@@ -790,6 +1000,7 @@ def surf_scalars_from_nifti(
 def parcellate_colormap(
     parcellation_name: str,
     cmap_name: Optional[str] = None,
+    *,
     target: Union[str, Sequence[str]] = ('surf_scalars', 'node'),
     template: Literal['fsLR', 'fsaverage'] = 'fsLR',
 ) -> callable:
@@ -843,11 +1054,18 @@ def parcellate_colormap(
         transformer_f = Partial(
             parcellate_colormap_p,
             parcellation_name=parcellation_name,
-            target=target,
         )
         _template = template
+        _target = target
 
-        @splice_on(f)
+        @splice_on(
+            f,
+            expansion={
+                f'{parcellation_name}_cmap_target': (
+                    Union[str, Sequence[str]], _target
+                ),
+            },
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
@@ -856,6 +1074,7 @@ def parcellate_colormap(
         ):
             surf_scalars = params.get('surf_scalars', ())
             cmap = cmap_name
+            target = params.pop(f'{parcellation_name}_cmap_target', _target)
             if parcellation_name in surf_scalars:
                 cmap = params.get(
                     f'{sanitise(parcellation_name)}_cmap',
@@ -881,6 +1100,7 @@ def parcellate_colormap(
                 surf=surf,
                 cmap_name=cmap,
                 cmap=rgba,
+                target=target,
             )
 
         return f_transformed
@@ -890,6 +1110,7 @@ def parcellate_colormap(
 def parcellate_surf_scalars(
     scalars: str,
     parcellation_name: str,
+    *,
     plot: bool = True,
 ) -> callable:
     """
@@ -921,24 +1142,31 @@ def parcellate_surf_scalars(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = sanitise(scalars)
+        _plot = plot
         transformer_f = Partial(
             parcellate_surf_scalars_p,
             scalars=scalars,
             parcellation_name=parcellation_name,
             sink=sink,
-            plot=plot,
         )
 
-        @splice_on(f, occlusion=parcellate_surf_scalars_p.output)
+        @splice_on(
+            f,
+            expansion={f'{paramstr}_parcellated_plot': (bool, _plot)},
+            occlusion=parcellate_surf_scalars_p.output,
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
             surf_scalars: Sequence[str] = (),
             **params: Mapping,
         ):
+            plot = params.pop(f'{paramstr}_parcellated_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 surf_scalars=surf_scalars,
+                plot=plot,
             )
 
         return f_transformed
@@ -948,6 +1176,7 @@ def parcellate_surf_scalars(
 def scatter_into_parcels(
     scalars: str,
     parcellation_name: str,
+    *,
     plot: bool = True,
 ) -> callable:
     """
@@ -973,8 +1202,8 @@ def scatter_into_parcels(
         * If ``plot`` is ``True``, the transformed function will automatically
           add the parcel-valued scalar dataset to the sequence of scalars to
           plot.
-        * The transformed plotter requires the ``<scalars>_parcellated``
-          argument, where ``<scalars>`` is the name of the scalar dataset
+        * The transformed plotter requires the ``<scalars>`` argument,
+          where ``<scalars>`` is the name of the scalar dataset
           provided as an argument to this function. The value of this
           argument should be a tensor of shape ``(N,)`` where ``N`` is the
           number of parcels in the parcellation.
@@ -983,18 +1212,21 @@ def scatter_into_parcels(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
-        paramstr = f'{sanitise(scalars)}_parcellated'
+        paramstr = sanitise(scalars)
+        _plot = plot
         transformer_f = Partial(
             scatter_into_parcels_p,
             scalars=scalars,
             parcellation_name=parcellation_name,
-            plot=plot,
         )
 
         @splice_on(
             f,
             occlusion=scatter_into_parcels_p.output,
-            expansion={paramstr: (Tensor, REQUIRED)},
+            expansion={
+                paramstr: (Tensor, REQUIRED),
+                f'{paramstr}_plot': (bool, _plot),
+            },
         )
         def f_transformed(
             *,
@@ -1009,10 +1241,12 @@ def scatter_into_parcels(
                     'Transformed plot function missing one required '
                     f'keyword-only argument: {paramstr}'
                 )
+            plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 parcellated=parcellated,
                 surf_scalars=surf_scalars,
+                plot=plot,
             )
 
         return f_transformed
@@ -1021,6 +1255,7 @@ def scatter_into_parcels(
 
 def vertex_to_face(
     scalars: str,
+    *,
     interpolation: Literal['mode', 'mean'] = 'mode',
 ) -> callable:
     """
@@ -1051,22 +1286,34 @@ def vertex_to_face(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        paramstr = sanitise(scalars)
+        _interpolation = interpolation
         transformer_f = Partial(
             vertex_to_face_p,
             scalars=scalars,
-            interpolation=interpolation,
         )
 
-        @splice_on(f, occlusion=vertex_to_face_p.output)
+        @splice_on(
+            f,
+            expansion={
+                f'{paramstr}_v2f_interpolation': (str, _interpolation)
+            },
+            occlusion=vertex_to_face_p.output,
+        )
         def f_transformed(
             *,
             surf: CortexTriSurface,
             surf_scalars: Sequence[str] = (),
             **params: Mapping,
         ):
+            interpolation = params.pop(
+                f'{paramstr}_v2f_interpolation',
+                _interpolation,
+            )
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 surf_scalars=surf_scalars,
+                interpolation=interpolation,
             )
 
         return f_transformed
