@@ -651,6 +651,36 @@ def vertex_to_face_f(
     return surf
 
 
+def surface_boundary_overlay_f(
+    surf: CortexTriSurface,
+    boundary_name: str,
+    scalars: str,
+    surf_scalars_layers: Sequence[Layer],
+    boundary_threshold: float = 0.5,
+    target_domain: Literal['vertex', 'face'] = 'vertex',
+    copy_values_to_boundary: bool = False,
+    boundary_fill: float = 1.0,
+    nonboundary_fill: Optional[float] = np.nan,
+    num_steps: int = 1,
+    surf_scalars: Sequence[str] = (),
+    plot: bool = True,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    surf.draw_boundaries(
+        scalars=scalars,
+        boundary_name=boundary_name,
+        threshold=boundary_threshold,
+        target_domain=target_domain,
+        copy_values_to_boundary=copy_values_to_boundary,
+        boundary_fill=boundary_fill,
+        nonboundary_fill=nonboundary_fill,
+        num_steps=num_steps,
+    )
+    if plot and boundary_name not in surf_scalars:
+        surf_scalars = tuple(list(surf_scalars) + [boundary_name])
+    #assert 0
+    return surf, surf_scalars
+
+
 def _copy_dict_from_params(
     params: Mapping[str, Any],
     key_default: Sequence[Tuple[str, Any]] = (),
@@ -2918,6 +2948,14 @@ vertex_to_face_p = Primitive(
     vertex_to_face_f,
     'vertex_to_face',
     output=('surf',),
+    forward_unused=True,
+)
+
+
+surface_boundary_overlay_p = Primitive(
+    surface_boundary_overlay_f,
+    'surface_boundary_overlay',
+    output=('surf', 'surf_scalars'), #('surf', 'surf_scalars_layers'),
     forward_unused=True,
 )
 

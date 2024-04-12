@@ -458,6 +458,9 @@ class ProjectedPolyData(pv.PolyData):
             style = SURF_DEFAULT_STYLE
         else:
             style = {**SURF_DEFAULT_STYLE, **style}
+        # backup, because setting the scalars using the arg in the add_mesh
+        # call below doesn't always work
+        self.set_active_scalars(name)
         # TODO: copying the mesh seems like it could create memory issues.
         #       A better solution would be delayed execution.
         plotter.add_mesh(
@@ -1210,6 +1213,144 @@ class CortexTriSurface:
         )
         self.right.point_data[points_name] = self.right.point_data[name]
         self.right.point_data.remove(name)
+
+    def draw_boundaries(
+        self,
+        scalars: str,
+        boundary_name: str,
+        threshold: float = 0.5,
+        num_steps: int = 1,
+        target_domain: Optional[Literal['vertex', 'face']] = None,
+        copy_values_to_boundary: bool = True,
+        boundary_fill: float = 1.0,
+        nonboundary_fill: float = 0.0,
+    ):
+        if (
+            (scalars in self.left.point_data) or
+            (scalars in self.right.point_data)
+        ):
+            source_domain = domain = 'vertex'
+            scalars_left = self.left.point_data[scalars]
+            scalars_right = self.right.point_data[scalars]
+        elif (
+            (scalars in self.left.face_data) or
+            (scalars in self.right.face_data)
+        ):
+            source_domain = domain = 'face'
+            scalars_left = self.left.face_data[scalars]
+            scalars_right = self.right.face_data[scalars]
+        else:
+            raise ValueError(
+                f'Unable to compute boundary for {scalars}: not found '
+                'in surface data.'
+            )
+        if target_domain is None:
+            target_domain = domain
+        self._hemisphere_draw_boundaries_impl(
+            'left',
+            scalars=scalars,
+            scalar_array=scalars_left,
+            boundary_name=boundary_name,
+            threshold=threshold,
+            num_steps=num_steps,
+            source_domain=source_domain,
+            target_domain=target_domain,
+            domain=domain,
+            copy_values_to_boundary=copy_values_to_boundary,
+            boundary_fill=boundary_fill,
+            nonboundary_fill=nonboundary_fill,
+        )
+        self._hemisphere_draw_boundaries_impl(
+            'right',
+            scalars=scalars,
+            scalar_array=scalars_right,
+            boundary_name=boundary_name,
+            threshold=threshold,
+            num_steps=num_steps,
+            source_domain=source_domain,
+            target_domain=target_domain,
+            domain=domain,
+            copy_values_to_boundary=copy_values_to_boundary,
+            boundary_fill=boundary_fill,
+            nonboundary_fill=nonboundary_fill,
+        )
+
+    def _hemisphere_draw_boundaries_impl(
+        self,
+        hemisphere: str,
+        scalars: str,
+        scalar_array: Tensor,
+        boundary_name: str,
+        threshold: float = 0.5,
+        num_steps: int = 1,
+        source_domain: str = 'vertex',
+        target_domain: str = 'vertex',
+        domain: str = 'vertex',
+        copy_values_to_boundary: bool = True,
+        boundary_fill: float = 1.0,
+        nonboundary_fill: float = 0.0,
+    ):
+        step = 0
+        hemi_surf = self.__getattribute__(hemisphere)
+        faces = hemi_surf.faces.reshape(-1, 4)[..., 1:]
+        #TODO: This would probably be much more efficient if we could use an
+        #      adjacency matrix to find the neighbours of each face, rather
+        #      than iteratively resampling between vertex and face data.
+        while (step < (num_steps * 2)) or (domain != target_domain):
+            if domain == 'vertex':
+                scalar_array = scalar_array[faces]
+                scalar_array = ~(
+                    (
+                        np.abs(scalar_array[..., 0] - scalar_array[..., 1])
+                        < threshold
+                    ) & (
+                        np.abs(scalar_array[..., 0] - scalar_array[..., 2])
+                        < threshold
+                    ) & (
+                        np.abs(scalar_array[..., 1] - scalar_array[..., 2])
+                        < threshold
+                    )
+                )
+                hemi_surf.cell_data[boundary_name] = scalar_array
+                domain = 'face'
+            else:
+                scalar_array = (
+                    #TODO: We're doing a lot of unnecessary resampling here.
+                    #      Can we at least just resample the boundary faces?
+                    pv.CompositeFilters.cell_data_to_point_data(
+                        hemi_surf
+                    ).point_data[boundary_name] != 0
+                )
+                hemi_surf.point_data[boundary_name] = scalar_array
+                domain = 'vertex'
+            step += 1
+        if copy_values_to_boundary:
+            dataset = (
+                hemi_surf.point_data
+                if domain == 'vertex'
+                else hemi_surf.face_data
+            )
+            if source_domain == target_domain:
+                scalar_array = dataset[scalars]
+            elif target_domain == 'vertex':
+                scalar_array = pv.CompositeFilters.cell_data_to_point_data(
+                    hemi_surf
+                ).point_data[scalars]
+            else:
+                scalar_array = pv.CompositeFilters.point_data_to_cell_data(
+                    hemi_surf
+                ).cell_data[scalars]
+            dataset[boundary_name] = np.where(
+                dataset[boundary_name], scalar_array, nonboundary_fill
+            )
+        else:
+            dataset[boundary_name] = np.where(
+                dataset[boundary_name], boundary_fill, nonboundary_fill
+            )
+        if domain == 'face':
+            hemi_surf.point_data.remove(boundary_name)
+        elif domain == 'vertex':
+            hemi_surf.cell_data.remove(boundary_name)
 
     def parcel_centres_of_mass(
         self,

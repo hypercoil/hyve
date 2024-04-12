@@ -91,6 +91,7 @@ from .prim import (
     surf_scalars_from_freesurfer_p,
     surf_scalars_from_gifti_p,
     surf_scalars_from_nifti_p,
+    surface_boundary_overlay_p,
     svg_element_p,
     text_element_p,
     transform_postprocessor_p,
@@ -1314,6 +1315,100 @@ def vertex_to_face(
                 surf=surf,
                 surf_scalars=surf_scalars,
                 interpolation=interpolation,
+            )
+
+        return f_transformed
+    return transform
+
+
+def surface_boundary_overlay(
+    scalars: str,
+    boundary_name: Optional[str] = None,
+    *,
+    boundary_threshold: float = 0.5,
+    target_domain: Literal['vertex', 'face'] = 'vertex',
+    copy_values_to_boundary: bool = False,
+    boundary_fill: float = 1.0,
+    nonboundary_fill: Optional[float] = np.nan,
+    num_steps: int = 1,
+    plot: bool = True,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        _boundary_name = boundary_name or f'{scalars}:boundary'
+        paramstr = sanitise(_boundary_name)
+        _boundary_threshold = boundary_threshold
+        _target_domain = target_domain
+        _copy_values_to_boundary = copy_values_to_boundary
+        _boundary_fill = boundary_fill
+        _nonboundary_fill = nonboundary_fill
+        _num_steps = num_steps
+        _plot = plot
+        transformer_f = Partial(
+            surface_boundary_overlay_p,
+            boundary_name=_boundary_name,
+            scalars=scalars,
+        )
+
+        @splice_on(
+            f,
+            expansion={
+                f'{paramstr}_boundary_threshold': (str, _boundary_threshold),
+                f'{paramstr}_target_domain': (str, _target_domain),
+                f'{paramstr}_copy_values_to_boundary': (
+                    bool, _copy_values_to_boundary
+                ),
+                f'{paramstr}_boundary_fill': (float, _boundary_fill),
+                f'{paramstr}_nonboundary_fill': (
+                    Optional[float], _nonboundary_fill
+                ),
+                f'{paramstr}_num_steps': (int, _num_steps),
+                f'{paramstr}_plot': (bool, _plot),
+            },
+            occlusion=vertex_to_face_p.output,
+        )
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            surf_scalars: Sequence[str] = (),
+            **params: Mapping,
+        ):
+            boundary_threshold = params.pop(
+                f'{paramstr}_boundary_threshold',
+                _boundary_threshold,
+            )
+            target_domain = params.pop(
+                f'{paramstr}_target_domain',
+                _target_domain,
+            )
+            copy_values_to_boundary = params.pop(
+                f'{paramstr}_copy_values_to_boundary',
+                _copy_values_to_boundary,
+            )
+            boundary_fill = params.pop(
+                f'{paramstr}_boundary_fill',
+                _boundary_fill,
+            )
+            nonboundary_fill = params.pop(
+                f'{paramstr}_nonboundary_fill',
+                _nonboundary_fill,
+            )
+            num_steps = params.pop(f'{paramstr}_num_steps', _num_steps)
+            plot = params.pop(f'{paramstr}_plot', _plot)
+            surf_scalars_layers = params.pop('surf_scalars_layers', ())
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                surf_scalars_layers=surf_scalars_layers,
+                boundary_threshold=boundary_threshold,
+                target_domain=target_domain,
+                copy_values_to_boundary=copy_values_to_boundary,
+                boundary_fill=boundary_fill,
+                nonboundary_fill=nonboundary_fill,
+                num_steps=num_steps,
+                surf_scalars=surf_scalars,
+                plot=plot,
             )
 
         return f_transformed
