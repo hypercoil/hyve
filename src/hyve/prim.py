@@ -2112,17 +2112,20 @@ def plot_to_display_f(
         #       from the theme when the plotter is created?
         plotter.show(window_size=window_size)
 
-    for cplotter, cmeta in plotter:
-        write_f(
-            writer=writer,
-            argument=cplotter,
-            entities=cmeta,
-            output_dir=None,
-            fname_spec=None,
-            suffix=None,
-            extension=None,
-        )
-        cplotter.close()
+    for retval in plotter:
+        cplotter = retval['elements'].get('plotter', None)
+        cmeta = retval['metadata']
+        if cplotter is not None:
+            write_f(
+                writer=writer,
+                argument=cplotter,
+                entities=cmeta,
+                output_dir=None,
+                fname_spec=None,
+                suffix=None,
+                extension=None,
+            )
+            cplotter.close()
 
 
 def save_figure_f(
@@ -2317,7 +2320,7 @@ def save_figure_f(
                 q: w
                 for q, w in layout.annotations[i].items()
                 if (
-                    q is not 'elements' and
+                    q != 'elements' and
                     tuple(
                         layout.annotations[i].get('elements', ('snapshots',))
                     ) != ('snapshots',)
