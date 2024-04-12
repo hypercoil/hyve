@@ -916,7 +916,7 @@ def parcellate_surf_scalars(
           add the parcellated scalar dataset to the sequence of scalars to
           plot.
     """
-    sink = f'{scalars}Parcellated'
+    sink = f'{scalars}:vertexwise'
     def transform(
         f: callable,
         compositor: callable = direct_compositor,

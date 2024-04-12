@@ -606,10 +606,15 @@ def parcellate_surf_scalars_f(
         name=scalars,
         parcellation=parcellation_name,
     )
+    if scalars in surf_scalars:
+        surf_scalars = (
+            tuple(e for e in surf_scalars if e != scalars) + (sink,)
+        )
+    surf.rename_array(scalars, sink)
     scalar_names = surf.scatter_into_parcels(
         data=parcellated,
         parcellation=parcellation_name,
-        sink=sink,
+        sink=scalars,
     )
     if plot:
         surf_scalars = tuple(list(surf_scalars) + list(scalar_names))

@@ -409,7 +409,7 @@ class ProjectedPolyData(pv.PolyData):
                 'All layers must be defined over the same data '
                 'domain. The base layer is defined over '
                 f'{data_domain}, but either the layer {layer.name} or '
-                'the alpha scalars {layer.alpha} (if string) was not '
+                f'the alpha scalars {layer.alpha} (if string) was not '
                 f'found in {data_domain}. In particular, ensure that '
                 'that, if you have mapped any layer to faces, all '
                 'other layers are also mapped to faces.'
@@ -1121,6 +1121,20 @@ class CortexTriSurface:
             l_num = l_num[:, None]
         return (l_num + r_num) / (l_denom + r_denom)
 
+    def rename_array(self, src: str, dst: str):
+        """
+        Rename a dataset array.
+
+        Parameters
+        ----------
+        src : str
+            Name of the dataset to rename.
+        dst : str
+            New name of the dataset.
+        """
+        self.left.rename_array(src, dst)
+        self.right.rename_array(src, dst)
+
     def scatter_into_parcels(
         self,
         data: Tensor,
@@ -1185,7 +1199,7 @@ class CortexTriSurface:
             raise ValueError(
                 'Interpolation method must be one of "mode" or "mean".'
             )
-        points_name = f'{name}_points'
+        points_name = f'{name}:points'
         self.left.cell_data[name] = self._hemisphere_resample_v2f_impl(
             name, interpolation, 'left'
         )
@@ -1498,10 +1512,52 @@ class CortexTriSurface:
                 if i not in exclude
             ]
             for n, d in zip(names, data.T):
-                self.__getattribute__(hemisphere).point_data.set_array(d, n)
+                try:
+                    self.__getattribute__(
+                        hemisphere
+                    ).point_data.set_array(d, n)
+                except ValueError as e:
+                    if self.mask:
+                        mask_size = self.__getattribute__(
+                            hemisphere
+                        ).point_data[self.mask].sum()
+                        if len(d) == mask_size:
+                            raise ValueError(
+                                'The number of vertices in the provided data '
+                                'matches the number of vertices in the mask, '
+                                'but the a dimension mismatch was raised '
+                                'when trying to add the data to the '
+                                'hemisphere. This is likely a consequence of '
+                                'failing to specify that the data are '
+                                'masked. Try setting `is_masked=True` when '
+                                'adding the data. Original error message:\n\n'
+                                + str(e)
+                            )
+                    raise
         else:
             names = [name]
-            self.__getattribute__(hemisphere).point_data.set_array(data, name)
+            try:
+                self.__getattribute__(
+                    hemisphere
+                ).point_data.set_array(data, name)
+            except ValueError as e:
+                if self.mask:
+                    #hemi_size = self.__getattribute__(hemisphere).n_points
+                    mask_size = self.__getattribute__(
+                        hemisphere
+                    ).point_data[self.mask].sum()
+                    if len(data) == mask_size:
+                        raise ValueError(
+                            'The number of vertices in the provided data '
+                            'matches the number of vertices in the mask, but '
+                            'the a dimension mismatch was raised when trying '
+                            'to add the data to the hemisphere. This is '
+                            'likely a consequence of failing to specify that '
+                            'the data are masked. Try setting '
+                            '`is_masked=True` when adding the data. Original '
+                            'error message:\n\n' + str(e)
+                        )
+                raise
         return names
 
     def _hemisphere_vertex_data_impl(
