@@ -83,6 +83,7 @@ from .prim import (
     scalar_focus_camera_aux_p,
     scalar_focus_camera_p,
     scatter_into_parcels_p,
+    select_active_parcels_p,
     surf_from_archive_p,
     surf_from_freesurfer_p,
     surf_from_gifti_p,
@@ -1089,6 +1090,8 @@ def parcellate_colormap(
                     f'{sanitise(parcellation_name)}_cmap',
                     params.get('surf_scalars_cmap', cmap_name),
                 )
+            else:
+                cmap = params.pop(f'{sanitise(parcellation_name)}_cmap', cmap)
             if cmap is None or cmap == (None, None):
                 cmap = cmap_name
             if cmap not in cmaps:
@@ -1413,6 +1416,73 @@ def draw_surface_boundary(
                 boundary_fill=boundary_fill,
                 nonboundary_fill=nonboundary_fill,
                 num_steps=num_steps,
+                surf_scalars=surf_scalars,
+                plot=plot,
+            )
+
+        return f_transformed
+    return transform
+
+
+def select_active_parcels(
+    parcellation_name: str,
+    activation_name: str,
+    *,
+    activation_threshold: float = 2.58,
+    parcel_coverage_threshold: float = 0.5,
+    use_abs: bool = False,
+    plot: bool = True,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        paramstr = sanitise(parcellation_name)
+        _activation_threshold = activation_threshold
+        _parcel_coverage_threshold = parcel_coverage_threshold
+        _use_abs = use_abs
+        _plot = plot
+        transformer_f = Partial(
+            select_active_parcels_p,
+            parcellation_name=parcellation_name,
+            activation_name=activation_name,
+        )
+
+        @splice_on(
+            f,
+            expansion={
+                f'{paramstr}_activation_threshold': (
+                    float, _activation_threshold
+                ),
+                f'{paramstr}_parcel_coverage_threshold': (
+                    float, _parcel_coverage_threshold
+                ),
+                f'{paramstr}_use_abs': (bool, _use_abs),
+                f'{paramstr}_plot': (bool, _plot),
+            },
+            occlusion=select_active_parcels_p.output,
+        )
+        def f_transformed(
+            *,
+            surf: CortexTriSurface,
+            surf_scalars: Sequence[str] = (),
+            **params: Mapping,
+        ):
+            activation_threshold = params.pop(
+                f'{paramstr}_activation_threshold',
+                _activation_threshold,
+            )
+            parcel_coverage_threshold = params.pop(
+                f'{paramstr}_parcel_coverage_threshold',
+                _parcel_coverage_threshold,
+            )
+            use_abs = params.pop(f'{paramstr}_use_abs', _use_abs)
+            plot = params.pop(f'{paramstr}_plot', _plot)
+            return compositor(f, transformer_f)(**params)(
+                surf=surf,
+                activation_threshold=activation_threshold,
+                parcel_coverage_threshold=parcel_coverage_threshold,
+                use_abs=use_abs,
                 surf_scalars=surf_scalars,
                 plot=plot,
             )

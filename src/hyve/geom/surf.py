@@ -1232,6 +1232,67 @@ class CortexTriSurface:
         self.right.point_data[points_name] = self.right.point_data[name]
         self.right.point_data.remove(name)
 
+    def select_active_parcels(
+        self,
+        parcellation_name: str,
+        activation_name: str,
+        activation_threshold: float = 2.58,
+        parcel_coverage_threshold: float = 0.5,
+        use_abs: bool = False,
+    ):
+        if (
+            (parcellation_name in self.left.point_data) or
+            (parcellation_name in self.right.point_data)
+        ):
+            assert (
+                activation_name in self.left.point_data or
+                activation_name in self.right.point_data
+            ), (
+                f'Activation dataset {activation_name} must be defined over '
+                'vertices.'
+            )
+            domain = 'vertex'
+            parcellation_left = self.left.point_data[parcellation_name]
+            parcellation_right = self.right.point_data[parcellation_name]
+            activation_left = self.left.point_data[activation_name]
+            activation_right = self.right.point_data[activation_name]
+        elif (
+            (parcellation_name in self.left.cell_data) or
+            (parcellation_name in self.right.cell_data)
+        ):
+            assert (
+                activation_name in self.left.cell_data or
+                activation_name in self.right.cell_data
+            ), (
+                f'Activation dataset {activation_name} must be defined over '
+                'faces.'
+            )
+            domain = 'face'
+            parcellation_left = self.left.cell_data[parcellation_name]
+            parcellation_right = self.right.cell_data[parcellation_name]
+            activation_left = self.left.cell_data[activation_name]
+            activation_right = self.right.cell_data[activation_name]
+        self._hemisphere_select_active_parcels_impl(
+            'left',
+            parcellation_name,
+            parcellation=np.nan_to_num(parcellation_left).astype(int),
+            activation=activation_left,
+            activation_threshold=activation_threshold,
+            parcel_coverage_threshold=parcel_coverage_threshold,
+            use_abs=use_abs,
+            domain=domain,
+        )
+        self._hemisphere_select_active_parcels_impl(
+            'right',
+            parcellation_name,
+            parcellation=np.nan_to_num(parcellation_right).astype(int),
+            activation=activation_right,
+            activation_threshold=activation_threshold,
+            parcel_coverage_threshold=parcel_coverage_threshold,
+            use_abs=use_abs,
+            domain=domain,
+        )
+
     def draw_boundaries(
         self,
         scalars: str,
@@ -1307,101 +1368,6 @@ class CortexTriSurface:
             boundary_fill=boundary_fill,
             nonboundary_fill=nonboundary_fill,
         )
-
-    def _hemisphere_draw_boundaries_impl(
-        self,
-        hemisphere: str,
-        scalars: str,
-        scalar_array: Tensor,
-        boundary_name: str,
-        threshold: float = 0.5,
-        num_steps: int = 1,
-        source_domain: str = 'vertex',
-        target_domain: str = 'vertex',
-        domain: str = 'vertex',
-        v2f_interpolation: str = 'mode',
-        overwrite: bool = False,
-        copy_values_to_boundary: bool = True,
-        boundary_fill: float = 1.0,
-        nonboundary_fill: float = 0.0,
-    ):
-        step = 0
-        hemi_surf = self.__getattribute__(hemisphere)
-        faces = hemi_surf.faces.reshape(-1, 4)[..., 1:]
-        #TODO: This would probably be much more efficient if we could use an
-        #      adjacency matrix to find the neighbours of each face, rather
-        #      than iteratively resampling between vertex and face data.
-        while (step < (num_steps * 2)) or (domain != target_domain):
-            if domain == 'vertex':
-                scalar_array = scalar_array[faces].astype(float)
-                scalar_array = ~(
-                    (
-                        np.abs(scalar_array[..., 0] - scalar_array[..., 1])
-                        < threshold
-                    ) & (
-                        np.abs(scalar_array[..., 0] - scalar_array[..., 2])
-                        < threshold
-                    ) & (
-                        np.abs(scalar_array[..., 1] - scalar_array[..., 2])
-                        < threshold
-                    )
-                )
-                hemi_surf.cell_data[boundary_name] = scalar_array
-                domain = 'face'
-            else:
-                scalar_array = (
-                    #TODO: We're doing a lot of unnecessary resampling here.
-                    #      Can we at least just resample the boundary faces?
-                    pv.DataSetFilters.cell_data_to_point_data(
-                        hemi_surf
-                    ).point_data[boundary_name] != 0
-                )
-                hemi_surf.point_data[boundary_name] = scalar_array
-                domain = 'vertex'
-            step += 1
-        dataset = (
-            hemi_surf.point_data
-            if domain == 'vertex'
-            else hemi_surf.cell_data
-        )
-        if copy_values_to_boundary:
-            if source_domain == target_domain:
-                scalar_array = dataset[scalars]
-            elif target_domain == 'vertex':
-                scalar_array = pv.DataSetFilters.cell_data_to_point_data(
-                    hemi_surf
-                ).point_data[scalars]
-            else:
-                scalar_array = self._hemisphere_resample_v2f_impl(
-                    name=scalars,
-                    interpolation=v2f_interpolation,
-                    hemisphere=hemisphere,
-                )
-            dataset[boundary_name] = np.where(
-                dataset[boundary_name], scalar_array, nonboundary_fill
-            )
-        else:
-            dataset[boundary_name] = np.where(
-                dataset[boundary_name], boundary_fill, nonboundary_fill
-            )
-        if domain == 'face':
-            if boundary_name in hemi_surf.point_data:
-                hemi_surf.point_data.remove(boundary_name)
-            if overwrite:
-                hemi_surf.cell_data[scalars] = np.array(
-                    dataset[boundary_name]
-                )
-                if boundary_name in hemi_surf.cell_data:
-                    hemi_surf.cell_data.remove(boundary_name)
-        elif domain == 'vertex':
-            if boundary_name in hemi_surf.cell_data:
-                hemi_surf.cell_data.remove(boundary_name)
-            if overwrite:
-                hemi_surf.point_data[scalars] = np.array(
-                    dataset[boundary_name]
-                )
-                if boundary_name in hemi_surf.point_data:
-                    hemi_surf.point_data.remove(boundary_name)
 
     def parcel_centres_of_mass(
         self,
@@ -1888,6 +1854,141 @@ class CortexTriSurface:
                 f'{interpolation} was given.'
             )
         return scalars
+
+    def _hemisphere_select_active_parcels_impl(
+        self,
+        hemisphere: str,
+        parcellation_name: str,
+        parcellation: Tensor,
+        activation: Tensor,
+        activation_threshold: float = 2.58,
+        parcel_coverage_threshold: float = 0.5,
+        use_abs: bool = False,
+        domain: str = 'vertex',
+        null_value: float = 0.0,
+    ):
+        if use_abs:
+            activation = np.abs(activation)
+        activation = (activation > activation_threshold)
+        parcellation_arg = parcellation
+        parcellation = parcellation - parcellation.min()
+        null_index = int(null_value - parcellation.min())
+        n_parcels = parcellation.max() + 1
+        parcellation = np.eye(n_parcels)[parcellation]
+        parcellation = np.delete(parcellation, null_index, axis=1)
+        selection = (
+            (activation @ parcellation) /
+            parcellation.sum(0) >
+            parcel_coverage_threshold
+        )
+        parcellation = np.where(
+            parcellation.T[selection].sum(0),
+            parcellation_arg,
+            np.nan,
+        )
+        if domain == 'vertex':
+            self.__getattribute__(hemisphere).point_data[
+                parcellation_name
+            ] = parcellation
+        else:
+            self.__getattribute__(hemisphere).cell_data[
+                parcellation_name
+            ] = parcellation
+
+    def _hemisphere_draw_boundaries_impl(
+        self,
+        hemisphere: str,
+        scalars: str,
+        scalar_array: Tensor,
+        boundary_name: str,
+        threshold: float = 0.5,
+        num_steps: int = 1,
+        source_domain: str = 'vertex',
+        target_domain: str = 'vertex',
+        domain: str = 'vertex',
+        v2f_interpolation: str = 'mode',
+        overwrite: bool = False,
+        copy_values_to_boundary: bool = True,
+        boundary_fill: float = 1.0,
+        nonboundary_fill: float = 0.0,
+    ):
+        step = 0
+        hemi_surf = self.__getattribute__(hemisphere)
+        faces = hemi_surf.faces.reshape(-1, 4)[..., 1:]
+        #TODO: This would probably be much more efficient if we could use an
+        #      adjacency matrix to find the neighbours of each face, rather
+        #      than iteratively resampling between vertex and face data.
+        while (step < (num_steps * 2)) or (domain != target_domain):
+            if domain == 'vertex':
+                scalar_array = scalar_array[faces].astype(float)
+                scalar_array = ~(
+                    (
+                        np.abs(scalar_array[..., 0] - scalar_array[..., 1])
+                        < threshold
+                    ) & (
+                        np.abs(scalar_array[..., 0] - scalar_array[..., 2])
+                        < threshold
+                    ) & (
+                        np.abs(scalar_array[..., 1] - scalar_array[..., 2])
+                        < threshold
+                    )
+                )
+                hemi_surf.cell_data[boundary_name] = scalar_array
+                domain = 'face'
+            else:
+                scalar_array = (
+                    #TODO: We're doing a lot of unnecessary resampling here.
+                    #      Can we at least just resample the boundary faces?
+                    pv.DataSetFilters.cell_data_to_point_data(
+                        hemi_surf
+                    ).point_data[boundary_name] != 0
+                )
+                hemi_surf.point_data[boundary_name] = scalar_array
+                domain = 'vertex'
+            step += 1
+        dataset = (
+            hemi_surf.point_data
+            if domain == 'vertex'
+            else hemi_surf.cell_data
+        )
+        if copy_values_to_boundary:
+            if source_domain == target_domain:
+                scalar_array = dataset[scalars]
+            elif target_domain == 'vertex':
+                scalar_array = pv.DataSetFilters.cell_data_to_point_data(
+                    hemi_surf
+                ).point_data[scalars]
+            else:
+                scalar_array = self._hemisphere_resample_v2f_impl(
+                    name=scalars,
+                    interpolation=v2f_interpolation,
+                    hemisphere=hemisphere,
+                )
+            dataset[boundary_name] = np.where(
+                dataset[boundary_name], scalar_array, nonboundary_fill
+            )
+        else:
+            dataset[boundary_name] = np.where(
+                dataset[boundary_name], boundary_fill, nonboundary_fill
+            )
+        if domain == 'face':
+            if boundary_name in hemi_surf.point_data:
+                hemi_surf.point_data.remove(boundary_name)
+            if overwrite:
+                hemi_surf.cell_data[scalars] = np.array(
+                    dataset[boundary_name]
+                )
+                if boundary_name in hemi_surf.cell_data:
+                    hemi_surf.cell_data.remove(boundary_name)
+        elif domain == 'vertex':
+            if boundary_name in hemi_surf.cell_data:
+                hemi_surf.cell_data.remove(boundary_name)
+            if overwrite:
+                hemi_surf.point_data[scalars] = np.array(
+                    dataset[boundary_name]
+                )
+                if boundary_name in hemi_surf.point_data:
+                    hemi_surf.point_data.remove(boundary_name)
 
     def scalar_percentile(
         self,

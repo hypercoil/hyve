@@ -681,6 +681,28 @@ def draw_surface_boundary_f(
     return surf, surf_scalars
 
 
+def select_active_parcels_f(
+    surf: CortexTriSurface,
+    parcellation_name: str,
+    activation_name: str,
+    activation_threshold: float = 2.58,
+    parcel_coverage_threshold: float = 0.5,
+    use_abs: bool = False,
+    surf_scalars: Sequence[str] = (),
+    plot: bool = True,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    surf.select_active_parcels(
+        parcellation_name=parcellation_name,
+        activation_name=activation_name,
+        activation_threshold=activation_threshold,
+        parcel_coverage_threshold=parcel_coverage_threshold,
+        use_abs=use_abs,
+    )
+    if plot and parcellation_name not in surf_scalars:
+        surf_scalars = tuple(list(surf_scalars) + [parcellation_name])
+    return surf, surf_scalars
+
+
 def _copy_dict_from_params(
     params: Mapping[str, Any],
     key_default: Sequence[Tuple[str, Any]] = (),
@@ -2956,6 +2978,14 @@ draw_surface_boundary_p = Primitive(
     draw_surface_boundary_f,
     'draw_surface_boundary',
     output=('surf', 'surf_scalars'), #('surf', 'surf_scalars_layers'),
+    forward_unused=True,
+)
+
+
+select_active_parcels_p = Primitive(
+    select_active_parcels_f,
+    'select_active_parcels',
+    output=('surf', 'surf_scalars'),
     forward_unused=True,
 )
 
