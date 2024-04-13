@@ -1833,7 +1833,7 @@ def closest_ortho_camera_aux_f(
 def planar_sweep_camera_f(
     surf: CortexTriSurface,
     hemispheres: Optional[str],
-    initial: Sequence,
+    initial: Sequence = (1, 0, 0),
     normal: Optional[Sequence[float]] = None,
     n_steps: int = 10,
     require_planar: bool = True,

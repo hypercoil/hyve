@@ -1748,36 +1748,38 @@ def scalar_focus_camera(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        _kind = kind
         transformer_f = Partial(
             transform_postprocessor_p,
             name='snapshots',
-            transformer=Partial(
-                scalar_focus_camera_p,
-                kind=kind,
-                __allowed__=(
-                    'surf',
-                    'hemispheres',
-                    'surf_scalars',
-                    'surf_projection',
-                    'close_plotter',
-                ),
-            ),
-            auxwriter=Partial(
-                scalar_focus_camera_aux_p,
-                kind=kind,
-                __allowed__=(
-                    'hemisphere',
-                ),
-            ),
         )
 
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            autocam_focus: Literal["centroid", "peak"] = _kind,
             **params: Mapping,
         ):
             return compositor(f, transformer_f)(**params)(
                 postprocessors=postprocessors,
+                transformer=Partial(
+                    scalar_focus_camera_p,
+                    kind=autocam_focus,
+                    __allowed__=(
+                        'surf',
+                        'hemispheres',
+                        'surf_scalars',
+                        'surf_projection',
+                        'close_plotter',
+                    ),
+                ),
+                auxwriter=Partial(
+                    scalar_focus_camera_aux_p,
+                    kind=autocam_focus,
+                    __allowed__=(
+                        'hemisphere',
+                    ),
+                ),
             )
 
         return f_transformed
@@ -1791,36 +1793,38 @@ def closest_ortho_camera(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        _n_ortho = n_ortho
         transformer_f = Partial(
             transform_postprocessor_p,
             name='snapshots',
-            transformer=Partial(
-                closest_ortho_camera_p,
-                n_ortho=n_ortho,
-                __allowed__=(
-                    'surf',
-                    'hemispheres',
-                    'surf_scalars',
-                    'surf_projection',
-                    'close_plotter',
-                ),
-            ),
-            auxwriter=Partial(
-                closest_ortho_camera_aux_p,
-                n_ortho=n_ortho,
-                __allowed__=(
-                    'hemisphere',
-                ),
-            ),
         )
 
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            autocam_n_ortho: int = _n_ortho,
             **params: Mapping,
         ):
             return compositor(f, transformer_f)(**params)(
                 postprocessors=postprocessors,
+                transformer=Partial(
+                    closest_ortho_camera_p,
+                    n_ortho=autocam_n_ortho,
+                    __allowed__=(
+                        'surf',
+                        'hemispheres',
+                        'surf_scalars',
+                        'surf_projection',
+                        'close_plotter',
+                    ),
+                ),
+                auxwriter=Partial(
+                    closest_ortho_camera_aux_p,
+                    n_ortho=autocam_n_ortho,
+                    __allowed__=(
+                        'hemisphere',
+                    ),
+                ),
             )
 
         return f_transformed
@@ -1828,46 +1832,54 @@ def closest_ortho_camera(
 
 
 def planar_sweep_camera(
-    initial: Sequence,
+    initial: Sequence = (1, 0, 0),
     normal: Optional[Sequence[float]] = None,
-    n_steps: int = 10,
+    n_angles: int = 10,
     require_planar: bool = True,
 ) -> callable:
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        _initial = initial
+        _normal = normal
+        _n_angles = n_angles
+        _require_planar = require_planar
         transformer_f = Partial(
             transform_postprocessor_p,
             name='snapshots',
-            transformer=Partial(
-                planar_sweep_camera_p,
-                initial=initial,
-                normal=normal,
-                n_steps=n_steps,
-                require_planar=require_planar,
-                __allowed__=(
-                    'surf',
-                    'hemispheres',
-                    'close_plotter',
-                ),
-            ),
-            auxwriter=Partial(
-                planar_sweep_camera_aux_p,
-                n_steps=n_steps,
-                __allowed__=(
-                    'hemisphere',
-                ),
-            ),
         )
 
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            autocam_sweep_initial_angle: Sequence[float] = _initial,
+            autocam_sweep_normal_vector: Optional[Sequence[float]] = _normal,
+            autocam_sweep_n_angles: int = _n_angles,
+            autocam_sweep_require_planar: bool = _require_planar,
             **params: Mapping,
         ):
             return compositor(f, transformer_f)(**params)(
                 postprocessors=postprocessors,
+                transformer=Partial(
+                    planar_sweep_camera_p,
+                    initial=autocam_sweep_initial_angle,
+                    normal=autocam_sweep_normal_vector,
+                    n_steps=autocam_sweep_n_angles,
+                    require_planar=autocam_sweep_require_planar,
+                    __allowed__=(
+                        'surf',
+                        'hemispheres',
+                        'close_plotter',
+                    ),
+                ),
+                auxwriter=Partial(
+                    planar_sweep_camera_aux_p,
+                    n_steps=autocam_sweep_n_angles,
+                    __allowed__=(
+                        'hemisphere',
+                    ),
+                ),
             )
 
         return f_transformed
@@ -1897,37 +1909,51 @@ def auto_camera(
             transformer_arg = {}
         else:
             transformer_arg = {'surf_scalars': surf_scalars}
+        _n_ortho = n_ortho
+        _focus = focus
+        _n_angles = n_angles
+        _initial_angle = initial_angle
+        _normal_vector = normal_vector
         transformer_f = Partial(
             transform_postprocessor_p,
             name='snapshots',
-            transformer=Partial(
-                auto_camera_p,
-                n_ortho=n_ortho,
-                focus=focus,
-                n_angles=n_angles,
-                initial_angle=initial_angle,
-                normal_vector=normal_vector,
-                __allowed__=__allowed__,
-                **transformer_arg,
-            ),
-            auxwriter=Partial(
-                auto_camera_aux_p,
-                n_ortho=n_ortho,
-                focus=focus,
-                n_angles=n_angles,
-                __allowed__=(
-                    'hemisphere',
-                ),
-            ),
         )
 
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            autocam_n_ortho: int = _n_ortho,
+            autocam_focus: Optional[Literal["centroid", "peak"]] = _focus,
+            autocam_sweep_n_angles: int = _n_angles,
+            autocam_sweep_initial_angle: Tuple[
+                float, float, float
+            ] = _initial_angle,
+            autocam_sweep_normal_vector: Optional[
+                Tuple[float, float, float]
+            ] = _normal_vector,
             **params: Mapping,
         ):
             return compositor(f, transformer_f)(**params)(
                 postprocessors=postprocessors,
+                transformer=Partial(
+                    auto_camera_p,
+                    n_ortho=autocam_n_ortho,
+                    focus=autocam_focus,
+                    n_angles=autocam_sweep_n_angles,
+                    initial_angle=autocam_sweep_initial_angle,
+                    normal_vector=autocam_sweep_normal_vector,
+                    __allowed__=__allowed__,
+                    **transformer_arg,
+                ),
+                auxwriter=Partial(
+                    auto_camera_aux_p,
+                    n_ortho=autocam_n_ortho,
+                    focus=autocam_focus,
+                    n_angles=autocam_sweep_n_angles,
+                    __allowed__=(
+                        'hemisphere',
+                    ),
+                ),
             )
 
         return f_transformed
@@ -1984,6 +2010,11 @@ def plot_to_image() -> callable:
 def plot_final_image(
     n_scenes: int = 1,
 ) -> callable:
+    if n_scenes > 1:
+        raise NotImplementedError(
+            'The `plot_final_image` postprocessor does not currently '
+            'support multiple scenes.'
+        )
     def transform(
         f: callable,
         compositor: callable = direct_compositor,
@@ -1991,11 +2022,6 @@ def plot_final_image(
         transformer_f = add_postprocessor_p
         _postprocessor = F(plot_final_view_f)
         _auxwriter = plot_to_image_aux_p
-        if n_scenes > 1:
-            raise NotImplementedError(
-                'The `plot_final_image` postprocessor does not currently '
-                'support multiple scenes.'
-            )
 
         @splice_on(f, occlusion=('off_screen', 'window_size'))
         def f_transformed(
