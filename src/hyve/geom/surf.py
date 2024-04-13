@@ -342,15 +342,15 @@ class ProjectedPolyData(pv.PolyData):
             except KeyError:
                 color_array = self.point_data[dst.color]
                 data_domain = 'point_data'
-        except KeyError:
+        except Exception:
             cmap = None
             color = dst.color or DEFAULT_COLOR
             try:
                 self.cell_data[layers[1].name]
-                color_array = np.empty(self.n_cells)
+                color_array = np.zeros(self.n_cells)
             except (KeyError, IndexError):
                 data_domain = 'point_data'
-                color_array = np.empty(self.n_points)
+                color_array = np.zeros(self.n_points)
         if isinstance(dst.alpha, str):
             alpha_array = self.__getattribute__(
                 data_domain
@@ -458,7 +458,7 @@ class ProjectedPolyData(pv.PolyData):
             style = SURF_DEFAULT_STYLE
         else:
             style = {**SURF_DEFAULT_STYLE, **style}
-        # backup, because setting the scalars using the arg in the add_mesh
+        # fallback, because setting the scalars using the arg in the add_mesh
         # call below doesn't always work
         self.set_active_scalars(name)
         # TODO: copying the mesh seems like it could create memory issues.
@@ -1225,6 +1225,10 @@ class CortexTriSurface:
         boundary_fill: float = 1.0,
         nonboundary_fill: float = 0.0,
     ):
+        overwrite = False
+        if scalars == boundary_name:
+            overwrite = True
+            boundary_name = f'{boundary_name}:boundary'
         if (
             (scalars in self.left.point_data) or
             (scalars in self.right.point_data)
@@ -1256,6 +1260,7 @@ class CortexTriSurface:
             source_domain=source_domain,
             target_domain=target_domain,
             domain=domain,
+            overwrite=overwrite,
             copy_values_to_boundary=copy_values_to_boundary,
             boundary_fill=boundary_fill,
             nonboundary_fill=nonboundary_fill,
@@ -1270,6 +1275,7 @@ class CortexTriSurface:
             source_domain=source_domain,
             target_domain=target_domain,
             domain=domain,
+            overwrite=overwrite,
             copy_values_to_boundary=copy_values_to_boundary,
             boundary_fill=boundary_fill,
             nonboundary_fill=nonboundary_fill,
@@ -1286,6 +1292,7 @@ class CortexTriSurface:
         source_domain: str = 'vertex',
         target_domain: str = 'vertex',
         domain: str = 'vertex',
+        overwrite: bool = False,
         copy_values_to_boundary: bool = True,
         boundary_fill: float = 1.0,
         nonboundary_fill: float = 0.0,
@@ -1349,8 +1356,18 @@ class CortexTriSurface:
             )
         if domain == 'face':
             hemi_surf.point_data.remove(boundary_name)
+            if overwrite:
+                hemi_surf.cell_data[scalars] = np.array(
+                    dataset[boundary_name]
+                )
+                hemi_surf.cell_data.remove(boundary_name)
         elif domain == 'vertex':
             hemi_surf.cell_data.remove(boundary_name)
+            if overwrite:
+                hemi_surf.point_data[scalars] = np.array(
+                    dataset[boundary_name]
+                )
+                hemi_surf.point_data.remove(boundary_name)
 
     def parcel_centres_of_mass(
         self,

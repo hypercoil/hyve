@@ -91,7 +91,7 @@ from .prim import (
     surf_scalars_from_freesurfer_p,
     surf_scalars_from_gifti_p,
     surf_scalars_from_nifti_p,
-    surface_boundary_overlay_p,
+    draw_surface_boundary_p,
     svg_element_p,
     text_element_p,
     transform_postprocessor_p,
@@ -1321,7 +1321,7 @@ def vertex_to_face(
     return transform
 
 
-def surface_boundary_overlay(
+def draw_surface_boundary(
     scalars: str,
     boundary_name: Optional[str] = None,
     *,
@@ -1347,7 +1347,7 @@ def surface_boundary_overlay(
         _num_steps = num_steps
         _plot = plot
         transformer_f = Partial(
-            surface_boundary_overlay_p,
+            draw_surface_boundary_p,
             boundary_name=_boundary_name,
             scalars=scalars,
         )
@@ -1397,10 +1397,8 @@ def surface_boundary_overlay(
             )
             num_steps = params.pop(f'{paramstr}_num_steps', _num_steps)
             plot = params.pop(f'{paramstr}_plot', _plot)
-            surf_scalars_layers = params.pop('surf_scalars_layers', ())
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
-                surf_scalars_layers=surf_scalars_layers,
                 boundary_threshold=boundary_threshold,
                 target_domain=target_domain,
                 copy_values_to_boundary=copy_values_to_boundary,

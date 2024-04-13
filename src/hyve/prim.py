@@ -651,11 +651,10 @@ def vertex_to_face_f(
     return surf
 
 
-def surface_boundary_overlay_f(
+def draw_surface_boundary_f(
     surf: CortexTriSurface,
     boundary_name: str,
     scalars: str,
-    surf_scalars_layers: Sequence[Layer],
     boundary_threshold: float = 0.5,
     target_domain: Literal['vertex', 'face'] = 'vertex',
     copy_values_to_boundary: bool = False,
@@ -677,7 +676,6 @@ def surface_boundary_overlay_f(
     )
     if plot and boundary_name not in surf_scalars:
         surf_scalars = tuple(list(surf_scalars) + [boundary_name])
-    #assert 0
     return surf, surf_scalars
 
 
@@ -2952,9 +2950,9 @@ vertex_to_face_p = Primitive(
 )
 
 
-surface_boundary_overlay_p = Primitive(
-    surface_boundary_overlay_f,
-    'surface_boundary_overlay',
+draw_surface_boundary_p = Primitive(
+    draw_surface_boundary_f,
+    'draw_surface_boundary',
     output=('surf', 'surf_scalars'), #('surf', 'surf_scalars_layers'),
     forward_unused=True,
 )
