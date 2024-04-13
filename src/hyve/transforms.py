@@ -2245,6 +2245,7 @@ def save_grid(
 
 def svg_element(
     name: str,
+    *,
     src_file: str,
     height: Optional[int] = None,
     width: Optional[int] = None,
@@ -2256,24 +2257,47 @@ def svg_element(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        _src_file = src_file
+        _height = height
+        _width = width
+        _height_mm = height_mm
+        _width_mm = width_mm
+        _priority = priority
         transformer_f = Partial(
             svg_element_p,
             name=name,
-            src_file=src_file,
-            height=height,
-            width=width,
-            height_mm=height_mm,
-            width_mm=width_mm,
-            priority=priority,
         )
 
-        @splice_on(f, occlusion=svg_element_p.output)
+        @splice_on(
+            f,
+            expansion={
+                f'{name}_element_src_file': (str, _src_file),
+                f'{name}_element_height': (Optional[int], _height),
+                f'{name}_element_width': (Optional[int], _width),
+                f'{name}_element_height_mm': (Optional[int], _height_mm),
+                f'{name}_element_width_mm': (Optional[int], _width_mm),
+                f'{name}_element_priority': (int, _priority),
+            },
+            occlusion=svg_element_p.output,
+        )
         def f_transformed(
             elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
             **params,
         ):
+            src_file = params.pop(f'{name}_element_src_file', _src_file)
+            height = params.pop(f'{name}_element_height', _height)
+            width = params.pop(f'{name}_element_width', _width)
+            height_mm = params.pop(f'{name}_element_height_mm', _height_mm)
+            width_mm = params.pop(f'{name}_element_width_mm', _width_mm)
+            priority = params.pop(f'{name}_element_priority', _priority)
             return compositor(f, transformer_f)(**params)(
                 elements=elements,
+                src_file=src_file,
+                height=height,
+                width=width,
+                height_mm=height_mm,
+                width_mm=width_mm,
+                priority=priority,
             )
 
         return f_transformed
@@ -2282,6 +2306,7 @@ def svg_element(
 
 def pyplot_element(
     name: str,
+    *,
     plotter: callable,
     priority: int = 0,
     **plotter_params,
@@ -2290,21 +2315,37 @@ def pyplot_element(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        _plotter = plotter
+        _priority = priority
+        _plotter_params = plotter_params
         transformer_f = Partial(
             pyplot_element_p,
             name=name,
-            plotter=plotter,
-            priority=priority,
-            plotter_params=plotter_params,
         )
 
-        @splice_on(f, occlusion=pyplot_element_p.output)
+        @splice_on(
+            f,
+            expansion={
+                f'{name}_element_plotter': (callable, _plotter),
+                f'{name}_element_priority': (int, _priority),
+                f'{name}_element_plotter_params': (Mapping, _plotter_params),
+            },
+            occlusion=pyplot_element_p.output,
+        )
         def f_transformed(
             elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
             **params,
         ):
+            plotter = params.pop(f'{name}_element_plotter', _plotter)
+            priority = params.pop(f'{name}_element_priority', _priority)
+            plotter_params = params.pop(
+                f'{name}_element_plotter_params', _plotter_params
+            )
             return compositor(f, transformer_f)(**params)(
                 elements=elements,
+                plotter=plotter,
+                priority=priority,
+                plotter_params=plotter_params,
             )
 
         return f_transformed
@@ -2313,6 +2354,7 @@ def pyplot_element(
 
 def text_element(
     name: str,
+    *,
     content: str = TEXT_DEFAULT_CONTENT,
     font: str = TEXT_DEFAULT_FONT,
     font_size_multiplier: int = TEXT_DEFAULT_FONT_SIZE_MULTIPLIER,
@@ -2328,28 +2370,84 @@ def text_element(
         f: callable,
         compositor: callable = direct_compositor,
     ) -> callable:
+        _content = content
+        _font = font
+        _font_size_multiplier = font_size_multiplier
+        _font_color = font_color
+        _font_outline_color = font_outline_color
+        _font_outline_multiplier = font_outline_multiplier
+        _bounding_box_width = bounding_box_width
+        _bounding_box_height = bounding_box_height
+        _angle = angle
+        _priority = priority
         transformer_f = Partial(
             text_element_p,
             name=name,
-            content=content,
-            font=font,
-            font_size_multiplier=font_size_multiplier,
-            font_color=font_color,
-            font_outline_color=font_outline_color,
-            font_outline_multiplier=font_outline_multiplier,
-            bounding_box_width=bounding_box_width,
-            bounding_box_height=bounding_box_height,
-            angle=angle,
-            priority=priority,
         )
 
-        @splice_on(f, occlusion=text_element_p.output)
+        @splice_on(
+            f,
+            expansion={
+                f'{name}_element_content': (str, _content),
+                f'{name}_element_font': (str, _font),
+                f'{name}_element_font_size_multiplier': (
+                    int, _font_size_multiplier
+                ),
+                f'{name}_element_font_color': (Any, _font_color),
+                f'{name}_element_font_outline_color': (
+                    Any, _font_outline_color
+                ),
+                f'{name}_element_font_outline_multiplier': (
+                    float, _font_outline_multiplier
+                ),
+                f'{name}_element_bounding_box_width': (
+                    Optional[int], _bounding_box_width
+                ),
+                f'{name}_element_bounding_box_height': (
+                    Optional[int], _bounding_box_height
+                ),
+                f'{name}_element_angle': (int, _angle),
+                f'{name}_element_priority': (int, _priority),
+            },
+            occlusion=text_element_p.output,
+        )
         def f_transformed(
             elements: Optional[Mapping[str, Sequence[ElementBuilder]]] = None,
             **params,
         ):
+            content = params.pop(f'{name}_element_content', _content)
+            font = params.pop(f'{name}_element_font', _font)
+            font_size_multiplier = params.pop(
+                f'{name}_element_font_size_multiplier', _font_size_multiplier
+            )
+            font_color = params.pop(f'{name}_element_font_color', _font_color)
+            font_outline_color = params.pop(
+                f'{name}_element_font_outline_color', _font_outline_color
+            )
+            font_outline_multiplier = params.pop(
+                f'{name}_element_font_outline_multiplier',
+                _font_outline_multiplier,
+            )
+            bounding_box_width = params.pop(
+                f'{name}_element_bounding_box_width', _bounding_box_width
+            )
+            bounding_box_height = params.pop(
+                f'{name}_element_bounding_box_height', _bounding_box_height
+            )
+            angle = params.pop(f'{name}_element_angle', _angle)
+            priority = params.pop(f'{name}_element_priority', _priority)
             return compositor(f, transformer_f)(**params)(
                 elements=elements,
+                content=content,
+                font=font,
+                font_size_multiplier=font_size_multiplier,
+                font_color=font_color,
+                font_outline_color=font_outline_color,
+                font_outline_multiplier=font_outline_multiplier,
+                bounding_box_width=bounding_box_width,
+                bounding_box_height=bounding_box_height,
+                angle=angle,
+                priority=priority,
             )
 
         return f_transformed
