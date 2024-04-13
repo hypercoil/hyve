@@ -1225,7 +1225,7 @@ def scatter_into_parcels(
             f,
             occlusion=scatter_into_parcels_p.output,
             expansion={
-                paramstr: (Tensor, REQUIRED),
+                f'{paramstr}_parcellated': (Tensor, REQUIRED),
                 f'{paramstr}_plot': (bool, _plot),
             },
         )
@@ -1236,7 +1236,7 @@ def scatter_into_parcels(
             **params: Mapping,
         ):
             try:
-                parcellated = params.pop(paramstr)
+                parcellated = params.pop(f'{paramstr}_parcellated')
             except KeyError:
                 raise TypeError(
                     'Transformed plot function missing one required '
@@ -1327,6 +1327,7 @@ def draw_surface_boundary(
     *,
     boundary_threshold: float = 0.5,
     target_domain: Literal['vertex', 'face'] = 'vertex',
+    v2f_interpolation: str = 'mode',
     copy_values_to_boundary: bool = False,
     boundary_fill: float = 1.0,
     nonboundary_fill: Optional[float] = np.nan,
@@ -1341,6 +1342,7 @@ def draw_surface_boundary(
         paramstr = sanitise(_boundary_name)
         _boundary_threshold = boundary_threshold
         _target_domain = target_domain
+        _v2f_interpolation = v2f_interpolation
         _copy_values_to_boundary = copy_values_to_boundary
         _boundary_fill = boundary_fill
         _nonboundary_fill = nonboundary_fill
@@ -1357,6 +1359,7 @@ def draw_surface_boundary(
             expansion={
                 f'{paramstr}_boundary_threshold': (str, _boundary_threshold),
                 f'{paramstr}_target_domain': (str, _target_domain),
+                f'{paramstr}_v2f_interpolation': (str, _v2f_interpolation),
                 f'{paramstr}_copy_values_to_boundary': (
                     bool, _copy_values_to_boundary
                 ),
@@ -1383,6 +1386,10 @@ def draw_surface_boundary(
                 f'{paramstr}_target_domain',
                 _target_domain,
             )
+            v2f_interpolation = params.pop(
+                f'{paramstr}_v2f_interpolation',
+                _v2f_interpolation,
+            )
             copy_values_to_boundary = params.pop(
                 f'{paramstr}_copy_values_to_boundary',
                 _copy_values_to_boundary,
@@ -1401,6 +1408,7 @@ def draw_surface_boundary(
                 surf=surf,
                 boundary_threshold=boundary_threshold,
                 target_domain=target_domain,
+                v2f_interpolation=v2f_interpolation,
                 copy_values_to_boundary=copy_values_to_boundary,
                 boundary_fill=boundary_fill,
                 nonboundary_fill=nonboundary_fill,

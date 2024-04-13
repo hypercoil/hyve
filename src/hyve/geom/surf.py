@@ -24,6 +24,7 @@ import nibabel as nb
 import numpy as np
 import pyvista as pv
 import templateflow.api as tflow
+from matplotlib import colors
 from scipy.spatial.distance import cdist
 
 from .base import (
@@ -388,9 +389,25 @@ class ProjectedPolyData(pv.PolyData):
         Convert a layer to RGBA colors.
         """
         try:
-            color_array = self.__getattribute__(
-                data_domain
-            )[layer.color]
+            try:
+                color_array = self.__getattribute__(
+                    data_domain
+                )[layer.color]
+                color = None
+            except KeyError:
+                colors.to_rgba(layer.color) # Check if it's a valid color
+                color_array = np.zeros(
+                    self.n_points
+                    if data_domain == 'point_data'
+                    else self.n_cells
+                )
+                if layer.name in self.__getattribute__(data_domain):
+                    color_array = np.where(
+                        np.isnan(self.__getattribute__(data_domain)[layer.name]),
+                        np.nan,
+                        color_array,
+                    )
+                color = layer.color
             if isinstance(layer.alpha, str):
                 alpha_array = self.__getattribute__(
                     data_domain
@@ -401,16 +418,17 @@ class ProjectedPolyData(pv.PolyData):
                 alpha_repl = layer.alpha
             layer = dataclasses.replace(
                 layer,
-                color=None,
+                color=color,
                 alpha=alpha_repl,
             )
-        except KeyError:
+        except (KeyError, ValueError):
             raise ValueError(
                 'All layers must be defined over the same data '
                 'domain. The base layer is defined over '
-                f'{data_domain}, but either the layer {layer.name} or '
+                f'{data_domain}, but either the layer {layer.color} or '
                 f'the alpha scalars {layer.alpha} (if string) was not '
-                f'found in {data_domain}. In particular, ensure that '
+                f'found in {data_domain}, or {layer.color} is an invalid '
+                'matplotlib colour specification. In particular, ensure '
                 'that, if you have mapped any layer to faces, all '
                 'other layers are also mapped to faces.'
             )
@@ -1221,6 +1239,7 @@ class CortexTriSurface:
         threshold: float = 0.5,
         num_steps: int = 1,
         target_domain: Optional[Literal['vertex', 'face']] = None,
+        v2f_interpolation: str = 'mode',
         copy_values_to_boundary: bool = True,
         boundary_fill: float = 1.0,
         nonboundary_fill: float = 0.0,
@@ -1237,12 +1256,19 @@ class CortexTriSurface:
             scalars_left = self.left.point_data[scalars]
             scalars_right = self.right.point_data[scalars]
         elif (
-            (scalars in self.left.face_data) or
-            (scalars in self.right.face_data)
+            (scalars in self.left.cell_data) or
+            (scalars in self.right.cell_data)
         ):
+            assert NotImplementedError(
+                'Drawing boundaries for face datasets is not yet '
+                'implemented. It is possible to obtain face-valued '
+                'boundaries by first drawing boundaries (before '
+                'resampling vertex datasets to faces), and setting ``face`` '
+                'as the target domain in the draw boundaries call.'
+            )
             source_domain = domain = 'face'
-            scalars_left = self.left.face_data[scalars]
-            scalars_right = self.right.face_data[scalars]
+            scalars_left = self.left.cell_data[scalars]
+            scalars_right = self.right.cell_data[scalars]
         else:
             raise ValueError(
                 f'Unable to compute boundary for {scalars}: not found '
@@ -1275,6 +1301,7 @@ class CortexTriSurface:
             source_domain=source_domain,
             target_domain=target_domain,
             domain=domain,
+            v2f_interpolation=v2f_interpolation,
             overwrite=overwrite,
             copy_values_to_boundary=copy_values_to_boundary,
             boundary_fill=boundary_fill,
@@ -1292,6 +1319,7 @@ class CortexTriSurface:
         source_domain: str = 'vertex',
         target_domain: str = 'vertex',
         domain: str = 'vertex',
+        v2f_interpolation: str = 'mode',
         overwrite: bool = False,
         copy_values_to_boundary: bool = True,
         boundary_fill: float = 1.0,
@@ -1305,7 +1333,7 @@ class CortexTriSurface:
         #      than iteratively resampling between vertex and face data.
         while (step < (num_steps * 2)) or (domain != target_domain):
             if domain == 'vertex':
-                scalar_array = scalar_array[faces]
+                scalar_array = scalar_array[faces].astype(float)
                 scalar_array = ~(
                     (
                         np.abs(scalar_array[..., 0] - scalar_array[..., 1])
@@ -1324,29 +1352,31 @@ class CortexTriSurface:
                 scalar_array = (
                     #TODO: We're doing a lot of unnecessary resampling here.
                     #      Can we at least just resample the boundary faces?
-                    pv.CompositeFilters.cell_data_to_point_data(
+                    pv.DataSetFilters.cell_data_to_point_data(
                         hemi_surf
                     ).point_data[boundary_name] != 0
                 )
                 hemi_surf.point_data[boundary_name] = scalar_array
                 domain = 'vertex'
             step += 1
+        dataset = (
+            hemi_surf.point_data
+            if domain == 'vertex'
+            else hemi_surf.cell_data
+        )
         if copy_values_to_boundary:
-            dataset = (
-                hemi_surf.point_data
-                if domain == 'vertex'
-                else hemi_surf.face_data
-            )
             if source_domain == target_domain:
                 scalar_array = dataset[scalars]
             elif target_domain == 'vertex':
-                scalar_array = pv.CompositeFilters.cell_data_to_point_data(
+                scalar_array = pv.DataSetFilters.cell_data_to_point_data(
                     hemi_surf
                 ).point_data[scalars]
             else:
-                scalar_array = pv.CompositeFilters.point_data_to_cell_data(
-                    hemi_surf
-                ).cell_data[scalars]
+                scalar_array = self._hemisphere_resample_v2f_impl(
+                    name=scalars,
+                    interpolation=v2f_interpolation,
+                    hemisphere=hemisphere,
+                )
             dataset[boundary_name] = np.where(
                 dataset[boundary_name], scalar_array, nonboundary_fill
             )
@@ -1355,19 +1385,23 @@ class CortexTriSurface:
                 dataset[boundary_name], boundary_fill, nonboundary_fill
             )
         if domain == 'face':
-            hemi_surf.point_data.remove(boundary_name)
+            if boundary_name in hemi_surf.point_data:
+                hemi_surf.point_data.remove(boundary_name)
             if overwrite:
                 hemi_surf.cell_data[scalars] = np.array(
                     dataset[boundary_name]
                 )
-                hemi_surf.cell_data.remove(boundary_name)
+                if boundary_name in hemi_surf.cell_data:
+                    hemi_surf.cell_data.remove(boundary_name)
         elif domain == 'vertex':
-            hemi_surf.cell_data.remove(boundary_name)
+            if boundary_name in hemi_surf.cell_data:
+                hemi_surf.cell_data.remove(boundary_name)
             if overwrite:
                 hemi_surf.point_data[scalars] = np.array(
                     dataset[boundary_name]
                 )
-                hemi_surf.point_data.remove(boundary_name)
+                if boundary_name in hemi_surf.point_data:
+                    hemi_surf.point_data.remove(boundary_name)
 
     def parcel_centres_of_mass(
         self,
