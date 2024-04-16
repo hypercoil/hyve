@@ -84,6 +84,7 @@ from .prim import (
     scalar_focus_camera_p,
     scatter_into_parcels_p,
     select_active_parcels_p,
+    select_internal_points_p,
     surf_from_archive_p,
     surf_from_freesurfer_p,
     surf_from_gifti_p,
@@ -738,6 +739,7 @@ def points_scalars_from_nifti(
     *,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
+    geom_name: str = None,
     plot: bool = True,
 ) -> callable:
     def transform(
@@ -748,6 +750,7 @@ def points_scalars_from_nifti(
         paramstr_ext = f'{paramstr}_nifti'
         _null_value = null_value
         _point_size = point_size
+        _geom_name = geom_name
         _plot = plot
         transformer_f = Partial(
             points_scalars_from_nifti_p,
@@ -761,6 +764,7 @@ def points_scalars_from_nifti(
                 paramstr_ext: (Union[nb.Nifti1Image, str], REQUIRED),
                 f'{paramstr}_null_value': (Optional[float], _null_value),
                 f'{paramstr}_point_size': (Optional[float], _point_size),
+                f'{paramstr}_geom_name': (str, _geom_name),
                 f'{paramstr}_plot': (bool, _plot),
             },
         )
@@ -779,6 +783,7 @@ def points_scalars_from_nifti(
                 )
             null_value = params.pop(f'{paramstr}_null_value', _null_value)
             point_size = params.pop(f'{paramstr}_point_size', _point_size)
+            geom_name = params.pop(f'{paramstr}_geom_name', _geom_name)
             plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 nifti=nifti,
@@ -786,6 +791,7 @@ def points_scalars_from_nifti(
                 points_scalars=points_scalars,
                 null_value=null_value,
                 point_size=point_size,
+                geom_name=geom_name,
                 plot=plot,
             )
 
@@ -797,6 +803,7 @@ def points_scalars_from_array(
     scalars: str,
     *,
     point_size: float = 1.0,
+    geom_name: str = None,
     plot: bool = True,
 ) -> callable:
     def transform(
@@ -807,6 +814,7 @@ def points_scalars_from_array(
         paramstr_coor = f'{paramstr}_coor'
         paramstr_values = f'{paramstr}_values'
         _point_size = point_size
+        _geom_name = geom_name
         _plot = plot
         transformer_f = Partial(
             points_scalars_from_array_p,
@@ -820,6 +828,7 @@ def points_scalars_from_array(
                 paramstr_coor: (Tensor, REQUIRED),
                 paramstr_values: (Tensor, REQUIRED),
                 f'{paramstr}_point_size': (float, _point_size),
+                f'{paramstr}_geom_name': (str, _geom_name),
                 f'{paramstr}_plot': (bool, _plot),
             },
         )
@@ -844,6 +853,7 @@ def points_scalars_from_array(
                     f'keyword-only argument: {paramstr_values}'
                 )
             point_size = params.pop(f'{paramstr}_point_size', _point_size)
+            geom_name = params.pop(f'{paramstr}_geom_name', _geom_name)
             plot = params.pop(f'{paramstr}_plot', _plot)
             return compositor(f, transformer_f)(**params)(
                 coor=coor,
@@ -851,6 +861,7 @@ def points_scalars_from_array(
                 points=points,
                 points_scalars=points_scalars,
                 point_size=point_size,
+                geom_name=geom_name,
                 plot=plot,
             )
 
@@ -1485,6 +1496,34 @@ def select_active_parcels(
                 use_abs=use_abs,
                 surf_scalars=surf_scalars,
                 plot=plot,
+            )
+
+        return f_transformed
+    return transform
+
+
+def select_internal_points(
+    geom: Optional[str] = None,
+) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> direct_compositor:
+        _geom = geom
+        transformer_f = Partial(select_internal_points_p)
+
+        @splice_on(f, occlusion=select_internal_points_p.output)
+        def f_transformed(
+            *,
+            points: PointDataCollection,
+            internal_points_geom: Optional[str] = _geom,
+            **params: Mapping,
+        ):
+            surf = params.get('surf')
+            return compositor(f, transformer_f)(**params)(
+                points=points,
+                surf=surf,
+                geom=internal_points_geom,
             )
 
         return f_transformed

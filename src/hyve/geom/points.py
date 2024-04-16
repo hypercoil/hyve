@@ -36,21 +36,108 @@ from ..const import (
 
 
 @dataclasses.dataclass
+class PointFilters:
+    pipeline: Sequence[callable]
+    ledger: Sequence[str] = ()
+
+    def __call__(self, points: pv.PointSet) -> pv.PointSet:
+        coor = points.points
+        cached = {
+            k: v for k, v in points.point_data.items()
+            if k in self.ledger
+        }
+        new = {
+            k: v for k, v in points.point_data.items()
+            if k not in self.ledger
+        }
+        required = pv.PointSet(coor)
+        for name, data in new.items():
+            required.point_data[name] = data
+        if required.point_data.keys():
+            for filter in self.pipeline:
+                required = filter(required)
+        point_data = {
+            **required.point_data,
+            **cached,
+        }
+        points = pv.PointSet(required.points)
+        for name, data in point_data.items():
+            points.point_data[name] = data
+        self.ledger = tuple(set(
+            tuple(self.ledger) + tuple(points.point_data.keys())
+        ))
+        return points
+
+
+@dataclasses.dataclass
+class SurfaceSelect:
+    selection_surfaces: Sequence[pv.PolyData]
+
+    def __call__(self, points: pv.PointSet) -> pv.PointSet:
+        selection_mask = [
+            points.select_enclosed_points(
+                surface
+            ).point_data['SelectedPoints'].astype(bool)
+            for surface in self.selection_surfaces
+        ]
+        selection_mask = np.logical_or.reduce(selection_mask)
+        coor = points.points[selection_mask]
+        data = {
+            k: v[selection_mask]
+            for k, v in points.point_data.items()
+        }
+        points = pv.PointSet(coor)
+        for name, data in data.items():
+            points.point_data[name] = data
+        return points
+
+
+@dataclasses.dataclass
 class PointData:
     points: pv.PointSet
+    name: Optional[str] = None
     point_size: float = 1.0
+    filters: Optional[PointFilters] = None
 
     def __init__(
         self,
         points: pv.PointSet,
         point_size: float = 1.0,
-        data: Optional[Mapping[str, Tensor]] = None,
+        data: Optional[Mapping[str, Union[Tensor, pv.PointSet]]] = None,
+        name: Optional[str] = None,
+        filters: Optional[PointFilters] = None,
     ):
-        self.points = points
+        self.name = name
         self.point_size = point_size
         data = data or {}
+        new_point_sets = []
         for key, value in data.items():
-            self.points.point_data[key] = value
+            if isinstance(value, pv.PointSet):
+                new_point_sets += [value]
+            else:
+                points.point_data[key] = value
+        point_sets = [points] + new_point_sets
+        if filters is not None:
+            point_sets = [filters(points) for points in point_sets]
+        if len(point_sets) == 1:
+            points = point_sets[0]
+        else:
+            points = pv.PointSet(point_sets[0].points)
+            for point_set in point_sets:
+                assert np.all(point_set.points == points.points), (
+                    'All point sets must have the same coordinates after '
+                    'all filters are applied. Dataset(s) '
+                    f'{tuple(point_set.point_data.keys())} have '
+                    f'n={point_set.n_points} points, while the '
+                    f'base dataset has n={points.n_points} points. (If the '
+                    'counts are the same, either the coordinates or their '
+                    'ordering are not, and the visualisation will in any case '
+                    'be invalid.)'
+                )
+                for key, value in point_set.point_data.items():
+                    points.point_data[key] = value
+        self.points = points
+        self.filters = filters
 
     # TODO: Let's use nitransforms for this
     def translate(
@@ -64,12 +151,35 @@ class PointData:
                 points,
                 self.point_size,
                 data=self.points.point_data,
+                name=self.name,
+                filters=self.filters,
             )
         return self.select(condition).translate(translation)
 
     def select(self, condition: callable) -> 'PointData':
         mask = condition(self.points.points, self.points.point_data)
         return self.mask(mask)
+
+    @classmethod
+    def with_selection_surfaces(
+        cls,
+        points: pv.PointSet,
+        selection_surfaces: Sequence[pv.PolyData],
+        point_size: float = 1.0,
+        data: Optional[Mapping[str, Tensor]] = None,
+        name: Optional[str] = None,
+    ):
+        filters = PointFilters(
+            pipeline=[SurfaceSelect(selection_surfaces)],
+            ledger=(),
+        )
+        return cls(
+            points,
+            point_size=point_size,
+            data=data,
+            name=name,
+            filters=filters,
+        )
 
     def mask(
         self,
@@ -81,11 +191,37 @@ class PointData:
         points = pv.PointSet(self.points.points[mask])
         for name, data in self.points.point_data.items():
             points.point_data[name] = data[mask]
-        return self.__class__(points, self.point_size)
+        return self.__class__(
+            points,
+            self.point_size,
+            name=self.name,
+            filters=self.filters,
+        )
 
     def __add__(self, other: 'PointData') -> 'PointData':
         # Note that there is no coalescing of point data. We should probably
         # underpin this with ``scipy.sparse`` or something equivalent.
+        if self.points.n_points == other.points.n_points:
+            if (self.points.points == other.points.points).all():
+                points = pv.PointSet(self.points.points)
+                names = set(
+                    self.points.point_data.keys()
+                ) | set(
+                    other.points.point_data.keys()
+                )
+                for name in names:
+                    data = np.zeros(self.points.n_points)
+                    if name in self.points.point_data:
+                        data += self.points.point_data[name]
+                    if name in other.points.point_data:
+                        data += other.points.point_data[name]
+                    points.point_data[name] = data
+                return self.__class__(
+                    points,
+                    self.point_size,
+                    name=self.name,
+                    filters=self.filters,
+                )
         # TODO: This is currently unsafe for point data with different keys.
         #       It's fine for our purposes since this is only accessed when we
         #       recombine point data that were split by a condition. However,
@@ -98,7 +234,12 @@ class PointData:
             points.point_data[name] = np.concatenate([
                 data, other.points.point_data[name]
             ])
-        return self.__class__(points, self.point_size)
+        return self.__class__(
+            points,
+            self.point_size,
+            name=self.name,
+            filters=self.filters,
+        )
 
 
 class PointDataCollection:
@@ -107,6 +248,10 @@ class PointDataCollection:
         point_datasets: Optional[Sequence[PointData]] = None,
     ):
         self.point_datasets = list(point_datasets) or []
+        self.address = {
+            ds.name: (ds if ds.name is not None else True)
+            for ds in self.point_datasets
+        }
 
     def add_point_dataset(self, point_dataset: PointData):
         return self.__class__(self.point_datasets + [point_dataset])
@@ -144,6 +289,27 @@ class PointDataCollection:
             points=points,
             point_size=point_size,
         )
+
+    def apply_selection_surfaces(
+        self,
+        selection_surfaces: Sequence[pv.PolyData],
+        names: Optional[Sequence[str]] = None,
+    ):
+        if names is None:
+            names = list(self.address.keys())
+        point_datasets = [
+            PointData.with_selection_surfaces(
+                points=ds.points,
+                selection_surfaces=selection_surfaces,
+                point_size=ds.point_size,
+                data=ds.points.point_data,
+                name=ds.name,
+            )
+            if ds.name in names
+            else ds
+            for ds in self.point_datasets
+        ]
+        return self.__class__(point_datasets)
 
     def translate(
         self,

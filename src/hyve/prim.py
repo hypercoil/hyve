@@ -321,6 +321,7 @@ def points_scalars_from_nifti_f(
     nifti: nb.Nifti1Image,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
+    geom_name: str = None,
     points: Optional[PointDataCollection] = None,
     points_scalars: Sequence[str] = (),
     plot: bool = True,
@@ -344,7 +345,33 @@ def points_scalars_from_nifti_f(
         pv.PointSet(vol_coor),
         data={scalars: vol_scalars},
         point_size=point_size,
+        name=geom_name or scalars,
     )
+    if (geom_name is not None) and (points is not None):
+        geom = points.address[geom_name]
+        # if len(points_data.points.points) != len(vol_coor):
+        #     raise ValueError(
+        #         f'Point dataset {scalars} is configured to use the geometry '
+        #         f'{geom_name}, but the number of points in the geometry '
+        #         f'(n={len(points_data.points.points)}) does not match the '
+        #         f'number of points in the dataset (n={len(vol_coor)}).'
+        #     )
+        #     all_points = set(
+        #         tuple(e) for e in points_data.points.points
+        #     ).union(
+        #         set(tuple(e) for e in vol_coor)
+        #     )
+        #     all_points = np.asarray(tuple(all_points))
+        points_data = PointData(
+            points=geom.points,
+            point_size=geom.point_size,
+            data={**geom.points.point_data, scalars: points_data.points},
+            name=geom_name,
+            filters=geom.filters,
+        )
+        points = PointDataCollection([
+            ds for ds in points.address.values() if ds.name != geom_name
+        ])
     if points:
         points = points + PointDataCollection([points_data])
     else:
@@ -359,6 +386,7 @@ def points_scalars_from_array_f(
     coor: Tensor,
     values: Tensor,
     point_size: float = 1.0,
+    geom_name: str = None,
     points: Optional[PointDataCollection] = None,
     points_scalars: Sequence[str] = (),
     plot: bool = True,
@@ -367,7 +395,20 @@ def points_scalars_from_array_f(
         pv.PointSet(coor),
         data={scalars: values},
         point_size=point_size,
+        name=geom_name or scalars,
     )
+    if (geom_name is not None) and (points is not None):
+        geom = points.address[geom_name]
+        points_data = PointData(
+            points=geom.points,
+            point_size=geom.point_size,
+            data={**geom.points.point_data, scalars: points_data.points},
+            name=geom_name,
+            filters=geom.filters,
+        )
+        points = PointDataCollection([
+            ds for ds in points.address.values() if ds.name != geom_name
+        ])
     if points:
         points = points + PointDataCollection([points_data])
     else:
@@ -701,6 +742,18 @@ def select_active_parcels_f(
     if plot and parcellation_name not in surf_scalars:
         surf_scalars = tuple(list(surf_scalars) + [parcellation_name])
     return surf, surf_scalars
+
+
+def select_internal_points_f(
+    points: PointDataCollection,
+    surf: CortexTriSurface,
+    geom: Optional[str] = None,
+) -> PointDataCollection:
+    points = points.apply_selection_surfaces(
+        selection_surfaces=(surf.left, surf.right),
+        names=(geom,) if geom else None,
+    )
+    return points
 
 
 def _copy_dict_from_params(
@@ -2986,6 +3039,14 @@ select_active_parcels_p = Primitive(
     select_active_parcels_f,
     'select_active_parcels',
     output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+select_internal_points_p = Primitive(
+    select_internal_points_f,
+    'select_internal_points',
+    output=('points',),
     forward_unused=True,
 )
 
