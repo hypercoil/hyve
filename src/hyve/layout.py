@@ -1619,14 +1619,18 @@ def _(
         for i, annotation in layout.annotations.items()
         if i >= left_size and i < left_size + right_size
     }
+    left_assigned = layout.assigned[:left_size]
+    right_assigned = layout.assigned[left_size:]
     return (
         AnnotatedLayout(
             layout=left,
             annotations=left_annotations,
+            assigned=left_assigned,
         ),
         AnnotatedLayout(
             layout=right,
             annotations=right_annotations,
+            assigned=right_assigned,
         ),
     )
 

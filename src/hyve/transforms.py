@@ -1796,6 +1796,7 @@ def scalar_focus_camera(
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            *,
             autocam_focus: Literal["centroid", "peak"] = _kind,
             **params: Mapping,
         ):
@@ -1841,6 +1842,7 @@ def closest_ortho_camera(
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            *,
             autocam_n_ortho: int = _n_ortho,
             **params: Mapping,
         ):
@@ -1892,6 +1894,7 @@ def planar_sweep_camera(
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            *,
             autocam_sweep_initial_angle: Sequence[float] = _initial,
             autocam_sweep_normal_vector: Optional[Sequence[float]] = _normal,
             autocam_sweep_n_angles: int = _n_angles,
@@ -1961,6 +1964,7 @@ def auto_camera(
         @splice_on(f, occlusion=transform_postprocessor_p.output)
         def f_transformed(
             postprocessors: Optional[Sequence[callable]] = None,
+            *,
             autocam_n_ortho: int = _n_ortho,
             autocam_focus: Optional[Literal["centroid", "peak"]] = _focus,
             autocam_sweep_n_angles: int = _n_angles,

@@ -2131,6 +2131,7 @@ def plot_final_view_f(
     n_scenes: int = 1,
     close_plotter: bool = True,
 ) -> Tuple[Tensor]:
+    plotter.view_xy() # TODO: allow more control over the default view
     snapshots = [
         plotter.show(
             window_size=window_size,
@@ -2150,6 +2151,7 @@ def plot_to_html_buffer_f(
     close_plotter: bool = True,
 ) -> StringIO:
     plotter.window_size = window_size
+    plotter.view_xy() # TODO: allow more control over the default view
     html_buffer = plotter.export_html(filename=None)
     if close_plotter:
         plotter.close()
@@ -2213,6 +2215,7 @@ def plot_to_display_f(
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
 ) -> None:
     def writer(plotter, fname=None):
+        plotter.view_xy() # TODO: allow more control over the default view
         # TODO: window_size apparently does not work. Perhaps it's inheriting
         #       from the theme when the plotter is created?
         plotter.show(window_size=window_size)

@@ -421,6 +421,7 @@ def base_plotmeta(
 
     if key_scalars == '__default__':
         key_scalars = _default_key_scalars(params)
+    params = {**params, **{'key_scalars': key_scalars}}
     for transform in meta_transforms or ():
         xfm_metadata = transform.meta(**params)
         metadata = {**metadata, **xfm_metadata}

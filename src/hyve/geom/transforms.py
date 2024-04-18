@@ -145,7 +145,7 @@ def hemisphere_select_fit_surf(f: callable) -> callable:
         surf_projection: Optional[str] = None,
         **params,
     ) -> Mapping[str, Any]:
-        fit_params = f(**params)
+        fit_params = f(**params, surf=surf, surf_projection=surf_projection)
 
         surf_hemi_params = hemisphere_select_assign_parameters(
             surf_scalars_cmap=params.get('surf_scalars_cmap'),

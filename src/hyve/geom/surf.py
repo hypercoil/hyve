@@ -1411,9 +1411,10 @@ class CortexTriSurface:
         bool
             Whether the dataset is present in the hemisphere.
         """
-        return key in (
-            self.__getattribute__(hemi).point_data or
-            self.__getattribute__(hemi).cell_data
+        return (
+            key in self.__getattribute__(hemi).point_data
+        ) or (
+            key in self.__getattribute__(hemi).cell_data
         )
 
     def scalars_centre_of_mass(
@@ -1492,8 +1493,13 @@ class CortexTriSurface:
                 f'Invalid hemisphere: {hemisphere}. '
                 'Must be "left" or "right".'
             )
-        scalars_data[np.isnan(scalars_data)] = -np.inf
-        return proj_data[np.argmax(scalars_data)]
+        return proj_data[np.argmax(
+            np.where(
+                np.isnan(scalars_data),
+                -np.inf,
+                scalars_data,
+            )
+        )]
 
     def poles(self, hemisphere: str) -> Tensor:
         """

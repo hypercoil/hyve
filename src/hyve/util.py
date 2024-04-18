@@ -245,8 +245,10 @@ def scalar_percentile(
 ) -> Tuple[float, float]:
     if isinstance(percent, float):
         percent = (percent, 100 - percent)
+    excl_mask = np.isnan(data) | np.isinf(data)
     if bgval is not None:
-        data = data[~np.isclose(data, bgval)]
+        excl_mask |= np.isclose(data, bgval)
+    data = data[~excl_mask]
     return (
         np.nanpercentile(data, percent[0]),
         np.nanpercentile(data, percent[1]),
