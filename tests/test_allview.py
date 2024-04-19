@@ -17,6 +17,7 @@ from hyve.transforms import (
     vertex_to_face,
     save_grid,
     plot_to_image,
+    text_element,
 )
 
 from hyve.elements import TextBuilder
@@ -80,6 +81,14 @@ def test_allviews_scalars():
             scalar_bar_action='collect',
             annotations=annotations,
         ),
+        text_element(
+            name='title',
+            content='{surfscalars}',
+            bounding_box_height=192,
+            font_size_multiplier=0.2,
+            font_color='#cccccc',
+            priority=-1,
+        ),
     )
     plot_f(
         template='fsaverage',
@@ -96,17 +105,7 @@ def test_allviews_scalars():
             'orientation': 'h',
         },
         surf_projection=('pial',),
-        elements={
-            'title': (
-                TextBuilder(
-                    content='GM density',
-                    bounding_box_height=192,
-                    font_size_multiplier=0.2,
-                    font_color='#cccccc',
-                    priority=-1,
-                ),
-            ),
-        },
+        title_element_content='Gray Matter Density',
         **COMMON_PARAMS,
     )
 

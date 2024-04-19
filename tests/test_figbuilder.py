@@ -95,7 +95,7 @@ def test_panoptic():
         difumo_nifti=nifti,
         surf_projection='pial',
         surf_scalars_cmap='viridis',
-        surf_scalars_clim='robust',
+        surf_scalars_clim_percentile=True,
         surf_scalars_below_color='#666666',
         #theme=pv.themes.DarkTheme(),
         window_size=(400, 300),
@@ -125,6 +125,7 @@ def test_focused_view_both_hemispheres():
             n_cols=4, n_rows=8, padding=4,
             canvas_size=(1280, 1640),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-difumo_view-focused_page-{page}'
             )
@@ -158,6 +159,7 @@ def test_ortho_views_both_hemispheres():
             n_cols=3, n_rows=8, padding=4,
             canvas_size=(960, 1640),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-difumo_view-ortho_page-{page}'
             )
@@ -187,11 +189,12 @@ def test_planar_sweep_both_hemispheres():
         surf_from_archive(),
         surf_scalars_from_nifti('difumo', template='fsaverage', plot=True),
         plot_to_image(),
-        planar_sweep_camera(initial=(1, 0, 0), n_steps=10),
+        planar_sweep_camera(initial=(1, 0, 0), n_angles=10),
         save_grid(
             n_cols=10, n_rows=8, padding=4,
             canvas_size=(3200, 1640),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-difumo_view-planar_page-{page}'
             )
@@ -221,11 +224,12 @@ def test_auto_view_both_hemispheres():
         surf_from_archive(),
         surf_scalars_from_nifti('difumo', template='fsaverage', plot=True),
         plot_to_image(),
-        auto_camera(n_ortho=3, focus='peak', n_angles=3),
+        auto_camera(),
         save_grid(
             n_cols=7, n_rows=8, padding=4,
             canvas_size=(2240, 1640),
             canvas_color=(0, 0, 0),
+            sort_by=['surfscalars'],
             fname_spec=(
                 'scalars-difumo_view-auto_page-{page}'
             )
@@ -244,6 +248,9 @@ def test_auto_view_both_hemispheres():
         surf_projection='pial',
         surf_scalars_cmap='Purples',
         surf_scalars_below_color='white',
+        autocam_n_ortho=3,
+        autocam_focus='peak',
+        autocam_sweep_n_angles=3,
         window_size=(400, 250),
         output_dir='/tmp',
         hemisphere=['left', 'right'],

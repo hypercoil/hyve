@@ -122,8 +122,8 @@ def test_layout_product():
         0: {'y': 0},
         1: {'y': 1},
     }
-    annotated0 = layout0.annotate(annotation0)
-    annotated1 = layout1.annotate(annotation1)
+    annotated0 = layout0.annotate(annotation0, default_elements=None)
+    annotated1 = layout1.annotate(annotation1, default_elements=None)
     annotated01 = (annotated0 * annotated1).partition(120, 120)
     assert annotated01.annotations == {
         0: {'x': 0, 'y': 0},
@@ -231,16 +231,20 @@ def test_layout_floating():
     check_cells(cells)
 
     annotated0 = base.annotate(
-        {0: {'i': 0}, 1: {'i': 1}, 2: {'i': 8}, 3: {'i': 9}}
+        {0: {'i': 0}, 1: {'i': 1}, 2: {'i': 8}, 3: {'i': 9}},
+        default_elements=None,
     )
     annotated1 = base.annotate(
-        {0: {'i': 2}, 1: {'i': 3}, 2: {'i': 10}, 3: {'i': 11}}
+        {0: {'i': 2}, 1: {'i': 3}, 2: {'i': 10}, 3: {'i': 11}},
+        default_elements=None,
     )
     annotated2 = base.annotate(
-        {0: {'i': 4}, 1: {'i': 5}, 2: {'i': 12}, 3: {'i': 13}}
+        {0: {'i': 4}, 1: {'i': 5}, 2: {'i': 12}, 3: {'i': 13}},
+        default_elements=None,
     )
     annotated3 = base.annotate(
-        {0: {'i': 6}, 1: {'i': 7}, 2: {'i': 14}, 3: {'i': 15}}
+        {0: {'i': 6}, 1: {'i': 7}, 2: {'i': 14}, 3: {'i': 15}},
+        default_elements=None,
     )
     annotated = (
         annotated0 | annotated1 << (1 / 2)) / (
@@ -253,10 +257,12 @@ def test_layout_floating():
         assert annotated.annotations[i]['i'] == i
 
     annotated0 = base.annotate(
-        {0: {'i': 0}, 1: {'i': None}, 2: {'i': 3}, 3: {'i': 4}}
+        {0: {'i': 0}, 1: {'i': None}, 2: {'i': 3}, 3: {'i': 4}},
+        default_elements=None,
     )
     annotated1 = base.annotate(
-        {0: {'i': 1}, 1: {'i': 2}, 2: {'i': 5}, 3: {'i': 6}}
+        {0: {'i': 1}, 1: {'i': 2}, 2: {'i': 5}, 3: {'i': 6}},
+        default_elements=None,
     )
     annotated = annotated0 % annotated1 << 1
     annotated.partition(400, 400)
@@ -281,14 +287,38 @@ def test_layout_floating():
     assert cells[6].cell_loc == (220, 120)
     assert cells[6].cell_dim == (160, 240)
 
-    annotated_a0 = anchor.annotate({0: {'i': 0}, 1: {'i': 1}})
-    annotated_a1 = anchor.annotate({0: {'i': 2}, 1: {'i': 3}})
-    annotated_a2 = anchor.annotate({0: {'i': 4}, 1: {'i': 5}})
-    annotated_a3 = anchor.annotate({0: {'i': 6}, 1: {'i': 7}})
-    annotated_f0 = floating.annotate({0: {'i': 8}, 1: {'i': 9}})
-    annotated_f1 = floating.annotate({0: {'i': 10}, 1: {'i': 11}})
-    annotated_f2 = floating.annotate({0: {'i': 12}, 1: {'i': 13}})
-    annotated_f3 = floating.annotate({0: {'i': 14}, 1: {'i': 15}})
+    annotated_a0 = anchor.annotate(
+        {0: {'i': 0}, 1: {'i': 1}},
+        default_elements=None,
+    )
+    annotated_a1 = anchor.annotate(
+        {0: {'i': 2}, 1: {'i': 3}},
+        default_elements=None,
+    )
+    annotated_a2 = anchor.annotate(
+        {0: {'i': 4}, 1: {'i': 5}},
+        default_elements=None,
+    )
+    annotated_a3 = anchor.annotate(
+        {0: {'i': 6}, 1: {'i': 7}},
+        default_elements=None,
+    )
+    annotated_f0 = floating.annotate(
+        {0: {'i': 8}, 1: {'i': 9}},
+        default_elements=None,
+    )
+    annotated_f1 = floating.annotate(
+        {0: {'i': 10}, 1: {'i': 11}},
+        default_elements=None,
+    )
+    annotated_f2 = floating.annotate(
+        {0: {'i': 12}, 1: {'i': 13}},
+        default_elements=None,
+    )
+    annotated_f3 = floating.annotate(
+        {0: {'i': 14}, 1: {'i': 15}},
+        default_elements=None,
+    )
     annotated0 = annotated_a0 + annotated_f0 << ((0.1, 0.1), (0.8, 0.8))
     annotated1 = annotated_a1 + annotated_f1 << ((0.1, 0.1), (0.8, 0.8))
     annotated2 = annotated_a2 + annotated_f2 << ((0.1, 0.1), (0.8, 0.8))
@@ -307,10 +337,22 @@ def test_layout_floating():
     layout0 = Cell() | Cell() << (1 / 2)
     layout1 = Cell() / Cell() << (1 / 4)
     onecell = Cell()
-    annotated0 = layout0.annotate({0: {'x': 0}, 1: {'x': 1}})
-    annotated1 = layout1.annotate({0: {'y': 0}, 1: {'y': 1}})
-    annotated2 = onecell.annotate({0: {'float0': True}})
-    annotated3 = onecell.annotate({0: {'float1': True}})
+    annotated0 = layout0.annotate(
+        {0: {'x': 0}, 1: {'x': 1}},
+        default_elements=None,
+    )
+    annotated1 = layout1.annotate(
+        {0: {'y': 0}, 1: {'y': 1}},
+        default_elements=None,
+    )
+    annotated2 = onecell.annotate(
+        {0: {'float0': True}},
+        default_elements=None,
+    )
+    annotated3 = onecell.annotate(
+        {0: {'float1': True}},
+        default_elements=None,
+    )
     annotated12 = annotated1 + annotated2 << ((0.1, 0.6), (0.8, 0.3))
     annotated03 = annotated0 + annotated3 << ((0.6, 0.1), (0.3, 0.8))
     annotated = annotated0 * annotated12
@@ -425,7 +467,10 @@ def test_break():
             continue
         assert (len(left), len(right)) == ((k * (i + 1), l - k * (i + 1)))
 
-    annotated = layout.annotate({i: {'i': i} for i in range(len(layout))})
+    annotated = layout.annotate(
+        {i: {'i': i} for i in range(len(layout))},
+        default_elements=None,
+    )
     for i in range(47):
         left, right = annotated @ i
         assert len(left), len(right) == (k * (i + 1), l - k * (i + 1))

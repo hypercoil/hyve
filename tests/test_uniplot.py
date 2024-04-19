@@ -16,15 +16,18 @@ from hyve_examples import (
     get_schaefer400_cifti,
     get_schaefer400_synthetic_conmat,
 )
-from hyve.plot import unified_plotter, Layer
-from hyve.surf import CortexTriSurface
-from hyve.util import (
-    filter_adjacency_data,
-    filter_node_data,
+from hyve.geom import (
+    CortexTriSurface,
+    Layer,
     PointDataCollection,
     PointData,
     NetworkDataCollection,
     NetworkData,
+)
+from hyve.plot import unified_plotter
+from hyve.util import (
+    filter_adjacency_data,
+    filter_node_data,
 )
 
 
@@ -96,7 +99,8 @@ def test_unified_plotter():
     points_layer_pain = Layer(
         name='pain',
         cmap='viridis',
-        clim='robust',
+        clim=(5, 95),
+        clim_percentile=True,
         alpha=0.8,
     )
     unified_plotter(
@@ -189,7 +193,7 @@ def test_unified_plotter():
         node_clim=node_clim,
         node_color='node_val',
         node_radius='radius',
-        node_radius_range=(1, 10),
+        node_rmap=(1, 10),
         node_alpha='opacity',
         edge_clim=edge_clim,
         hemisphere_slack=1.2,

@@ -11,7 +11,7 @@ import pyvista as pv
 import seaborn as sns
 import templateflow.api as tflow
 
-from hyve_examples import get_pain_thresh_nifti, get_svg_cuboid
+from hyve_examples import get_pain_thresh_nifti, get_svg_cuboid, get_svg_blend
 from hyve.flows import plotdef
 from hyve.layout import Cell
 from hyve.transforms import (
@@ -65,8 +65,10 @@ def get_annotations():
     }
 
 
-@pytest.mark.parametrize('projection', ['pial', 'veryinflated'])
-def test_svg_injection(projection):
+#@pytest.mark.parametrize('projection', ['pial', 'veryinflated'])
+@pytest.mark.parametrize('insert', ['cube', 'blend'])
+def test_svg_injection(insert): #projection):
+    projection = 'pial'
     layout = Cell() | Cell() << (1 / 2)
     layout = layout * (Cell() / Cell() / Cell() / Cell() << (1 / 4))
     layout = layout | (Cell() / Cell() << (1 / 2)) << (1 / 2)
@@ -74,6 +76,11 @@ def test_svg_injection(projection):
     annotations[8]['elements'] = ['title', 'scalar_bar']
     annotations[9]['elements'] = ['cuboid']
     layout = layout.annotate(annotations)
+    paramargs = {}
+    if insert == 'blend':
+        paramargs = {
+            'cuboid_element_src_file': get_svg_blend(),
+        }
 
     if projection == 'pial':
         template = 'fsaverage'
@@ -108,7 +115,7 @@ def test_svg_injection(projection):
             padding=10,
             canvas_size=(1800, 1500),
             canvas_color=(0, 0, 0),
-            fname_spec=f'scalars-pain_projection-{projection}_desc-cuboid_page-{{page}}',
+            fname_spec=f'scalars-pain_insert-{insert}_desc-cuboid_page-{{page}}',
             scalar_bar_action='collect',
         ),
     )
@@ -126,6 +133,7 @@ def test_svg_injection(projection):
         pain_cmap='inferno',
         surf_projection=(projection,),
         **COMMON_PARAMS,
+        **paramargs,
     )
 
 
