@@ -8,18 +8,12 @@ Network geometry data containers and geometric primitives.
 """
 import dataclasses
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
+
 import numpy as np
 import pandas as pd
 import pyvista as pv
 
-from .base import (
-    _LayerBase,
-    _property_vector,
-    layer_rgba,
-)
-from ..elements import ScalarBarBuilder
 from ..const import (
-    Tensor,
     EDGE_ALIM_DEFAULT_VALUE,
     EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_ALPHA_DEFAULT_VALUE,
@@ -32,8 +26,8 @@ from ..const import (
     EDGE_RLIM_DEFAULT_VALUE,
     EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_RMAP_DEFAULT_VALUE,
-    NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
     NETWORK_EDGE_DEFAULT_STYLE,
+    NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
     NETWORK_NODE_DEFAULT_STYLE,
     NODE_ALIM_DEFAULT_VALUE,
     NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
@@ -44,11 +38,18 @@ from ..const import (
     NODE_CMAP_DEFAULT_VALUE,
     NODE_COLOR_DEFAULT_VALUE,
     NODE_RADIUS_DEFAULT_VALUE,
-    NODE_RMAP_DEFAULT_VALUE,
     NODE_RLIM_DEFAULT_VALUE,
     NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    NODE_RMAP_DEFAULT_VALUE,
+    Tensor,
 )
+from ..elements import ScalarBarBuilder
 from ..util import scalar_percentile
+from .base import (
+    _LayerBase,
+    _property_vector,
+    layer_rgba,
+)
 
 RADIUS_GLYPH_SCALAR_EDGE = 0.01
 

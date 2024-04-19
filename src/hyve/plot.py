@@ -32,9 +32,9 @@ from .const import (
 from .elements import ScalarBarBuilder, _uniquify_names
 from .geom.prim import (
     GeomPrimitive,
-    plot_surf_p,
-    plot_points_p,
     plot_network_p,
+    plot_points_p,
+    plot_surf_p,
 )
 from .geom.transforms import (
     GeomTransform,
@@ -276,8 +276,12 @@ def bind_primitives(
                 meta_primitives = list(meta_primitives) + meta_prim
                 meta_transforms = params.pop('meta_transforms', [])
                 new_meta_transforms = transforms or []
-                new_meta_transforms = [e for e in transforms if e.meta is not None]
-                meta_transforms = list(meta_transforms) + list(new_meta_transforms)
+                new_meta_transforms = [
+                    e for e in transforms if e.meta is not None
+                ]
+                meta_transforms = (
+                    list(meta_transforms) + list(new_meta_transforms)
+                )
                 return meta_func(
                     meta_primitives=meta_primitives,
                     meta_transforms=meta_transforms,

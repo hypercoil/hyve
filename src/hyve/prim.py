@@ -7,9 +7,7 @@ Primitive functional atoms
 Atomic functional primitives for building more complex functions.
 """
 import inspect
-from functools import reduce
 from io import StringIO
-from itertools import chain
 from math import ceil
 from typing import (
     Any,
@@ -2545,10 +2543,13 @@ def save_figure_f(
                 i for i, e in enumerate(page.assigned) if not e
             )
             # if elements_fields:
-            #     queries = [{'elements': cfield} for cfield in elements_fields]
-            #     # Each assignment should not "fill" a slot since we might want
-            #     # to assign multiple elements fields to a single cell. Because
-            #     # layout is not mutable, this shouldn't be a problem.
+            #     queries = [
+            #         {'elements': cfield} for cfield in elements_fields
+            #     ]
+            #     # Each assignment should not "fill" a slot since we might
+            #     # want to assign multiple elements fields to a single cell.
+            #     # Because layout is not mutable, this shouldn't be a
+            #     # problem.
             #     elements_asgt = [
             #         layout.match_and_assign(query=q) for q in queries
             #     ]

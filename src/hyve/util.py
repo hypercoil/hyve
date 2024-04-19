@@ -25,7 +25,7 @@ import pyvista as pv
 from PIL import Image
 from pyvista.plotting.helpers import view_vectors
 
-from .const import Tensor, DEFAULT_ROBUST_LIM_PCT
+from .const import DEFAULT_ROBUST_LIM_PCT, Tensor
 
 
 def sanitise(string: str) -> str:

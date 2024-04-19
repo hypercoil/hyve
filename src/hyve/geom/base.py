@@ -21,9 +21,7 @@ from typing import (
 import numpy as np
 from matplotlib import cm, colors
 
-from ..elements import ScalarBarBuilder
 from ..const import (
-    Tensor,
     DEFAULT_CMAP,
     LAYER_ALIM_DEFAULT_VALUE,
     LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
@@ -37,17 +35,19 @@ from ..const import (
     LAYER_CLIM_DEFAULT_VALUE,
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
     LAYER_COLOR_NEGATIVE_DEFAULT_VALUE,
-    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+    Tensor,
 )
+from ..elements import ScalarBarBuilder
 from ..util import (
+    LinearScalarMapper,
     premultiply_alpha,
     scalar_percentile,
     source_over,
     unmultiply_alpha,
-    LinearScalarMapper,
 )
 
 BLEND_MODES = {
@@ -115,10 +115,10 @@ class SubgeometryParameters(MappingABC):
 
     def __len__(self):
         return len(self.params)
-    
+
     def __iter__(self):
         return iter(self.params)
-    
+
     def __getitem__(self, key):
         return self.params[key]
 

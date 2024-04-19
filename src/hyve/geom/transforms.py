@@ -13,16 +13,17 @@ from typing import (
     NamedTuple,
     Optional,
     Sequence,
-    Union,
     Tuple,
+    Union,
 )
+
 import numpy as np
 
+from ..const import Tensor
 from .base import SubgeometryParameters
 from .network import NetworkDataCollection
 from .points import PointDataCollection
 from .surf import CortexTriSurface
-from ..const import Tensor
 
 
 class GeomTransform(NamedTuple):
@@ -184,7 +185,7 @@ def hemisphere_select_transform_surf(f: callable) -> callable:
         hemisphere_parameters = fit_params.get('hemisphere_parameters', None)
         if hemisphere_parameters is None:
             return result
-        
+
         result['hemisphere_parameters'] = hemisphere_parameters
         return result
     return _hemisphere_select_transform_surf

@@ -27,41 +27,39 @@ import templateflow.api as tflow
 from matplotlib import colors
 from scipy.spatial.distance import cdist
 
-from .base import (
-    Layer,
-    SubgeometryParameters,
-    compose_layers,
-    layer_rgba,
-)
 from ..const import (
-    CIfTIStructures,
-    Tensor,
-    neuromaps_fetch_fn,
-    template_dict,
     DEFAULT_CMAP,
     DEFAULT_COLOR,
     LAYER_ALIM_DEFAULT_VALUE,
     LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
     LAYER_ALPHA_DEFAULT_VALUE,
-    LAYER_ALPHA_NEGATIVE_DEFAULT_VALUE,
     LAYER_AMAP_DEFAULT_VALUE,
     LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
-    LAYER_COLOR_DEFAULT_VALUE,
-    LAYER_COLOR_NEGATIVE_DEFAULT_VALUE,
-    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_COLOR_DEFAULT_VALUE,
     LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     SURF_DEFAULT_STYLE,
     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
-    SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_CLIM_DEFAULT_VALUE,
     SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    SURF_SCALARS_DEFAULT_VALUE,
     SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    CIfTIStructures,
+    Tensor,
+    neuromaps_fetch_fn,
+    template_dict,
 )
 from ..elements import ScalarBarBuilder
 from ..util import relabel_parcels, scalar_percentile
+from .base import (
+    Layer,
+    SubgeometryParameters,
+    compose_layers,
+    layer_rgba,
+)
 
 
 def is_path_like(obj: Any) -> bool:

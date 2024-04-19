@@ -8,13 +8,11 @@ Point cloud geometry data containers and geometric primitives.
 """
 import dataclasses
 from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
+
 import numpy as np
 import pyvista as pv
 
-from .base import Layer, layer_rgba
-from ..elements import ScalarBarBuilder
 from ..const import (
-    Tensor,
     LAYER_ALIM_DEFAULT_VALUE,
     LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
     LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
@@ -32,7 +30,10 @@ from ..const import (
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
     POINTS_SCALARS_DEFAULT_VALUE,
     POINTS_SCALARS_LAYERS_DEFAULT_VALUE,
+    Tensor,
 )
+from ..elements import ScalarBarBuilder
+from .base import Layer, layer_rgba
 
 
 @dataclasses.dataclass

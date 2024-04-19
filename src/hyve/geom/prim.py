@@ -6,7 +6,7 @@ Geometric primitives
 ~~~~~~~~~~~~~~~~~~~~
 Geometric primitives containers.
 """
-from typing import NamedTuple, Mapping, Tuple, Optional
+from typing import Mapping, NamedTuple, Optional, Tuple
 
 from .network import (
     plot_network_aux_f,
@@ -21,18 +21,18 @@ from .surf import (
     plot_surf_f,
 )
 from .transforms import (
-    hemisphere_select_fit_surf,
-    hemisphere_select_transform_surf,
-    hemisphere_select_fit_points,
-    hemisphere_select_transform_points,
     hemisphere_select_fit_network,
+    hemisphere_select_fit_points,
+    hemisphere_select_fit_surf,
     hemisphere_select_transform_network,
-    hemisphere_slack_fit_surf,
-    hemisphere_slack_transform_surf,
-    hemisphere_slack_fit_points,
-    hemisphere_slack_transform_points,
+    hemisphere_select_transform_points,
+    hemisphere_select_transform_surf,
     hemisphere_slack_fit_network,
+    hemisphere_slack_fit_points,
+    hemisphere_slack_fit_surf,
     hemisphere_slack_transform_network,
+    hemisphere_slack_transform_points,
+    hemisphere_slack_transform_surf,
 )
 
 
