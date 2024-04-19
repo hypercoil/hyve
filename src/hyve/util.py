@@ -13,7 +13,6 @@ from typing import (
     Any,
     Dict,
     Literal,
-    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -26,264 +25,7 @@ import pyvista as pv
 from PIL import Image
 from pyvista.plotting.helpers import view_vectors
 
-from .const import Tensor
-
-
-@dataclasses.dataclass
-class PointData:
-    points: pv.PointSet
-    point_size: float = 1.0
-
-    def __init__(
-        self,
-        points: pv.PointSet,
-        point_size: float = 1.0,
-        data: Optional[Mapping[str, Tensor]] = None,
-    ):
-        self.points = points
-        self.point_size = point_size
-        data = data or {}
-        for key, value in data.items():
-            self.points.point_data[key] = value
-
-    # TODO: Let's use nitransforms for this
-    def translate(
-        self,
-        translation: Sequence[float],
-        condition: Optional[callable] = None,
-    ) -> 'PointData':
-        if not condition:
-            points = pv.PointSet(self.points.points + np.array(translation))
-            return self.__class__(
-                points,
-                self.point_size,
-                data=self.points.point_data,
-            )
-        return self.select(condition).translate(translation)
-
-    def select(self, condition: callable) -> 'PointData':
-        mask = condition(self.points.points, self.points.point_data)
-        return self.mask(mask)
-
-    def mask(
-        self,
-        mask: Tensor,
-        return_complement: bool = False
-    ) -> 'PointData':
-        if return_complement:
-            mask = ~mask
-        points = pv.PointSet(self.points.points[mask])
-        for name, data in self.points.point_data.items():
-            points.point_data[name] = data[mask]
-        return self.__class__(points, self.point_size)
-
-    def __add__(self, other: 'PointData') -> 'PointData':
-        # Note that there is no coalescing of point data. We should probably
-        # underpin this with ``scipy.sparse`` or something equivalent.
-        # TODO: This is currently unsafe for point data with different keys.
-        #       It's fine for our purposes since this is only accessed when we
-        #       recombine point data that was split by a condition. However,
-        #       we should probably raise a more appropriate error if nothing
-        #       else.
-        points = pv.PointSet(np.concatenate([
-            self.points.points, other.points.points
-        ]))
-        for name, data in self.points.point_data.items():
-            points.point_data[name] = np.concatenate([
-                data, other.points.point_data[name]
-            ])
-        return self.__class__(points, self.point_size)
-
-
-class PointDataCollection:
-    def __init__(
-        self,
-        point_datasets: Optional[Sequence[PointData]] = None,
-    ):
-        self.point_datasets = list(point_datasets) or []
-
-    def add_point_dataset(self, point_dataset: PointData):
-        return self.__class__(self.point_datasets + [point_dataset])
-
-    def get_dataset(
-        self,
-        key: str,
-        return_all: bool = False,
-        strict: bool = True
-    ) -> PointData:
-        matches = [
-            (ds.points.point_data.get(key, None), i)
-            for i, ds in enumerate(self.point_datasets)
-        ]
-        if all(scalars is None for scalars, _ in matches):
-            raise KeyError(f'No point data with key {key}')
-        indices = [index for scalars, index in matches if scalars is not None]
-        if not return_all:
-            if len(indices) > 1 and strict:
-                raise KeyError(f'Multiple point data with key {key}')
-            dataset = self[indices[0]]
-            points = pv.PointSet(dataset.points.points)
-            points.point_data[key] = dataset.points.point_data[key]
-            point_size = dataset.point_size
-        else:
-            datasets = [self[i] for i in indices]
-            points = pv.PointSet(np.concatenate([
-                ds.points.points for ds in datasets
-            ]))
-            points.point_data[key] = np.concatenate([
-                ds.points.point_data[key] for ds in datasets
-            ])
-            point_size = np.min([ds.point_size for ds in datasets])
-        return PointData(
-            points=points,
-            point_size=point_size,
-        )
-
-    def translate(
-        self,
-        translation: Sequence[float],
-        condition: Optional[callable] = None,
-    ):
-        return self.__class__([
-            ds.translate(translation, condition=condition)
-            for ds in self.point_datasets
-        ])
-
-    def __getitem__(self, key: int):
-        return self.point_datasets[key]
-
-    def __len__(self):
-        return len(self.point_datasets)
-
-    def __iter__(self):
-        return iter(self.point_datasets)
-
-    def __str__(self):
-        return f'PointDataCollection({self.point_datasets})'
-
-    def __repr__(self):
-        return str(self)
-
-    def __add__(self, other):
-        return self.__class__(self.point_datasets + other.point_datasets)
-
-    def __radd__(self, other):
-        return self.__class__(other.point_datasets + self.point_datasets)
-
-
-@dataclasses.dataclass(frozen=True)
-class NetworkData:
-    name: str
-    coor: Tensor
-    nodes: pd.DataFrame
-    edges: Optional[pd.DataFrame] = None
-    lh_mask: Optional[Tensor] = None
-
-    def translate(
-        self,
-        translation: Sequence[float],
-        condition: Optional[callable] = None,
-    ) -> 'PointData':
-        if not condition:
-            coor = self.coor + np.array(translation)
-        else:
-            mask = condition(self.coor, self.nodes, self.lh_mask)
-            coor = self.coor.copy()
-            coor[mask] = coor[mask] + np.array(translation)
-        return self.__class__(
-            self.name,
-            coor,
-            self.nodes,
-            self.edges,
-            self.lh_mask,
-        )
-
-
-class NetworkDataCollection:
-    def __init__(
-        self,
-        network_datasets: Optional[Sequence[NetworkData]] = None
-    ):
-        self.network_datasets = list(network_datasets) or []
-
-    def add_network_dataset(self, network_dataset: NetworkData):
-        return self.__class__(self.network_datasets + [network_dataset])
-
-    def get_dataset(
-        self,
-        key: str,
-        return_all: bool = False,
-        strict: bool = True,
-    ) -> Union[NetworkData, 'NetworkDataCollection']:
-        indices = [
-            i for i in range(len(self.network_datasets))
-            if self.network_datasets[i].name == key
-        ]
-        if len(indices) == 0:
-            raise KeyError(f'No node data with key {key}')
-        if not return_all:
-            if len(indices) > 1 and strict:
-                raise KeyError(f'Multiple node data with key {key}')
-            return self[indices[0]]
-        else:
-            return self.__class__([self[i] for i in indices])
-
-    def get_node_dataset(
-        self,
-        key: str,
-        return_all: bool = False,
-        strict: bool = True,
-    ) -> Union[NetworkData, Sequence[NetworkData], 'NetworkDataCollection']:
-        return self.get_dataset(
-            key,
-            return_all=return_all,
-            strict=strict,
-            search='nodes',
-        )
-
-    def get_edge_dataset(
-        self,
-        key: str,
-        return_all: bool = False,
-        strict: bool = True,
-    ) -> Union[NetworkData, Sequence[NetworkData], 'NetworkDataCollection']:
-        return self.get_dataset(
-            key,
-            return_all=return_all,
-            strict=strict,
-            search='edges',
-        )
-
-    def translate(
-        self,
-        translation: Sequence[float],
-        condition: Optional[callable] = None,
-    ):
-        return self.__class__([
-            ds.translate(translation, condition=condition)
-            for ds in self.network_datasets
-        ])
-
-    def __getitem__(self, key: int):
-        return self.network_datasets[key]
-
-    def __len__(self):
-        return len(self.network_datasets)
-
-    def __iter__(self):
-        return iter(self.network_datasets)
-
-    def __str__(self):
-        return f'NetworkDataCollection({self.network_datasets})'
-
-    def __repr__(self):
-        return str(self)
-
-    def __add__(self, other):
-        return self.__class__(self.network_datasets + other.network_datasets)
-
-    def __radd__(self, other):
-        return self.__class__(other.network_datasets + self.network_datasets)
+from .const import DEFAULT_ROBUST_LIM_PCT, Tensor
 
 
 def sanitise(string: str) -> str:
@@ -496,16 +238,20 @@ def scale_image_preserve_aspect_ratio(
     return img.resize((new_width, new_height))
 
 
-def robust_clim(
+def scalar_percentile(
     data: Tensor,
-    percent: float = 5.0,
+    percent: Union[float, Tuple[float, float]] = DEFAULT_ROBUST_LIM_PCT,
     bgval: Optional[float] = 0.0,
 ) -> Tuple[float, float]:
+    if isinstance(percent, float):
+        percent = (percent, 100 - percent)
+    excl_mask = np.isnan(data) | np.isinf(data)
     if bgval is not None:
-        data = data[~np.isclose(data, bgval)]
+        excl_mask |= np.isclose(data, bgval)
+    data = data[~excl_mask]
     return (
-        np.nanpercentile(data, percent),
-        np.nanpercentile(data, 100 - percent),
+        np.nanpercentile(data, percent[0]),
+        np.nanpercentile(data, percent[1]),
     )
 
 
@@ -717,3 +463,24 @@ def source_over(
     Assumes premultiplied alpha.
     """
     return src + dst * (1.0 - src[..., 3:])
+
+
+@dataclasses.dataclass(frozen=True)
+class LinearScalarMapper:
+    norm: Optional[Tuple[float, float]] = None
+
+    def __call__(
+        self,
+        X: Tensor,
+        vmin: float,
+        vmax: float,
+    ) -> Tensor:
+        X = np.clip(X, vmin, vmax)
+        if self.norm is None:
+            return X
+        return (
+            (X - vmin) /
+            (vmax - vmin) *
+            (self.norm[1] - self.norm[0]) +
+            self.norm[0]
+        )

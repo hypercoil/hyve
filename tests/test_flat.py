@@ -42,7 +42,13 @@ surf = get_fsLR_flatmap_gifti()
 @pytest.mark.ci_unsupported
 def test_scalars():
     plot_f = plotdef(
-        surf_from_gifti(projection='flat'),
+        surf_from_gifti(
+            projection='flat',
+            left_surf=surf['left'],
+            right_surf=surf['right'],
+            left_mask=lh_mask,
+            right_mask=rh_mask,
+        ),
         surf_scalars_from_nifti('GM Density', template='fsLR'),
         plot_to_image(),
         save_snapshots(
@@ -52,10 +58,6 @@ def test_scalars():
         ),
     )
     plot_f(
-        flat_left_surf=surf['left'],
-        flat_right_surf=surf['right'],
-        flat_left_mask=lh_mask,
-        flat_right_mask=rh_mask,
         gm_density_nifti=tflow.get(
             template='MNI152NLin2009cAsym',
             suffix='probseg',
@@ -75,6 +77,7 @@ def test_scalars():
         ('network', 'bone')
     ])
 def test_parcellation(cmap, cmap_name):
+    extra_args = {}
     plot_f = plotdef(
         surf_from_gifti(projection='flat'),
         surf_scalars_from_cifti('parcellation', plot=True),
@@ -88,6 +91,8 @@ def test_parcellation(cmap, cmap_name):
             ),
         ),
     )
+    if cmap_name == 'bone':
+        extra_args['surf_scalars_clim'] = (0.1, 400.9)
     plot_f(
         flat_left_surf=surf['left'],
         flat_right_surf=surf['right'],
@@ -98,4 +103,5 @@ def test_parcellation(cmap, cmap_name):
         hemisphere=['left', 'right'],
         views=['down'],
         output_dir='/tmp',
+        **extra_args,
     )

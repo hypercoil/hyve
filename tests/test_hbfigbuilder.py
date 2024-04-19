@@ -21,11 +21,15 @@ from hyve.transforms import (
     plot_to_image,
     save_figure,
     save_grid,
+    text_element,
 )
 
 
 @pytest.mark.ci_unsupported
-def test_focused_view_autoselect_hemisphere_groupspec0():
+@pytest.mark.parametrize('num_maps', [2])
+def test_focused_view_autoselect_hemisphere_groupspec0(
+    num_maps,
+):
     plot_f = plotdef(
         surf_from_archive(),
         surf_scalars_from_array(
@@ -38,7 +42,7 @@ def test_focused_view_autoselect_hemisphere_groupspec0():
         scalar_focus_camera(kind='peak'),
         save_figure(
             padding=4,
-            canvas_size=(2000, 100),
+            canvas_size=(4 * 200 * num_maps, 200),
             canvas_color=(0, 0, 0),
             sort_by=['surfscalars'],
             group_spec = [
@@ -48,14 +52,14 @@ def test_focused_view_autoselect_hemisphere_groupspec0():
                 RowGroupSpec(variable='surfscalars'),
             ],
             fname_spec=(
-                'scalars-gaussiannoise_view-focused3_page-{page}'
+                'scalars-gaussiannoise_view-focused3_layout-emptyctr_page-{page}'
                 #'scalars-gaussiannoise_view-focused2_page-{page}'
             )
         ),
     )
 
-    array_left = np.random.randn(10, 32492)
-    array_right = np.random.randn(10, 32492)
+    array_left = np.random.randn(num_maps, 32492)
+    array_right = np.random.randn(num_maps, 32492)
     plot_f(
         template="fsLR",
         load_mask=True,
@@ -89,12 +93,12 @@ def test_focused_view_autoselect_hemisphere_groupspec1():
             group_spec = [
                 RowGroupSpec(
                     variable='hemisphere',
-                    max_levels=1,
+                    max_levels=2,
                 ),
                 ColGroupSpec(variable='surfscalars'),
             ],
             fname_spec=(
-                'scalars-gaussiannoise_view-focused_hemi-{hemisphere}_page-{page}'
+                'scalars-gaussiannoise_view-focused_layout-2col_page-{page}'
             )
         ),
     )
@@ -118,34 +122,40 @@ def test_focused_view_autoselect_hemisphere_groupspec1():
 def test_panoptic_groupspec_nohb():
     layout = Cell() | Cell() << (1 / 2)
     layout = layout * layout * layout
+    layout = layout | Cell() << (32 / 33)
+    layout = Cell() / layout << (1 / 13)
     annotations = {
-        0: dict(
-            hemisphere='left',
-            view='lateral',
-        ),
+        0: dict(elements=['subtitle']),
         1: dict(
             hemisphere='left',
-            view='medial',
+            view='lateral',
         ),
         2: dict(
-            hemisphere='right',
-            view='lateral',
+            hemisphere='left',
+            view='medial',
         ),
         3: dict(
             hemisphere='right',
-            view='medial',
+            view='lateral',
         ),
         4: dict(
-            view='dorsal',
+            hemisphere='right',
+            view='medial',
         ),
         5: dict(
-            view='ventral',
+            view='dorsal',
         ),
         6: dict(
-            view='anterior',
+            view='ventral',
         ),
         7: dict(
+            view='anterior',
+        ),
+        8: dict(
             view='posterior',
+        ),
+        9: dict(
+            elements=['scalar_bar'],
         ),
     }
     layout = layout.annotate(annotations)
@@ -156,9 +166,10 @@ def test_panoptic_groupspec_nohb():
             is_masked=False,
             apply_mask=True,
         ),
+        text_element('subtitle', content='{surfscalars}'),
         plot_to_image(),
         save_figure(
-            canvas_size=(3200, 4800),
+            canvas_size=(3200, 1200),
             canvas_color=(0, 0, 0),
             sort_by=['surfscalars'],
             layout_kernel=layout,
@@ -171,11 +182,14 @@ def test_panoptic_groupspec_nohb():
             fname_spec=(
                 'scalars-gaussiannoise_view-all_page-{page}'
             ),
+            scalar_bar_action='collect',
         ),
     )
 
-    array_left = np.random.randn(12, 32492)
-    array_right = np.random.randn(12, 32492)
+    # array_left = np.random.randn(12, 32492)
+    # array_right = np.random.randn(12, 32492)
+    array_left = np.random.randn(6, 32492)
+    array_right = np.random.randn(6, 32492)
     plot_f(
         template='fsLR',
         load_mask=True,
@@ -183,7 +197,7 @@ def test_panoptic_groupspec_nohb():
         gaussiannoise_array_right=array_right,
         surf_projection='veryinflated',
         surf_scalars_cmap='RdYlBu',
-        surf_scalars_clim='robust',
+        surf_scalars_clim_percentile=True,
         surf_scalars_below_color='#333333',
         window_size=(400, 300),
         hemisphere=['left', 'right', None],
@@ -283,7 +297,7 @@ def test_planar_sweep_autoselect_hemisphere():
             apply_mask=True,
         ),
         plot_to_image(),
-        planar_sweep_camera(initial=(1, 0, 0), normal=(0, 0, 1), n_steps=10),
+        planar_sweep_camera(initial=(1, 0, 0), normal=(0, 0, 1), n_angles=10),
         save_grid(
             n_cols=10, n_rows=5, padding=4,
             canvas_size=(3200, 1024),
@@ -320,7 +334,7 @@ def test_auto_view_autoselect_hemisphere():
             apply_mask=True,
         ),
         plot_to_image(),
-        auto_camera(n_ortho=3, focus='peak', n_angles=3),
+        auto_camera(),
         save_grid(
             n_cols=7, n_rows=10, padding=4,
             canvas_size=(2240, 2048),
@@ -342,6 +356,9 @@ def test_auto_view_autoselect_hemisphere():
         surf_projection='veryinflated',
         surf_scalars_cmap='RdYlBu',
         surf_scalars_below_color='#333333',
+        autocam_n_ortho=3,
+        autocam_focus='peak',
+        autocam_sweep_n_angles=3,
         window_size=(400, 250),
         output_dir='/tmp',
     )

@@ -7,9 +7,7 @@ Primitive functional atoms
 Atomic functional primitives for building more complex functions.
 """
 import inspect
-from functools import reduce
 from io import StringIO
-from itertools import chain
 from math import ceil
 from typing import (
     Any,
@@ -48,27 +46,46 @@ from PIL import Image
 
 from .const import (
     DEFAULT_WINDOW_SIZE,
+    EDGE_ALIM_DEFAULT_VALUE,
+    EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_ALPHA_DEFAULT_VALUE,
+    EDGE_AMAP_DEFAULT_VALUE,
     EDGE_CLIM_DEFAULT_VALUE,
+    EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
     EDGE_CMAP_DEFAULT_VALUE,
     EDGE_COLOR_DEFAULT_VALUE,
     EDGE_RADIUS_DEFAULT_VALUE,
     EDGE_RLIM_DEFAULT_VALUE,
+    EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    EDGE_RMAP_DEFAULT_VALUE,
     EMPIRICAL_DPI,
+    LAYER_ALIM_DEFAULT_VALUE,
+    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
     LAYER_ALPHA_DEFAULT_VALUE,
+    LAYER_AMAP_DEFAULT_VALUE,
+    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_BELOW_COLOR_DEFAULT_VALUE,
     LAYER_BLEND_MODE_DEFAULT_VALUE,
     LAYER_CLIM_DEFAULT_VALUE,
     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
     LAYER_COLOR_DEFAULT_VALUE,
+    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
     NETWORK_LAYER_BELOW_COLOR_DEFAULT_VALUE,
+    NODE_ALIM_DEFAULT_VALUE,
+    NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
     NODE_ALPHA_DEFAULT_VALUE,
+    NODE_AMAP_DEFAULT_VALUE,
     NODE_CLIM_DEFAULT_VALUE,
+    NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
     NODE_CMAP_DEFAULT_VALUE,
     NODE_COLOR_DEFAULT_VALUE,
     NODE_RADIUS_DEFAULT_VALUE,
     NODE_RLIM_DEFAULT_VALUE,
+    NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
+    NODE_RMAP_DEFAULT_VALUE,
     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
     POINTS_SCALARS_CLIM_DEFAULT_VALUE,
     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
@@ -92,38 +109,41 @@ from .const import (
 from .elements import (
     ElementBuilder,
     RasterBuilder,
+    ScalarBarBuilder,
     TextBuilder,
     UnknownBuilder,
-    build_raster,
     tile_plot_elements,
 )
+from .geom import (
+    CortexTriSurface,
+    EdgeLayer,
+    Layer,
+    NetworkData,
+    NetworkDataCollection,
+    NodeLayer,
+    PointData,
+    PointDataCollection,
+    hemisphere_select_fit,
+    hemisphere_slack_fit,
+    plot_network_f,
+    plot_points_f,
+    plot_surf_f,
+)
+from .geom.transforms import hemisphere_select_assign_parameters
 from .layout import (
-    AnnotatedLayout,
     Cell,
     CellLayout,
     GroupSpec,
     grid,
 )
 from .plot import (
-    EdgeLayer,
-    Layer,
-    NodeLayer,
-    _get_hemisphere_parameters,
+    #_get_hemisphere_parameters,
     _null_auxwriter,
     _null_op,
-    hemisphere_slack_fit,
-    plot_network_f,
-    plot_points_f,
-    plot_surf_f,
     plotted_entities,
     unified_plotter,
 )
-from .surf import CortexTriSurface
 from .util import (
-    NetworkData,
-    NetworkDataCollection,
-    PointData,
-    PointDataCollection,
     auto_focus,
     cortex_cameras,
     filter_adjacency_data,
@@ -299,6 +319,7 @@ def points_scalars_from_nifti_f(
     nifti: nb.Nifti1Image,
     null_value: Optional[float] = 0.0,
     point_size: Optional[float] = None,
+    geom_name: str = None,
     points: Optional[PointDataCollection] = None,
     points_scalars: Sequence[str] = (),
     plot: bool = True,
@@ -322,7 +343,33 @@ def points_scalars_from_nifti_f(
         pv.PointSet(vol_coor),
         data={scalars: vol_scalars},
         point_size=point_size,
+        name=geom_name or scalars,
     )
+    if (geom_name is not None) and (points is not None):
+        geom = points.address[geom_name]
+        # if len(points_data.points.points) != len(vol_coor):
+        #     raise ValueError(
+        #         f'Point dataset {scalars} is configured to use the geometry '
+        #         f'{geom_name}, but the number of points in the geometry '
+        #         f'(n={len(points_data.points.points)}) does not match the '
+        #         f'number of points in the dataset (n={len(vol_coor)}).'
+        #     )
+        #     all_points = set(
+        #         tuple(e) for e in points_data.points.points
+        #     ).union(
+        #         set(tuple(e) for e in vol_coor)
+        #     )
+        #     all_points = np.asarray(tuple(all_points))
+        points_data = PointData(
+            points=geom.points,
+            point_size=geom.point_size,
+            data={**geom.points.point_data, scalars: points_data.points},
+            name=geom_name,
+            filters=geom.filters,
+        )
+        points = PointDataCollection([
+            ds for ds in points.address.values() if ds.name != geom_name
+        ])
     if points:
         points = points + PointDataCollection([points_data])
     else:
@@ -337,6 +384,7 @@ def points_scalars_from_array_f(
     coor: Tensor,
     values: Tensor,
     point_size: float = 1.0,
+    geom_name: str = None,
     points: Optional[PointDataCollection] = None,
     points_scalars: Sequence[str] = (),
     plot: bool = True,
@@ -345,7 +393,20 @@ def points_scalars_from_array_f(
         pv.PointSet(coor),
         data={scalars: values},
         point_size=point_size,
+        name=geom_name or scalars,
     )
+    if (geom_name is not None) and (points is not None):
+        geom = points.address[geom_name]
+        points_data = PointData(
+            points=geom.points,
+            point_size=geom.point_size,
+            data={**geom.points.point_data, scalars: points_data.points},
+            name=geom_name,
+            filters=geom.filters,
+        )
+        points = PointDataCollection([
+            ds for ds in points.address.values() if ds.name != geom_name
+        ])
     if points:
         points = points + PointDataCollection([points_data])
     else:
@@ -584,10 +645,15 @@ def parcellate_surf_scalars_f(
         name=scalars,
         parcellation=parcellation_name,
     )
+    if scalars in surf_scalars:
+        surf_scalars = (
+            tuple(e for e in surf_scalars if e != scalars) + (sink,)
+        )
+    surf.rename_array(scalars, sink)
     scalar_names = surf.scatter_into_parcels(
         data=parcellated,
         parcellation=parcellation_name,
-        sink=sink,
+        sink=scalars,
     )
     if plot:
         surf_scalars = tuple(list(surf_scalars) + list(scalar_names))
@@ -622,6 +688,70 @@ def vertex_to_face_f(
         interpolation=interpolation,
     )
     return surf
+
+
+def draw_surface_boundary_f(
+    surf: CortexTriSurface,
+    boundary_name: str,
+    scalars: str,
+    boundary_threshold: float = 0.5,
+    target_domain: Literal['vertex', 'face'] = 'vertex',
+    v2f_interpolation: str = 'mode',
+    copy_values_to_boundary: bool = False,
+    boundary_fill: float = 1.0,
+    nonboundary_fill: Optional[float] = np.nan,
+    num_steps: int = 1,
+    surf_scalars: Sequence[str] = (),
+    plot: bool = True,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    surf.draw_boundaries(
+        scalars=scalars,
+        boundary_name=boundary_name,
+        threshold=boundary_threshold,
+        target_domain=target_domain,
+        v2f_interpolation=v2f_interpolation,
+        copy_values_to_boundary=copy_values_to_boundary,
+        boundary_fill=boundary_fill,
+        nonboundary_fill=nonboundary_fill,
+        num_steps=num_steps,
+    )
+    if plot and boundary_name not in surf_scalars:
+        surf_scalars = tuple(list(surf_scalars) + [boundary_name])
+    return surf, surf_scalars
+
+
+def select_active_parcels_f(
+    surf: CortexTriSurface,
+    parcellation_name: str,
+    activation_name: str,
+    activation_threshold: float = 2.58,
+    parcel_coverage_threshold: float = 0.5,
+    use_abs: bool = False,
+    surf_scalars: Sequence[str] = (),
+    plot: bool = True,
+) -> Tuple[CortexTriSurface, Sequence[str]]:
+    surf.select_active_parcels(
+        parcellation_name=parcellation_name,
+        activation_name=activation_name,
+        activation_threshold=activation_threshold,
+        parcel_coverage_threshold=parcel_coverage_threshold,
+        use_abs=use_abs,
+    )
+    if plot and parcellation_name not in surf_scalars:
+        surf_scalars = tuple(list(surf_scalars) + [parcellation_name])
+    return surf, surf_scalars
+
+
+def select_internal_points_f(
+    points: PointDataCollection,
+    surf: CortexTriSurface,
+    geom: Optional[str] = None,
+) -> PointDataCollection:
+    points = points.apply_selection_surfaces(
+        selection_surfaces=(surf.left, surf.right),
+        names=(geom,) if geom else None,
+    )
+    return points
 
 
 def _copy_dict_from_params(
@@ -710,12 +840,45 @@ def add_surface_overlay_f(
             params,
             (
                 ('surf_scalars', SURF_SCALARS_DEFAULT_VALUE),
+                ('surf_scalars_color', LAYER_COLOR_DEFAULT_VALUE),
                 ('surf_scalars_cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
+                (
+                    'surf_scalars_cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
                 ('surf_scalars_clim', SURF_SCALARS_CLIM_DEFAULT_VALUE),
+                (
+                    'surf_scalars_clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'surf_scalars_clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                ('surf_scalars_alpha', LAYER_ALPHA_DEFAULT_VALUE),
+                ('surf_scalars_amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    'surf_scalars_amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                ('surf_scalars_alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    'surf_scalars_alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'surf_scalars_alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    'surf_scalars_nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     'surf_scalars_below_color',
                     SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
                 ),
+                ('surf_scalars_blend_mode', LAYER_BLEND_MODE_DEFAULT_VALUE),
             ),
         )
         inner_f_params = {**params}
@@ -723,20 +886,47 @@ def add_surface_overlay_f(
         layer_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_cmap', 'cmap', SURF_SCALARS_CMAP_DEFAULT_VALUE),
-                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
                     'cmap_negative',
                     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_clim_negative',
                     'clim_negative',
                     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (
+                    f'{paramstr}_clim_percentile',
+                    'clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
-                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+                (f'{paramstr}_amap', 'amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_amap_negative',
+                    'amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (f'{paramstr}_alim', 'alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_alim_negative',
+                    'alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_alim_percentile',
+                    'alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_nan_override',
+                    'nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_below_color',
                     'below_color',
@@ -757,23 +947,69 @@ def add_surface_overlay_f(
 
         params = inner_f(**inner_f_params)
 
-        result_params, params = _move_params_to_dict(params, (
-            ('surf_scalars_cmap', 'cmap', layer_params['cmap']),
-            ('surf_scalars_clim', 'clim', layer_params['clim']),
-            (
-                'surf_scalars_below_color',
-                'below_color',
-                layer_params['below_color'],
-            ),
-        ))
+        result_params, params = _move_params_to_dict(
+            params, (
+                ('surf_scalars_color', 'color', layer_params['color']),
+                ('surf_scalars_cmap', 'cmap', layer_params['cmap']),
+                (
+                    'surf_scalars_cmap_negative',
+                    'cmap_negative',
+                    layer_params['cmap_negative'],
+                ),
+                ('surf_scalars_clim', 'clim', layer_params['clim']),
+                (
+                    'surf_scalars_clim_negative',
+                    'clim_negative',
+                    layer_params['clim_negative'],
+                ),
+                (
+                    'surf_scalars_clim_percentile',
+                    'clim_percentile',
+                    layer_params['clim_percentile'],
+                ),
+                ('surf_scalars_alpha', 'alpha', layer_params['alpha']),
+                ('surf_scalars_amap', 'amap', layer_params['amap']),
+                (
+                    'surf_scalars_amap_negative',
+                    'amap_negative',
+                    layer_params['amap_negative'],
+                ),
+                ('surf_scalars_alim', 'alim', layer_params['alim']),
+                (
+                    'surf_scalars_alim_negative',
+                    'alim_negative',
+                    layer_params['alim_negative'],
+                ),
+                (
+                    'surf_scalars_alim_percentile',
+                    'alim_percentile',
+                    layer_params['alim_percentile'],
+                ),
+                (
+                    'surf_scalars_nan_override',
+                    'nan_override',
+                    layer_params['nan_override'],
+                ),
+                (
+                    'surf_scalars_below_color',
+                    'below_color',
+                    layer_params['below_color'],
+                ),
+                (
+                    'surf_scalars_blend_mode',
+                    'blend_mode',
+                    layer_params['blend_mode'],
+                ),
+            )
+        )
         layer_params = {**layer_params, **result_params}
 
-        hemi_params_p = _get_hemisphere_parameters(
+        hemi_params_p = hemisphere_select_assign_parameters(
             surf_scalars_cmap=layer_params['cmap'],
             surf_scalars_clim=layer_params['clim'],
             surf_scalars_layers=None,
         )
-        hemi_params_n = _get_hemisphere_parameters(
+        hemi_params_n = hemisphere_select_assign_parameters(
             surf_scalars_cmap=layer_params['cmap_negative'],
             surf_scalars_clim=layer_params['clim_negative'],
             surf_scalars_layers=None,
@@ -841,12 +1077,45 @@ def add_points_overlay_f(
         points_scalars_layers = params.pop('points_scalars_layers', None)
         if points_scalars_layers is None:
             points_scalars_layers = []
+        #params_orig = {**params}
         store, params = _copy_dict_from_params(
             params,
             (
                 ('points_scalars', POINTS_SCALARS_DEFAULT_VALUE),
+                ('points_scalars_color', LAYER_COLOR_DEFAULT_VALUE),
                 ('points_scalars_cmap', POINTS_SCALARS_CMAP_DEFAULT_VALUE),
+                (
+                    'points_scalars_cmap_negative',
+                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
                 ('points_scalars_clim', POINTS_SCALARS_CLIM_DEFAULT_VALUE),
+                (
+                    'points_scalars_clim_negative',
+                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'points_scalars_clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                ('points_scalars_alpha', LAYER_ALPHA_DEFAULT_VALUE),
+                ('points_scalars_amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    'points_scalars_amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                ('points_scalars_alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    'points_scalars_alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    'points_scalars_alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    'points_scalars_nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     'points_scalars_below_color',
                     POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
@@ -855,32 +1124,58 @@ def add_points_overlay_f(
         )
         inner_f_params = {**params}
 
-        paramstr = sanitise(layer_name)
         layer_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap',
                     'cmap',
                     POINTS_SCALARS_CMAP_DEFAULT_VALUE,
                 ),
-                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_cmap_negative',
                     'cmap_negative',
                     LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_clim', 'clim', LAYER_CLIM_DEFAULT_VALUE),
                 (
                     f'{paramstr}_clim_negative',
                     'clim_negative',
                     LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
                 ),
+                (
+                    f'{paramstr}_clim_percentile',
+                    'clim_percentile',
+                    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_alpha', 'alpha', LAYER_ALPHA_DEFAULT_VALUE),
-                (f'{paramstr}_color', 'color', LAYER_COLOR_DEFAULT_VALUE),
+                (f'{paramstr}_amap', 'amap', LAYER_AMAP_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_amap_negative',
+                    'amap_negative',
+                    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (f'{paramstr}_alim', 'alim', LAYER_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_alim_negative',
+                    'alim_negative',
+                    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_alim_percentile',
+                    'alim_percentile',
+                    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
+                (
+                    f'{paramstr}_nan_override',
+                    'nan_override',
+                    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_below_color',
                     'below_color',
-                    LAYER_BELOW_COLOR_DEFAULT_VALUE,
+                    POINTS_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_blend_mode',
@@ -892,25 +1187,78 @@ def add_points_overlay_f(
 
         params = inner_f(**inner_f_params)
 
-        result_params, params = _move_params_to_dict(params, (
-            ('points_scalars_cmap', 'cmap', layer_params['cmap']),
-            ('points_scalars_clim', 'clim', layer_params['clim']),
-            (
-                'points_scalars_below_color',
-                'below_color',
-                layer_params['below_color'],
-            ),
-        ))
+        result_params, params = _move_params_to_dict(
+            params, (
+                ('points_scalars_color', 'color', layer_params['color']),
+                ('points_scalars_cmap', 'cmap', layer_params['cmap']),
+                (
+                    'points_scalars_cmap_negative',
+                    'cmap_negative',
+                    layer_params['cmap_negative'],
+                ),
+                ('points_scalars_clim', 'clim', layer_params['clim']),
+                (
+                    'points_scalars_clim_negative',
+                    'clim_negative',
+                    layer_params['clim_negative'],
+                ),
+                (
+                    'points_scalars_clim_percentile',
+                    'clim_percentile',
+                    layer_params['clim_percentile'],
+                ),
+                ('points_scalars_alpha', 'alpha', layer_params['alpha']),
+                ('points_scalars_amap', 'amap', layer_params['amap']),
+                (
+                    'points_scalars_amap_negative',
+                    'amap_negative',
+                    layer_params['amap_negative'],
+                ),
+                ('points_scalars_alim', 'alim', layer_params['alim']),
+                (
+                    'points_scalars_alim_negative',
+                    'alim_negative',
+                    layer_params['alim_negative'],
+                ),
+                (
+                    'points_scalars_alim_percentile',
+                    'alim_percentile',
+                    layer_params['alim_percentile'],
+                ),
+                (
+                    'points_scalars_nan_override',
+                    'nan_override',
+                    layer_params['nan_override'],
+                ),
+                (
+                    'points_scalars_below_color',
+                    'below_color',
+                    layer_params['below_color'],
+                ),
+                (
+                    'points_scalars_blend_mode',
+                    'blend_mode',
+                    layer_params['blend_mode'],
+                ),
+            )
+        )
         layer_params = {**layer_params, **result_params}
 
         layer = Layer(
             name=layer_name,
-            cmap=layer_params['cmap'],
-            clim=layer_params['clim'],
-            cmap_negative=layer_params['cmap_negative'],
-            clim_negative=layer_params['clim_negative'],
-            alpha=layer_params['alpha'],
             color=layer_params['color'],
+            cmap=layer_params['cmap'],
+            cmap_negative=layer_params['cmap_negative'],
+            clim=layer_params['clim'],
+            clim_negative=layer_params['clim_negative'],
+            clim_percentile=layer_params['clim_percentile'],
+            alpha=layer_params['alpha'],
+            amap=layer_params['amap'],
+            amap_negative=layer_params['amap_negative'],
+            alim=layer_params['alim'],
+            alim_negative=layer_params['alim_negative'],
+            alim_percentile=layer_params['alim_percentile'],
+            nan_override=layer_params['nan_override'],
             below_color=layer_params['below_color'],
             blend_mode=layer_params['blend_mode'],
         )
@@ -953,18 +1301,30 @@ def add_network_overlay_f(
         store, params = _copy_dict_from_params(
             params,
             (
+                ('node_color', NODE_COLOR_DEFAULT_VALUE),
                 ('node_cmap', NODE_CMAP_DEFAULT_VALUE),
                 ('node_clim', NODE_CLIM_DEFAULT_VALUE),
-                ('node_color', NODE_COLOR_DEFAULT_VALUE),
+                ('node_clim_percentile', NODE_CLIM_PERCENTILE_DEFAULT_VALUE),
                 ('node_radius', NODE_RADIUS_DEFAULT_VALUE),
-                ('node_radius_range', NODE_RLIM_DEFAULT_VALUE),
+                ('node_rmap', NODE_RMAP_DEFAULT_VALUE),
+                ('node_rlim', NODE_RLIM_DEFAULT_VALUE),
+                ('node_rlim_percentile', NODE_RLIM_PERCENTILE_DEFAULT_VALUE),
                 ('node_alpha', NODE_ALPHA_DEFAULT_VALUE),
+                ('node_amap', NODE_AMAP_DEFAULT_VALUE),
+                ('node_alim', NODE_ALIM_DEFAULT_VALUE),
+                ('node_alim_percentile', NODE_ALIM_PERCENTILE_DEFAULT_VALUE),
+                ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
                 ('edge_cmap', EDGE_CMAP_DEFAULT_VALUE),
                 ('edge_clim', EDGE_CLIM_DEFAULT_VALUE),
-                ('edge_color', EDGE_COLOR_DEFAULT_VALUE),
-                ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                ('edge_clim_percentile', EDGE_CLIM_PERCENTILE_DEFAULT_VALUE),
                 ('edge_radius', EDGE_RADIUS_DEFAULT_VALUE),
-                ('edge_radius_range', EDGE_RLIM_DEFAULT_VALUE),
+                ('edge_rmap', EDGE_RMAP_DEFAULT_VALUE),
+                ('edge_rlim', EDGE_RLIM_DEFAULT_VALUE),
+                ('edge_rlim_percentile', EDGE_RLIM_PERCENTILE_DEFAULT_VALUE),
+                ('edge_alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                ('edge_amap', EDGE_AMAP_DEFAULT_VALUE),
+                ('edge_alim', EDGE_ALIM_DEFAULT_VALUE),
+                ('edge_alim_percentile', EDGE_ALIM_PERCENTILE_DEFAULT_VALUE),
             )
         )
         inner_f_params = {**params}
@@ -972,29 +1332,37 @@ def add_network_overlay_f(
         node_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_node_cmap', 'cmap', NODE_CMAP_DEFAULT_VALUE),
                 (f'{paramstr}_node_clim', 'clim', NODE_CLIM_DEFAULT_VALUE),
-                (f'{paramstr}_node_color', 'color', NODE_COLOR_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_node_clim_percentile',
+                    'clim_percentile',
+                    NODE_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_node_alpha', 'alpha', NODE_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_node_amap', 'amap', NODE_AMAP_DEFAULT_VALUE),
+                (f'{paramstr}_node_alim', 'alim', NODE_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_node_alim_percentile',
+                    'alim_percentile',
+                    NODE_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_node_radius',
                     'radius',
                     NODE_RADIUS_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_node_rmap', 'rmap', NODE_RMAP_DEFAULT_VALUE),
                 (
-                    f'{paramstr}_node_radius_range',
-                    'radius_range',
+                    f'{paramstr}_node_rlim',
+                    'rlim',
                     NODE_RLIM_DEFAULT_VALUE,
                 ),
                 (
-                    f'{paramstr}_node_cmap_negative',
-                    'cmap_negative',
-                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-                ),
-                (
-                    f'{paramstr}_node_clim_negative',
-                    'clim_negative',
-                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                    f'{paramstr}_node_rlim_percentile',
+                    'rlim_percentile',
+                    NODE_RLIM_PERCENTILE_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_node_below_color',
@@ -1006,29 +1374,33 @@ def add_network_overlay_f(
         edge_params, params = _move_params_to_dict(
             params,
             (
+                (f'{paramstr}_edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
                 (f'{paramstr}_edge_cmap', 'cmap', EDGE_CMAP_DEFAULT_VALUE),
                 (f'{paramstr}_edge_clim', 'clim', EDGE_CLIM_DEFAULT_VALUE),
-                (f'{paramstr}_edge_color', 'color', EDGE_COLOR_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_edge_clim_percentile',
+                    'clim_percentile',
+                    EDGE_CLIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (f'{paramstr}_edge_alpha', 'alpha', EDGE_ALPHA_DEFAULT_VALUE),
+                (f'{paramstr}_edge_amap', 'amap', EDGE_AMAP_DEFAULT_VALUE),
+                (f'{paramstr}_edge_alim', 'alim', EDGE_ALIM_DEFAULT_VALUE),
+                (
+                    f'{paramstr}_edge_alim_percentile',
+                    'alim_percentile',
+                    EDGE_ALIM_PERCENTILE_DEFAULT_VALUE,
+                ),
                 (
                     f'{paramstr}_edge_radius',
                     'radius',
                     EDGE_RADIUS_DEFAULT_VALUE,
                 ),
+                (f'{paramstr}_edge_rmap', 'rmap', EDGE_RMAP_DEFAULT_VALUE),
+                (f'{paramstr}_edge_rlim', 'rlim', EDGE_RLIM_DEFAULT_VALUE),
                 (
-                    f'{paramstr}_edge_radius_range',
-                    'radius_range',
-                    EDGE_RLIM_DEFAULT_VALUE,
-                ),
-                (
-                    f'{paramstr}_edge_cmap_negative',
-                    'cmap_negative',
-                    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
-                ),
-                (
-                    f'{paramstr}_edge_clim_negative',
-                    'clim_negative',
-                    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+                    f'{paramstr}_edge_rlim_percentile',
+                    'rlim_percentile',
+                    EDGE_RLIM_PERCENTILE_DEFAULT_VALUE,
                 ),
                 (
                     f'{paramstr}_edge_below_color',
@@ -1040,48 +1412,106 @@ def add_network_overlay_f(
 
         params = inner_f(**inner_f_params)
 
-        result_node_params, params = _move_params_to_dict(params, (
-            ('node_cmap', 'cmap', node_params['cmap']),
-            ('node_clim', 'clim', node_params['clim']),
-            ('node_color', 'color', node_params['color']),
-            ('node_radius', 'radius', node_params['radius']),
-            ('node_radius_range', 'radius_range', node_params['radius_range']),
-            ('node_alpha', 'alpha', node_params['alpha']),
-        ))
-        result_edge_params, params = _move_params_to_dict(params, (
-            ('edge_cmap', 'cmap', edge_params['cmap']),
-            ('edge_clim', 'clim', edge_params['clim']),
-            ('edge_color', 'color', edge_params['color']),
-            ('edge_alpha', 'alpha', edge_params['alpha']),
-            ('edge_radius', 'radius', edge_params['radius']),
-            ('edge_radius_range', 'radius_range', edge_params['radius_range']),
-        ))
+        result_node_params, params = _move_params_to_dict(
+            params, (
+                ('node_color', 'color', node_params['color']),
+                ('node_cmap', 'cmap', node_params['cmap']),
+                ('node_clim', 'clim', node_params['clim']),
+                (
+                    'node_clim_percentile',
+                    'clim_percentile',
+                    node_params['clim_percentile'],
+                ),
+                ('node_alpha', 'alpha', node_params['alpha']),
+                ('node_amap', 'amap', node_params['amap']),
+                ('node_alim', 'alim', node_params['alim']),
+                (
+                    'node_alim_percentile',
+                    'alim_percentile',
+                    node_params['alim_percentile'],
+                ),
+                ('node_radius', 'radius', node_params['radius']),
+                ('node_rmap', 'rmap', node_params['rmap']),
+                ('node_rlim', 'rlim', node_params['rlim']),
+                (
+                    'node_rlim_percentile',
+                    'rlim_percentile',
+                    node_params['rlim_percentile'],
+                ),
+                (
+                    'node_below_color',
+                    'below_color',
+                    node_params['below_color'],
+                ),
+            )
+        )
+        result_edge_params, params = _move_params_to_dict(
+            params, (
+                ('edge_color', 'color', edge_params['color']),
+                ('edge_cmap', 'cmap', edge_params['cmap']),
+                ('edge_clim', 'clim', edge_params['clim']),
+                (
+                    'edge_clim_percentile',
+                    'clim_percentile',
+                    edge_params['clim_percentile'],
+                ),
+                ('edge_alpha', 'alpha', edge_params['alpha']),
+                ('edge_amap', 'amap', edge_params['amap']),
+                ('edge_alim', 'alim', edge_params['alim']),
+                (
+                    'edge_alim_percentile',
+                    'alim_percentile',
+                    edge_params['alim_percentile'],
+                ),
+                ('edge_radius', 'radius', edge_params['radius']),
+                ('edge_rmap', 'rmap', edge_params['rmap']),
+                ('edge_rlim', 'rlim', edge_params['rlim']),
+                (
+                    'edge_rlim_percentile',
+                    'rlim_percentile',
+                    edge_params['rlim_percentile'],
+                ),
+                (
+                    'edge_below_color',
+                    'below_color',
+                    edge_params['below_color'],
+                ),
+            )
+        )
         node_params = {**node_params, **result_node_params}
         edge_params = {**edge_params, **result_edge_params}
 
         edge_layer = EdgeLayer(
             name=layer_name,
+            color=edge_params['color'],
             cmap=edge_params['cmap'],
             clim=edge_params['clim'],
-            cmap_negative=edge_params['cmap_negative'],
-            clim_negative=edge_params['clim_negative'],
-            color=edge_params['color'],
+            clim_percentile=edge_params['clim_percentile'],
             alpha=edge_params['alpha'],
-            below_color=edge_params['below_color'],
+            amap=edge_params['amap'],
+            alim=edge_params['alim'],
+            alim_percentile=edge_params['alim_percentile'],
             radius=edge_params['radius'],
-            radius_range=edge_params['radius_range'],
+            rmap=edge_params['rmap'],
+            rlim=edge_params['rlim'],
+            rlim_percentile=edge_params['rlim_percentile'],
+            below_color=edge_params['below_color'],
         )
         node_layer = NodeLayer(
             name=layer_name,
+            color=node_params['color'],
             cmap=node_params['cmap'],
             clim=node_params['clim'],
-            cmap_negative=node_params['cmap_negative'],
-            clim_negative=node_params['clim_negative'],
-            color=node_params['color'],
+            clim_percentile=node_params['clim_percentile'],
             alpha=node_params['alpha'],
-            below_color=node_params['below_color'],
+            amap=node_params['amap'],
+            alim=node_params['alim'],
+            alim_percentile=node_params['alim_percentile'],
             radius=node_params['radius'],
-            radius_range=node_params['radius_range'],
+            rmap=node_params['rmap'],
+            rlim=node_params['rlim'],
+            rlim_percentile=node_params['rlim_percentile'],
+            below_color=node_params['below_color'],
             edge_layers=[edge_layer],
         )
 
@@ -1241,7 +1671,7 @@ def add_postprocessor_f(
     name: str,
     postprocessor: Callable,
     auxwriter: Optional[Callable] = None,
-    postprocessors: Optional[Sequence[Callable]] = None,
+    postprocessors: Optional[Mapping[str, Tuple[Callable, Callable]]] = None,
 ) -> Sequence[Callable]:
     if postprocessors is None:
         postprocessors = {}
@@ -1255,7 +1685,7 @@ def add_postprocessor_f(
 #       parameter, which specifies whether to close the plotter after the
 #       primitive is executed, when another downstream primitive like
 #       `plot_to_image` is called. It would probably be better to either
-#       handling the close operation in a base postprocessor that is
+#       handle the close operation in a base postprocessor that is
 #       pre-transformed into the postprocessor chain, or to automatically
 #       splice the close parameter into the postprocessor chain.
 def transform_postprocessor_f(
@@ -1265,12 +1695,12 @@ def transform_postprocessor_f(
     aux_transformer: Optional[Callable] = None,
     auxwriter: Optional[Callable] = None,
     auxwriter_params: Optional[Mapping] = None,
-    postprocessors: Optional[Sequence[Callable]] = None,
+    postprocessors: Optional[Mapping[str, Tuple[Callable, Callable]]] = None,
     composition_order: Literal['pre', 'post'] = 'pre',
 ) -> Sequence[Callable]:
     notfound = False
     if postprocessors is None:
-        notfound = True
+        postprocessors = {}
     postprocessor, _auxwriter = postprocessors.get(name, (None, None))
     if postprocessor is None:
         notfound = True
@@ -1454,7 +1884,7 @@ def closest_ortho_camera_aux_f(
 def planar_sweep_camera_f(
     surf: CortexTriSurface,
     hemispheres: Optional[str],
-    initial: Sequence,
+    initial: Sequence = (1, 0, 0),
     normal: Optional[Sequence[float]] = None,
     n_steps: int = 10,
     require_planar: bool = True,
@@ -1699,6 +2129,7 @@ def plot_final_view_f(
     n_scenes: int = 1,
     close_plotter: bool = True,
 ) -> Tuple[Tensor]:
+    plotter.view_xy() # TODO: allow more control over the default view
     snapshots = [
         plotter.show(
             window_size=window_size,
@@ -1718,6 +2149,7 @@ def plot_to_html_buffer_f(
     close_plotter: bool = True,
 ) -> StringIO:
     plotter.window_size = window_size
+    plotter.view_xy() # TODO: allow more control over the default view
     html_buffer = plotter.export_html(filename=None)
     if close_plotter:
         plotter.close()
@@ -1725,7 +2157,7 @@ def plot_to_html_buffer_f(
 
 
 def save_snapshots_f(
-    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    snapshots: Sequence[Mapping],
     output_dir: str,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -1735,20 +2167,23 @@ def save_snapshots_f(
         img = Image.fromarray(img)
         img.save(fname)
 
-    for cimg, cmeta in snapshots:
-        write_f(
-            writer=writer,
-            argument=cimg,
-            entities=cmeta,
-            output_dir=output_dir,
-            fname_spec=fname_spec,
-            suffix=suffix,
-            extension=extension,
-        )
+    for retval in snapshots:
+        cimg = retval['elements'].get('snapshots', None)
+        cmeta = retval['metadata']
+        if cimg is not None:
+            write_f(
+                writer=writer,
+                argument=cimg,
+                entities=cmeta,
+                output_dir=output_dir,
+                fname_spec=fname_spec,
+                suffix=suffix,
+                extension=extension,
+            )
 
 
 def save_html_f(
-    html_buffer: Sequence[Tuple[StringIO, Mapping[str, str]]],
+    html_buffer: Sequence[Mapping],
     output_dir: str,
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -1758,16 +2193,19 @@ def save_html_f(
         with open(fname, 'w', encoding='utf-8') as f:
             f.write(buffer.read())
 
-    for chtml, cmeta in html_buffer:
-        write_f(
-            writer=writer,
-            argument=chtml,
-            entities=cmeta,
-            output_dir=output_dir,
-            fname_spec=fname_spec,
-            suffix=suffix,
-            extension=extension,
-        )
+    for retval in html_buffer:
+        chtml = retval['elements'].get('html_buffer', None)
+        cmeta = retval['metadata']
+        if chtml is not None:
+            write_f(
+                writer=writer,
+                argument=chtml,
+                entities=cmeta,
+                output_dir=output_dir,
+                fname_spec=fname_spec,
+                suffix=suffix,
+                extension=extension,
+            )
 
 
 def plot_to_display_f(
@@ -1775,36 +2213,42 @@ def plot_to_display_f(
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
 ) -> None:
     def writer(plotter, fname=None):
+        plotter.view_xy() # TODO: allow more control over the default view
         # TODO: window_size apparently does not work. Perhaps it's inheriting
         #       from the theme when the plotter is created?
         plotter.show(window_size=window_size)
 
-    for cplotter, cmeta in plotter:
-        write_f(
-            writer=writer,
-            argument=cplotter,
-            entities=cmeta,
-            output_dir=None,
-            fname_spec=None,
-            suffix=None,
-            extension=None,
-        )
-        cplotter.close()
+    for retval in plotter:
+        cplotter = retval['elements'].get('plotter', None)
+        cmeta = retval['metadata']
+        if cplotter is not None:
+            write_f(
+                writer=writer,
+                argument=cplotter,
+                entities=cmeta,
+                output_dir=None,
+                fname_spec=None,
+                suffix=None,
+                extension=None,
+            )
+            cplotter.close()
 
 
 def save_figure_f(
-    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    snapshots: Sequence[Mapping],
     canvas_size: Tuple[int, int],
     output_dir: str,
     layout_kernel: CellLayout = Cell(),
     sort_by: Optional[Sequence[str]] = None,
     group_spec: Optional[Sequence[GroupSpec]] = None,
+    default_elements: Optional[Union[str, Sequence[str]]] = ('snapshots',),
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'svg',
     padding: int = 0,
     canvas_color: Any = (1, 1, 1, 1),
 ) -> None: # Union[Tuple[Image.Image], Image.Image]:
+
     # Helper function: write a single snapshot group to a file.
     def writer(snapshot_group, fname):
         _canvas_color = colors.to_hex(canvas_color)
@@ -1821,18 +2265,74 @@ def save_figure_f(
                 transform=[],
             )
         ]
-        for i, (cimg, cmeta) in snapshot_group:
+        # print(len(snapshot_group))
+        # print(tuple(i for i, _ in snapshot_group))
+        for i, results in snapshot_group:
             panel = cells[i]
-            if not isinstance(cimg, svg.SVG):
-                builder = RasterBuilder(
-                    content=cimg,
+            celements_names = tuple(
+                e for e in page_elements[i] if isinstance(e, str)
+            )
+            celements_with_filters = {
+                tuple(e.keys())[0]: j
+                for j, e in enumerate(page_elements[i])
+                if not isinstance(e, str)
+            }
+            celements_names = celements_names + tuple(
+                celements_with_filters.keys()
+            )
+            celements = tuple(
+                v
+                for k, v in results['elements'].items()
+                if k in celements_names
+            )
+            if not celements:
+                continue
+            elif isinstance(celements[0], tuple):
+                celements = sum(celements, ())
+            # TODO: We want something more general than this. Currently, this
+            #       works because scalar bar elements are the only side effect
+            #       elements that are not explicitly requested by the user.
+            if 'scalar_bar' in celements_with_filters:
+                scalar_bar_names = page_elements[i][
+                    celements_with_filters['scalar_bar']
+                ]['scalar_bar']
+                if not isinstance(scalar_bar_names, tuple):
+                    scalar_bar_names = (scalar_bar_names,)
+                _others = [
+                    e
+                    for e in celements
+                    if not isinstance(e, ScalarBarBuilder)
+                ]
+                _scalar_bars = [
+                    e
+                    for e in celements
+                    if isinstance(e, ScalarBarBuilder)
+                    and e.name in scalar_bar_names
+                ]
+                celements = tuple(_others + _scalar_bars)
+                if not celements: # We need to check again because we may have
+                    continue      # removed all elements in the previous step.
+            celements = tuple(
+                e
+                if isinstance(e, ElementBuilder)
+                else RasterBuilder(
+                    content=e,
                     bounding_box_height=panel.cell_dim[1],
                     bounding_box_width=panel.cell_dim[0],
                     fmt='png',
                 )
-                cgroup = build_raster(**builder).elements[0]
-            else:
-                cgroup = cimg.elements[0]
+                for e in celements
+            )
+            # print(tuple(
+            #     (i, k)
+            #     for k, v in results['elements'].items()
+            #     if k in page_elements[i]
+            # ))
+            cgroup = tile_plot_elements(
+                builders=celements,
+                max_dimension=panel.cell_dim,
+            )
+            cgroup = cgroup.elements[0]
             ctransform = cgroup.transform or []
             transform = [svg.Translate(*panel.cell_loc)]
             cgroup = svg.G(
@@ -1851,55 +2351,54 @@ def save_figure_f(
             f.write(canvas.__str__())
 
     # Step 0: Configure inputs
-    try:
-        n_scenes = len(snapshots)
-    except TypeError:
-        n_scenes = 1
-        snapshots = (snapshots,)
+    n_scenes = len(snapshots)
+    snapshots, global_results = snapshots[:-1], snapshots[-1]
     if sort_by is not None:
+        if isinstance(sort_by, str):
+            sort_by = (sort_by,)
 
         def sort_func(snapshot):
-            _, cmeta = snapshot
+            cmeta = snapshot['metadata']
             return tuple(cmeta[cfield] for cfield in sort_by)
 
         snapshots = sorted(snapshots, key=sort_func)
 
-    meta = [meta for (_, meta) in snapshots]
+    meta = [e['metadata'] for e in snapshots]
+    single_page_kernel = False
 
     # Step 1: Apply any grouping modulators to the provided layout template.
     if group_spec:
+        #assert 0
         group_layouts, group_spec, bp, nb = tuple(
             zip(*[spec(meta) for spec in group_spec])
         )
         bp, nb = bp[0], nb[0]
         bp_factor = 1
-        if group_layouts[0].layout.split_orientation == 'v':
-            if group_spec[0].n_rows == 1:
-                for spec in group_spec[1:]:
-                    if spec.order == 'row' and spec.n_rows > 1:
-                        break
-                    bp_factor *= spec.n_cols
-                    if spec.n_rows > 1:
-                        break
-        else:
-            if group_spec[0].n_cols == 1:
-                for spec in group_spec[1:]:
-                    if spec.order == 'col' and spec.n_cols > 1:
-                        break
-                    bp_factor *= spec.n_rows
-                    if spec.n_cols > 1:
-                        break
-
-        if bp is not None:
-            bp = (bp + 1) * bp_factor - 1
-        group_layouts = reduce(
-            (lambda x, y: x * y),
-            group_layouts,
-        )
         if not hasattr(layout_kernel, 'annotations'):
-            layout_kernel = layout_kernel.annotate({})
-        layout = group_layouts * layout_kernel
+            layout_kernel = layout_kernel.annotate(
+                {}, default_elements=default_elements
+            )
+        layout = layout_kernel
+        accum_bp = (bp is not None and len(layout) > 1)
+        for group_layout in group_layouts[::-1]:
+            if accum_bp:
+                kernel_bps = tuple(layout.layout.breakpoints)
+                if (
+                    kernel_bps[0].split_orientation
+                    == group_layout.layout.split_orientation
+                ):
+                    bp_factor = (len(kernel_bps) + 1)
+                else:
+                    accum_bp = False
+            layout = group_layout * layout
+        if bp is not None:
+            bp = bp * bp_factor
     else:
+        if not hasattr(layout_kernel, 'annotations'):
+            layout_kernel = layout_kernel.annotate(
+                {}, default_elements=default_elements
+            )
+            single_page_kernel = True
         layout = layout_kernel
         bp = None
         nb = 0
@@ -1907,7 +2406,9 @@ def save_figure_f(
     # Step 2: Determine the layout of cells on the canvas
     # Case a: layout is an annotated CellLayout. Here we assume that the
     #         provided layout specifies the layout of all pages together.
-    if getattr(layout, 'annotations', None) is not None:
+    if (
+        getattr(layout, 'annotations', None) is not None
+    ) and (not single_page_kernel):
         # It's an annotated layout, so we'll match the annotations
         # to the snapshot metadata to 'semantically' assign snapshots
         # to cells.
@@ -1917,6 +2418,38 @@ def save_figure_f(
             # drop={'elements'},
         )
         assert len(cell_indices) == len(meta)
+        unassigned_cells = tuple(
+            i for i, e in enumerate(layout.assigned) if not e
+        )
+        outstanding_queries = {
+            i: {
+                q: w
+                for q, w in layout.annotations[i].items()
+                if (
+                    q != 'elements' and
+                    tuple(
+                        layout.annotations[i].get('elements', ('snapshots',))
+                    ) != ('snapshots',)
+                )
+            }
+            for i in unassigned_cells
+        }
+        outstanding_queries = {
+            k: v for k, v in outstanding_queries.items() if v
+        }
+        for i, query in outstanding_queries.items():
+            for j, e in enumerate(meta):
+                query_result = tuple(
+                    query.get(key, None)
+                    for key in e.keys()
+                )
+                if all(
+                    (r == value or r is None or r in value)
+                    for r, value in zip(query_result, e.values())
+                ):
+                    cell_indices += [i]
+                    snapshots += [snapshots[j]]
+                    layout = layout.set_assigned(i, True)
         index_map = dict(zip(cell_indices, snapshots))
         # Now, we use the breakpoint to split the layout into pages.
         pages = ()
@@ -1976,18 +2509,21 @@ def save_figure_f(
     # Step 3: Write to the canvas
     for i, (page, snapshot_group) in enumerate(zip(pages, snapshots)):
         cells = list(page.partition(*canvas_size, padding=padding))
+        page_elements = {
+            k: v['elements'] for k, v in page.annotations.items()
+        }
         # Build page-level metadata. This includes the page number as well as
         # any metadata that is constant across all snapshots on the page.
-        page = f'{i + 1:{len(str(n_pages))}d}'
+        pagenum = f'{(i + 1):0{len(str(n_pages))}d}'
         # print(snapshot_group)
         # print([meta for (_, meta) in snapshot_group])
-        page_entities = [meta for (_, (_, meta)) in snapshot_group]
+        page_entities = [e[1]['metadata'] for e in snapshot_group]
         if not page_entities:
             # It's an empty page. This shouldn't happen, but it currently does
             # because of the way we handle the layout splitting. We need to
             # fix this in a more principled way, i.e. at the level of the
             # layout splitting.
-            print(f'Page {page} is empty.')
+            print(f'Page {pagenum} is empty.')
             continue
         page_entities = _seq_to_dict(page_entities, merge_type='union')
         page_entities = {
@@ -1997,55 +2533,56 @@ def save_figure_f(
         page_entities = {
             k : list(v)[0] for k, v in page_entities.items() if len(v) == 1
         }
-        page_entities['page'] = page
+        page_entities['page'] = pagenum
         # Time to handle any additional plot elements that need to be added
         # to the canvas. This includes things like colorbars, legends, etc.
         # We can only semantically add these if we have an annotated layout.
-        elements_asgt = {}
+        # elements_asgt = {}
         if hasattr(layout, 'annotations'):
-            elements_fields = list(
-                set(
-                    sum(
-                        [
-                            list(cmeta.get('elements', {}).keys())
-                            for (_, (_, cmeta)) in snapshot_group
-                        ],
-                        [],
-                    )
-                )
+            global_scope_cells = tuple(
+                i for i, e in enumerate(page.assigned) if not e
             )
-            if elements_fields:
-                queries = [{'elements': cfield} for cfield in elements_fields]
-                # Each assignment should not "fill" a slot since we might want
-                # to assign multiple elements fields to a single cell. Because
-                # layout is not mutable, this shouldn't be a problem.
-                elements_asgt = [
-                    layout.match_and_assign(query=q) for q in queries
-                ]
-                _, elements_asgt = zip(*elements_asgt)
-                elements_asgt = {
-                    k: v
-                    for k, v in zip(elements_fields, elements_asgt)
-                    if v < len(cells)
-                }
-                elements = [
-                    cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
-                ]
-                elements = _seq_to_dict(elements, merge_type='union')
-        for cell_idx in set(elements_asgt.values()):
-            if cell_idx >= len(cells):
-                continue
-            elements_cell = [
-                k for k, v in elements_asgt.items() if v == cell_idx
-            ]
-            builders_cell = list(chain(*[
-                elements[k] for k in elements_cell
-            ]))
-            cellimg = tile_plot_elements(
-                builders=builders_cell,
-                max_dimension=cells[cell_idx].cell_dim,
-            )
-            snapshot_group.append((cell_idx, (cellimg, {})))
+            # if elements_fields:
+            #     queries = [
+            #         {'elements': cfield} for cfield in elements_fields
+            #     ]
+            #     # Each assignment should not "fill" a slot since we might
+            #     # want to assign multiple elements fields to a single cell.
+            #     # Because layout is not mutable, this shouldn't be a
+            #     # problem.
+            #     elements_asgt = [
+            #         layout.match_and_assign(query=q) for q in queries
+            #     ]
+            #     _, elements_asgt = zip(*elements_asgt)
+            #     elements_asgt = {
+            #         k: v
+            #         for k, v in zip(elements_fields, elements_asgt)
+            #         if v < len(cells)
+            #     }
+            #     elements = [
+            #         cmeta['elements'] for (_, (_, cmeta)) in snapshot_group
+            #     ]
+            #     elements = _seq_to_dict(elements, merge_type='union')
+            # assert 0
+        else:
+            global_scope_cells = ()
+        # for cell_idx in set(elements_asgt.values()):
+        #     if cell_idx >= len(cells):
+        #         continue
+        #     elements_cell = [
+        #         k for k, v in elements_asgt.items() if v == cell_idx
+        #     ]
+        #     builders_cell = list(chain(*[
+        #         elements[k] for k in elements_cell
+        #     ]))
+        #     cellimg = tile_plot_elements(
+        #         builders=builders_cell,
+        #         max_dimension=cells[cell_idx].cell_dim,
+        #     )
+        #     snapshot_group.append((cell_idx, (cellimg, {})))
+        snapshot_group = snapshot_group + [
+            (i, global_results) for i in global_scope_cells
+        ]
 
         write_f(
             writer=writer,
@@ -2059,7 +2596,7 @@ def save_figure_f(
 
 
 def save_grid_f(
-    snapshots: Sequence[Tuple[Tensor, Mapping[str, str]]],
+    snapshots: Sequence[Mapping],
     canvas_size: Tuple[int, int],
     n_rows: int,
     n_cols: int,
@@ -2068,6 +2605,7 @@ def save_grid_f(
     sort_by: Optional[Sequence[str]] = None,
     group_spec: Optional[Sequence[GroupSpec]] = None,
     annotations: Optional[Mapping[int, Mapping]] = None,
+    default_elements: Optional[Union[str, Sequence[str]]] = ('snapshots',),
     fname_spec: Optional[str] = None,
     suffix: Optional[str] = None,
     extension: str = 'svg',
@@ -2082,7 +2620,9 @@ def save_grid_f(
         kernel=lambda: layout_kernel,
     )
     if annotations is not None:
-        layout = AnnotatedLayout(layout, annotations=annotations)
+        layout = layout.annotate(
+            annotations, default_elements=default_elements
+        )
     save_figure_f(
         snapshots=snapshots,
         canvas_size=canvas_size,
@@ -2090,6 +2630,7 @@ def save_grid_f(
         layout_kernel=layout,
         sort_by=sort_by,
         group_spec=group_spec,
+        default_elements=default_elements,
         fname_spec=fname_spec,
         suffix=suffix,
         extension=extension,
@@ -2222,13 +2763,14 @@ def splice_on(f):
 @splice_on(plot_surf_f)
 @splice_on(plot_points_f)
 @splice_on(plot_network_f)
+@splice_on(hemisphere_select_fit)
 @splice_on(hemisphere_slack_fit)
 def automap_unified_plotter_f(
     *,
-    hemisphere: Optional[Literal['left', 'right']] = None,
     off_screen: bool = True,
     copy_actors: bool = False,
     theme: Optional[Any] = None,
+    parallel_projection: bool = False,
     window_size: Tuple[int, int] = DEFAULT_WINDOW_SIZE,
     use_single_plotter: bool = True,
     sbprocessor: Optional[callable] = None,
@@ -2285,6 +2827,16 @@ def automap_unified_plotter_f(
     except ValueError:
         n_replicates = 1
 
+    metadata = [
+        plotted_entities(
+            **{
+                k: (v[i % len(v)] if k in repl_vars else v)
+                for k, v in params.items()
+            },
+            entity_writers=auxwriters,
+        )
+        for i in range(n_replicates)
+    ]
     output = [
         unified_plotter(
             **{
@@ -2302,19 +2854,7 @@ def automap_unified_plotter_f(
         k: tuple(_flatten_to_depth(v, 1))
         for k, v in zip(postprocessor_names, zip(*output))
     }
-    metadata = [
-        plotted_entities(
-            **{
-                k: (v[i % len(v)] if k in repl_vars else v)
-                for k, v in params.items()
-            },
-            entity_writers=auxwriters,
-        )
-        for i in range(n_replicates)
-    ]
-    # TODO: we're sticking the 2D plot elements into the metadata here as a
-    #       hack to access them later, but this is not really where they
-    #       belong.
+    # meta_orig = [({**m[0]},) for m in metadata]
     for cmeta, celements in zip(metadata, elements):
         len_cmeta = len(next(iter(cmeta[0].values())))
         meta_asgts = [
@@ -2337,7 +2877,44 @@ def automap_unified_plotter_f(
         k: tuple(_flatten_to_depth([_dict_to_seq(val) for val in v], 1))
         for k, v in zip(postprocessor_names, zip(*metadata))
     }
-    output = {k: tuple(zip(output[k], metadata[k])) for k in output.keys()}
+    gelements = {} # initialise global elements
+    gmetadata = {}
+    for postproc, meta in metadata.items():
+        gelements[postproc] = {}
+        unique_elements = set(
+            sum(tuple(list(e['elements'].keys()) for e in meta), [])
+        )
+        for celement in unique_elements:
+            cvalues = sum([e['elements'][celement] for e in meta], ())
+            if all([v == cvalues[0] for v in cvalues[1:]]):
+                gelements[postproc][celement] = (cvalues[0],)
+            else:
+                gelements[postproc][celement] = cvalues
+        unique_meta = {
+            k: tuple(set(v))
+            for k, v in _seq_to_dict([
+                {k: v for k, v in e.items() if k != 'elements'}
+                for e in meta
+            ]).items()
+        }
+        gmetadata[postproc] = {
+            k: v[0] for k, v in unique_meta.items() if len(v) == 1
+        }
+    output = {
+        postproc: [
+            {
+                'elements': {postproc: out, **meta['elements']},
+                'metadata': {
+                    k: v for k, v in meta.items() if k != 'elements'
+                },
+            }
+            for out, meta in zip(output[postproc], metadata[postproc])
+        ] + [{
+            'elements': gelements[postproc],
+            'metadata': gmetadata[postproc],
+        }]
+        for postproc in output.keys()
+    }
 
     return output
 
@@ -2450,6 +3027,30 @@ vertex_to_face_p = Primitive(
     vertex_to_face_f,
     'vertex_to_face',
     output=('surf',),
+    forward_unused=True,
+)
+
+
+draw_surface_boundary_p = Primitive(
+    draw_surface_boundary_f,
+    'draw_surface_boundary',
+    output=('surf', 'surf_scalars'), #('surf', 'surf_scalars_layers'),
+    forward_unused=True,
+)
+
+
+select_active_parcels_p = Primitive(
+    select_active_parcels_f,
+    'select_active_parcels',
+    output=('surf', 'surf_scalars'),
+    forward_unused=True,
+)
+
+
+select_internal_points_p = Primitive(
+    select_internal_points_f,
+    'select_internal_points',
+    output=('points',),
     forward_unused=True,
 )
 

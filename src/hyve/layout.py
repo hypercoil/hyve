@@ -390,10 +390,25 @@ class CellLayout:
     def annotate(
         self,
         annotations: Mapping[int, Optional[Mapping]],
+        default_elements: Optional[
+            Union[str, Sequence[str]]
+        ] = ('snapshots',),
     ) -> 'AnnotatedLayout':
         """
         Annotate a layout with a dictionary of annotations
         """
+        if default_elements is not None:
+            if isinstance(default_elements, str):
+                default_elements = [default_elements]
+            annotations = {
+                k: {
+                    **annotations.get(k, {}),
+                    'elements': annotations.get(
+                        k, {}
+                    ).get('elements', default_elements),
+                }
+                for k in range(len(self))
+            }
         return AnnotatedLayout(
             layout=self.copy(),
             annotations=annotations,
@@ -628,6 +643,13 @@ class AnnotatedLayout(CellLayout):
                 )
             return root_layout, floating_layouts
 
+    def copy(self):
+        return self.__class__(
+            layout=self.layout.copy(),
+            annotations=self.annotations.copy(),
+            assigned=self.assigned.copy(),
+        )
+
     def partition(
         self,
         width: int,
@@ -680,10 +702,22 @@ class AnnotatedLayout(CellLayout):
             assigned=self.assigned,
         )
 
+    def set_assigned(
+        self, index: int, asgt: bool = True
+    ) ->  'AnnotatedLayout':
+        assigned = self.assigned.copy()
+        assigned[index] = asgt
+        return AnnotatedLayout(
+            layout=self.layout,
+            annotations=self.annotations,
+            assigned=assigned,
+        )
+
     def match_and_assign(
         self,
         query: Mapping,
         match_to_unannotated: bool = False,
+        nonmatching_fields: Sequence[str] = {'elements'},
     ) -> Tuple['AnnotatedLayout', int]:
         """
         Match annotations against a query and assign the first available cell
@@ -702,6 +736,7 @@ class AnnotatedLayout(CellLayout):
                     or query.get(key, None) in value
                 )
                 for key, value in annotation.items()
+                if key not in nonmatching_fields
             ):
                 difficulty = len(annotation)
                 candidates += [(index, difficulty)]
@@ -726,6 +761,7 @@ class AnnotatedLayout(CellLayout):
         queries: Sequence[Mapping],
         force_unmatched: bool = False,
         # drop: Optional[Sequence[str]] = None,
+        nonmatching_fields: Sequence[str] = {'elements'},
     ) -> Tuple['AnnotatedLayout', Sequence[int]]:
         """
         Match annotations against a sequence of queries and assign the first
@@ -741,7 +777,9 @@ class AnnotatedLayout(CellLayout):
         #     ]
         for i, query in enumerate(queries):
             layout, index = layout.match_and_assign(
-                query, match_to_unannotated=False
+                query,
+                match_to_unannotated=False,
+                nonmatching_fields=nonmatching_fields,
             )
             if index < len(layout):
                 indices[i] = index
@@ -750,7 +788,9 @@ class AnnotatedLayout(CellLayout):
             if matched[i]:
                 continue
             layout, index = layout.match_and_assign(
-                query, match_to_unannotated=True
+                query,
+                match_to_unannotated=True,
+                nonmatching_fields=nonmatching_fields,
             )
             if index < len(layout):
                 indices[i] = index
@@ -800,7 +840,13 @@ class GroupSpec:
                     f'({self.n_cols}) when both are specified'
                 )
 
-    def __call__(self, metadata: Sequence[Mapping[str, str]]) -> Tuple[
+    def __call__(
+        self,
+        metadata: Sequence[Mapping[str, str]],
+        default_elements: Optional[
+            Union[str, Sequence[str]]
+        ] = None,
+    ) -> Tuple[
         AnnotatedLayout,
         Optional[int]
     ]:
@@ -834,11 +880,12 @@ class GroupSpec:
                     order=self.order,
                     kernel=Cell,
                 )
-                i = 0
+                i = 1
                 while i < nb:
                     layout = kernel | layout
                     i += 1
-                layout = layout << (1 / (nb + 1))
+                if i > 1:
+                    layout = layout << (1 / (nb + 1))
             else:
                 bp = self.max_levels // n_cols
                 nb = ceil(n_rows / (bp + 1))
@@ -848,11 +895,12 @@ class GroupSpec:
                     order=self.order,
                     kernel=Cell,
                 )
-                i = 0
+                i = 1
                 while i < nb:
                     layout = kernel / layout
                     i += 1
-                layout = layout << (1 / (nb + 1))
+                if i > 1:
+                    layout = layout << (1 / (nb + 1))
         else:
             bp = None
             nb = 1
@@ -863,10 +911,13 @@ class GroupSpec:
                 kernel=Cell,
             )
         return (
-            layout.annotate({
-                i: {self.variable: level}
-                for i, level in enumerate(levels)
-            }),
+            layout.annotate(
+                {
+                    i: {self.variable: level}
+                    for i, level in enumerate(levels)
+                },
+                default_elements=default_elements,
+            ),
             GroupSpec(
                 variable=self.variable,
                 n_rows=n_rows,
@@ -1568,14 +1619,18 @@ def _(
         for i, annotation in layout.annotations.items()
         if i >= left_size and i < left_size + right_size
     }
+    left_assigned = layout.assigned[:left_size]
+    right_assigned = layout.assigned[left_size:]
     return (
         AnnotatedLayout(
             layout=left,
             annotations=left_annotations,
+            assigned=left_assigned,
         ),
         AnnotatedLayout(
             layout=right,
             annotations=right_annotations,
+            assigned=right_assigned,
         ),
     )
 

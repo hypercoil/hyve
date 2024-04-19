@@ -4,11 +4,11 @@
 """
 Brain surfaces
 ~~~~~~~~~~~~~~
-Brain surface objects for plotting.
+Brain surface geometry data containers and geometric primitives.
 """
+import dataclasses
 import pathlib
 import warnings
-from dataclasses import dataclass
 from typing import (
     Any,
     Iterable,
@@ -24,15 +24,42 @@ import nibabel as nb
 import numpy as np
 import pyvista as pv
 import templateflow.api as tflow
+from matplotlib import colors
 from scipy.spatial.distance import cdist
 
-from .const import (
+from ..const import (
+    DEFAULT_CMAP,
+    DEFAULT_COLOR,
+    LAYER_ALIM_DEFAULT_VALUE,
+    LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_ALPHA_DEFAULT_VALUE,
+    LAYER_AMAP_DEFAULT_VALUE,
+    LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    LAYER_COLOR_DEFAULT_VALUE,
+    LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+    SURF_DEFAULT_STYLE,
+    SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    SURF_SCALARS_DEFAULT_VALUE,
+    SURF_SCALARS_LAYERS_DEFAULT_VALUE,
     CIfTIStructures,
     Tensor,
     neuromaps_fetch_fn,
     template_dict,
 )
-from .util import relabel_parcels
+from ..elements import ScalarBarBuilder
+from ..util import relabel_parcels, scalar_percentile
+from .base import (
+    Layer,
+    SubgeometryParameters,
+    compose_layers,
+    layer_rgba,
+)
 
 
 def is_path_like(obj: Any) -> bool:
@@ -83,7 +110,9 @@ def get_cifti_brain_model_axis(
 ) -> Tuple[Sequence[str], Sequence[str]]:
     return tuple(
         (i, a)
-        for (i, a) in tuple((i, cifti.header.get_axis(i)) for i in range(cifti.ndim))
+        for (i, a) in tuple(
+            (i, cifti.header.get_axis(i)) for i in range(cifti.ndim)
+        )
         if isinstance(a, nb.cifti2.cifti2_axes.BrainModelAxis)
     )[0]
 
@@ -107,7 +136,7 @@ def get_cifti_brain_model_axis(
 #         return f'Projection({self.projection})'
 
 
-@dataclass
+@dataclasses.dataclass
 class ProjectedPolyData(pv.PolyData):
     """
     PyVista ``PolyData`` object with multiple projections.
@@ -296,8 +325,171 @@ class ProjectedPolyData(pv.PolyData):
         # translated.add_projection(self.active_projection, proj_coor + xyz)
         # return translated
 
+    def init_composition(
+        self,
+        layers: Sequence[Layer],
+        *,
+        data_domain: Literal['point_data', 'cell_data'] = 'cell_data',
+        **params,
+    ) -> None:
+        dst = layers[0]
+        try:
+            cmap = dst.cmap or DEFAULT_CMAP
+            color = None
+            try:
+                color_array = self.cell_data[dst.color]
+            except KeyError:
+                color_array = self.point_data[dst.color]
+                data_domain = 'point_data'
+        except Exception:
+            cmap = None
+            color = dst.color or DEFAULT_COLOR
+            try:
+                self.cell_data[layers[1].name]
+                color_array = np.zeros(self.n_cells)
+            except (KeyError, IndexError):
+                data_domain = 'point_data'
+                color_array = np.zeros(self.n_points)
+        if isinstance(dst.alpha, str):
+            alpha_array = self.__getattribute__(
+                data_domain
+            )[dst.alpha]
+        else:
+            alpha_array = None
+        dst = Layer(
+            name=dst.name,
+            cmap=cmap,
+            cmap_negative=dst.cmap_negative,
+            clim=dst.clim,
+            clim_negative=dst.clim_negative,
+            clim_percentile=dst.clim_percentile,
+            color=color,
+            color_negative=dst.color_negative,
+            alpha=dst.alpha,
+            alpha_negative=dst.alpha_negative,
+            alim=dst.alim,
+            alim_negative=dst.alim_negative,
+            amap=dst.amap,
+            amap_negative=dst.amap_negative,
+            below_color=dst.below_color,
+            nan_override=dst.nan_override,
+            hide_subthreshold=dst.hide_subthreshold,
+            scalar_bar_style=dst.scalar_bar_style,
+        )
+        return dst, (color_array, alpha_array), {'data_domain': data_domain}
 
-@dataclass
+    def layer_to_tensors(
+        self,
+        layer: Layer,
+        data_domain: Literal['point_data', 'cell_data'],
+    ) -> Tuple[Tensor, Sequence[ScalarBarBuilder]]:
+        """
+        Convert a layer to RGBA colors.
+        """
+        try:
+            try:
+                color_array = self.__getattribute__(
+                    data_domain
+                )[layer.color]
+                color = None
+            except KeyError:
+                colors.to_rgba(layer.color) # Check if it's a valid color
+                color_array = np.zeros(
+                    self.n_points
+                    if data_domain == 'point_data'
+                    else self.n_cells
+                )
+                if layer.name in self.__getattribute__(data_domain):
+                    color_array = np.where(
+                        np.isnan(self.__getattribute__(data_domain)[layer.name]),
+                        np.nan,
+                        color_array,
+                    )
+                color = layer.color
+            if isinstance(layer.alpha, str):
+                alpha_array = self.__getattribute__(
+                    data_domain
+                )[layer.alpha]
+                alpha_repl = None
+            else:
+                alpha_array = None
+                alpha_repl = layer.alpha
+            layer = dataclasses.replace(
+                layer,
+                color=color,
+                alpha=alpha_repl,
+            )
+        except (KeyError, ValueError):
+            raise ValueError(
+                'All layers must be defined over the same data '
+                'domain. The base layer is defined over '
+                f'{data_domain}, but either the layer {layer.color} or '
+                f'the alpha scalars {layer.alpha} (if string) was not '
+                f'found in {data_domain}, or {layer.color} is an invalid '
+                'matplotlib colour specification. In particular, ensure '
+                'that, if you have mapped any layer to faces, all '
+                'other layers are also mapped to faces.'
+            )
+        rgba, scalar_bar_builders = layer_rgba(
+            layer=layer,
+            color_scalar_array=color_array,
+            alpha_scalar_array=alpha_array,
+        )
+
+        return rgba, scalar_bar_builders
+
+    def paint(
+        self,
+        plotter: pv.Plotter,
+        layers: Sequence[Layer],
+        surf_alpha: Optional[float] = None,
+        style: Union[Mapping, Literal['__default__']] = '__default__',
+        copy_actors: bool = False,
+    ) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+        layers = [
+            layer
+            if layer.color is not None
+            else dataclasses.replace(
+                layer,
+                color=layer.name,
+            )
+            for layer in layers
+        ]
+        rgba, scalar_bar_builders, extra_params = compose_layers(self, layers)
+        data_domain = extra_params.get('data_domain', 'cell_data')
+        # We shouldn't have to do this, but for some reason exporting to
+        # HTML adds transparency even if we set alpha to 1 when we use
+        # explicit RGBA to colour the mesh. Dropping the alpha channel
+        # fixes this.
+        if (surf_alpha is None):
+            rgba = rgba[:, :3]
+
+        name = '-'.join([str(layer.name) for layer in layers])
+        name = f'{name}_{data_domain}_rgba'
+        if data_domain == 'cell_data':
+            self.cell_data[name] = rgba
+        elif data_domain == 'point_data':
+            self.point_data[name] = rgba
+        if style == '__default__':
+            style = SURF_DEFAULT_STYLE
+        else:
+            style = {**SURF_DEFAULT_STYLE, **style}
+        # fallback, because setting the scalars using the arg in the add_mesh
+        # call below doesn't always work
+        self.set_active_scalars(name)
+        # TODO: copying the mesh seems like it could create memory issues.
+        #       A better solution would be delayed execution.
+        plotter.add_mesh(
+            self,
+            scalars=rgba,
+            rgb=True,
+            **style,
+            copy_mesh=copy_actors,
+        )
+        return plotter, scalar_bar_builders
+
+
+@dataclasses.dataclass
 class CortexTriSurface:
     """
     A pair of ``ProjectedPolyData`` objects representing the left and right
@@ -655,11 +847,13 @@ class CortexTriSurface:
         name : str
             Name of the dataset.
         left_gifti : str or ``GiftiImage`` or None (default=None)
-            Path to a GIFTI file or a ``nibabel`` ``GiftiImage`` object for the
-            left hemisphere. If None, the dataset is assumed to be right-only.
+            Path to a GIFTI file or a ``nibabel`` ``GiftiImage`` object for
+            the left hemisphere. If None, the dataset is assumed to be
+            right-only.
         right_gifti : str or ``GiftiImage`` or None (default=None)
-            Path to a GIFTI file or a ``nibabel`` ``GiftiImage`` object for the
-            right hemisphere. If None, the dataset is assumed to be left-only.
+            Path to a GIFTI file or a ``nibabel`` ``GiftiImage`` object for
+            the right hemisphere. If None, the dataset is assumed to be
+            left-only.
         is_masked : bool (default=False)
             Indicates whether the GIFTI dataset includes values for all
             vertices (``is_masked=False``) or only for vertices included in
@@ -817,14 +1011,14 @@ class CortexTriSurface:
                         right_slice = slice(self.n_points['left'], None)
                 else:
                     warnings.warn(
-                        'No slices were provided for vertex data, and default '
-                        'slicing was toggled off. The `data` tensor will be '
-                        'ignored. Attempting fallback to `left_data` and '
-                        '`right_data`.\n\n'
-                        'To silence this warning, provide slices for the data '
-                        'or toggle on default slicing if a `data` tensor is '
-                        'provided. Alternatively, provide `left_data` and '
-                        '`right_data` directly and exclusively.'
+                        'No slices were provided for vertex data, and '
+                        'default slicing was toggled off. The `data` tensor '
+                        'will be ignored. Attempting fallback to `left_data` '
+                        'and `right_data`.\n\n'
+                        'To silence this warning, provide slices for the '
+                        'data or toggle on default slicing if a `data` tensor'
+                        ' is provided. Alternatively, provide `left_data` '
+                        'and `right_data` directly and exclusively.'
                     )
             if left_slice is not None:
                 if left_data is not None:
@@ -946,6 +1140,20 @@ class CortexTriSurface:
             l_num = l_num[:, None]
         return (l_num + r_num) / (l_denom + r_denom)
 
+    def rename_array(self, src: str, dst: str):
+        """
+        Rename a dataset array.
+
+        Parameters
+        ----------
+        src : str
+            Name of the dataset to rename.
+        dst : str
+            New name of the dataset.
+        """
+        self.left.rename_array(src, dst)
+        self.right.rename_array(src, dst)
+
     def scatter_into_parcels(
         self,
         data: Tensor,
@@ -1010,7 +1218,7 @@ class CortexTriSurface:
             raise ValueError(
                 'Interpolation method must be one of "mode" or "mean".'
             )
-        points_name = f'{name}_points'
+        points_name = f'{name}:points'
         self.left.cell_data[name] = self._hemisphere_resample_v2f_impl(
             name, interpolation, 'left'
         )
@@ -1021,6 +1229,143 @@ class CortexTriSurface:
         )
         self.right.point_data[points_name] = self.right.point_data[name]
         self.right.point_data.remove(name)
+
+    def select_active_parcels(
+        self,
+        parcellation_name: str,
+        activation_name: str,
+        activation_threshold: float = 2.58,
+        parcel_coverage_threshold: float = 0.5,
+        use_abs: bool = False,
+    ):
+        if (
+            (parcellation_name in self.left.point_data) or
+            (parcellation_name in self.right.point_data)
+        ):
+            assert (
+                activation_name in self.left.point_data or
+                activation_name in self.right.point_data
+            ), (
+                f'Activation dataset {activation_name} must be defined over '
+                'vertices.'
+            )
+            domain = 'vertex'
+            parcellation_left = self.left.point_data[parcellation_name]
+            parcellation_right = self.right.point_data[parcellation_name]
+            activation_left = self.left.point_data[activation_name]
+            activation_right = self.right.point_data[activation_name]
+        elif (
+            (parcellation_name in self.left.cell_data) or
+            (parcellation_name in self.right.cell_data)
+        ):
+            assert (
+                activation_name in self.left.cell_data or
+                activation_name in self.right.cell_data
+            ), (
+                f'Activation dataset {activation_name} must be defined over '
+                'faces.'
+            )
+            domain = 'face'
+            parcellation_left = self.left.cell_data[parcellation_name]
+            parcellation_right = self.right.cell_data[parcellation_name]
+            activation_left = self.left.cell_data[activation_name]
+            activation_right = self.right.cell_data[activation_name]
+        self._hemisphere_select_active_parcels_impl(
+            'left',
+            parcellation_name,
+            parcellation=np.nan_to_num(parcellation_left).astype(int),
+            activation=activation_left,
+            activation_threshold=activation_threshold,
+            parcel_coverage_threshold=parcel_coverage_threshold,
+            use_abs=use_abs,
+            domain=domain,
+        )
+        self._hemisphere_select_active_parcels_impl(
+            'right',
+            parcellation_name,
+            parcellation=np.nan_to_num(parcellation_right).astype(int),
+            activation=activation_right,
+            activation_threshold=activation_threshold,
+            parcel_coverage_threshold=parcel_coverage_threshold,
+            use_abs=use_abs,
+            domain=domain,
+        )
+
+    def draw_boundaries(
+        self,
+        scalars: str,
+        boundary_name: str,
+        threshold: float = 0.5,
+        num_steps: int = 1,
+        target_domain: Optional[Literal['vertex', 'face']] = None,
+        v2f_interpolation: str = 'mode',
+        copy_values_to_boundary: bool = True,
+        boundary_fill: float = 1.0,
+        nonboundary_fill: float = 0.0,
+    ):
+        overwrite = False
+        if scalars == boundary_name:
+            overwrite = True
+            boundary_name = f'{boundary_name}:boundary'
+        if (
+            (scalars in self.left.point_data) or
+            (scalars in self.right.point_data)
+        ):
+            source_domain = domain = 'vertex'
+            scalars_left = self.left.point_data[scalars]
+            scalars_right = self.right.point_data[scalars]
+        elif (
+            (scalars in self.left.cell_data) or
+            (scalars in self.right.cell_data)
+        ):
+            assert NotImplementedError(
+                'Drawing boundaries for face datasets is not yet '
+                'implemented. It is possible to obtain face-valued '
+                'boundaries by first drawing boundaries (before '
+                'resampling vertex datasets to faces), and setting ``face`` '
+                'as the target domain in the draw boundaries call.'
+            )
+            source_domain = domain = 'face'
+            scalars_left = self.left.cell_data[scalars]
+            scalars_right = self.right.cell_data[scalars]
+        else:
+            raise ValueError(
+                f'Unable to compute boundary for {scalars}: not found '
+                'in surface data.'
+            )
+        if target_domain is None:
+            target_domain = domain
+        self._hemisphere_draw_boundaries_impl(
+            'left',
+            scalars=scalars,
+            scalar_array=scalars_left,
+            boundary_name=boundary_name,
+            threshold=threshold,
+            num_steps=num_steps,
+            source_domain=source_domain,
+            target_domain=target_domain,
+            domain=domain,
+            overwrite=overwrite,
+            copy_values_to_boundary=copy_values_to_boundary,
+            boundary_fill=boundary_fill,
+            nonboundary_fill=nonboundary_fill,
+        )
+        self._hemisphere_draw_boundaries_impl(
+            'right',
+            scalars=scalars,
+            scalar_array=scalars_right,
+            boundary_name=boundary_name,
+            threshold=threshold,
+            num_steps=num_steps,
+            source_domain=source_domain,
+            target_domain=target_domain,
+            domain=domain,
+            v2f_interpolation=v2f_interpolation,
+            overwrite=overwrite,
+            copy_values_to_boundary=copy_values_to_boundary,
+            boundary_fill=boundary_fill,
+            nonboundary_fill=nonboundary_fill,
+        )
 
     def parcel_centres_of_mass(
         self,
@@ -1048,6 +1393,28 @@ class CortexTriSurface:
             parcellation=parcellation,
         )
 
+    def present_in_hemisphere(self, hemi: str, key: str) -> bool:
+        """
+        Check if a dataset is present in a hemisphere.
+
+        Parameters
+        ----------
+        hemi : str
+            Hemisphere to check. Must be ``'left'`` or ``'right'``.
+        key : str
+            Name of the dataset to check for.
+
+        Returns
+        -------
+        bool
+            Whether the dataset is present in the hemisphere.
+        """
+        return (
+            key in self.__getattribute__(hemi).point_data
+        ) or (
+            key in self.__getattribute__(hemi).cell_data
+        )
+
     def scalars_centre_of_mass(
         self,
         hemisphere: str,
@@ -1060,8 +1427,8 @@ class CortexTriSurface:
         Parameters
         ----------
         hemisphere : str
-            Hemisphere to compute the centre of mass for. Must be ``'left'`` or
-            ``'right'``.
+            Hemisphere to compute the centre of mass for. Must be ``'left'``
+            or ``'right'``.
         scalars : str
             Name of the scalar dataset to compute the centre of mass for.
         projection : str
@@ -1124,8 +1491,13 @@ class CortexTriSurface:
                 f'Invalid hemisphere: {hemisphere}. '
                 'Must be "left" or "right".'
             )
-        scalars_data[np.isnan(scalars_data)] = -np.inf
-        return proj_data[np.argmax(scalars_data)]
+        return proj_data[np.argmax(
+            np.where(
+                np.isnan(scalars_data),
+                -np.inf,
+                scalars_data,
+            )
+        )]
 
     def poles(self, hemisphere: str) -> Tensor:
         """
@@ -1302,10 +1674,52 @@ class CortexTriSurface:
                 if i not in exclude
             ]
             for n, d in zip(names, data.T):
-                self.__getattribute__(hemisphere).point_data.set_array(d, n)
+                try:
+                    self.__getattribute__(
+                        hemisphere
+                    ).point_data.set_array(d, n)
+                except ValueError as e:
+                    if self.mask:
+                        mask_size = self.__getattribute__(
+                            hemisphere
+                        ).point_data[self.mask].sum()
+                        if len(d) == mask_size:
+                            raise ValueError(
+                                'The number of vertices in the provided data '
+                                'matches the number of vertices in the mask, '
+                                'but the a dimension mismatch was raised '
+                                'when trying to add the data to the '
+                                'hemisphere. This is likely a consequence of '
+                                'failing to specify that the data are '
+                                'masked. Try setting `is_masked=True` when '
+                                'adding the data. Original error message:\n\n'
+                                + str(e)
+                            )
+                    raise
         else:
             names = [name]
-            self.__getattribute__(hemisphere).point_data.set_array(data, name)
+            try:
+                self.__getattribute__(
+                    hemisphere
+                ).point_data.set_array(data, name)
+            except ValueError as e:
+                if self.mask:
+                    #hemi_size = self.__getattribute__(hemisphere).n_points
+                    mask_size = self.__getattribute__(
+                        hemisphere
+                    ).point_data[self.mask].sum()
+                    if len(data) == mask_size:
+                        raise ValueError(
+                            'The number of vertices in the provided data '
+                            'matches the number of vertices in the mask, but '
+                            'the a dimension mismatch was raised when trying '
+                            'to add the data to the hemisphere. This is '
+                            'likely a consequence of failing to specify that '
+                            'the data are masked. Try setting '
+                            '`is_masked=True` when adding the data. Original '
+                            'error message:\n\n' + str(e)
+                        )
+                raise
         return names
 
     def _hemisphere_vertex_data_impl(
@@ -1383,7 +1797,8 @@ class CortexTriSurface:
         hemisphere: str,
     ) -> Tensor:
         """
-        Helper function used when parcellating data onto a cortical hemisphere.
+        Helper function used when parcellating data onto a cortical
+        hemisphere.
         """
         try:
             point_data = self.point_data[hemisphere]
@@ -1424,7 +1839,9 @@ class CortexTriSurface:
         interpolation: str,
         hemisphere: str,
     ) -> Tensor:
-        faces = self.__getattribute__(hemisphere).faces.reshape(-1, 4)[..., 1:]
+        faces = self.__getattribute__(
+            hemisphere
+        ).faces.reshape(-1, 4)[..., 1:]
         scalars = self.__getattribute__(hemisphere).point_data[name]
         scalars = scalars[faces]
         if interpolation == 'mode':
@@ -1441,3 +1858,417 @@ class CortexTriSurface:
                 f'{interpolation} was given.'
             )
         return scalars
+
+    def _hemisphere_select_active_parcels_impl(
+        self,
+        hemisphere: str,
+        parcellation_name: str,
+        parcellation: Tensor,
+        activation: Tensor,
+        activation_threshold: float = 2.58,
+        parcel_coverage_threshold: float = 0.5,
+        use_abs: bool = False,
+        domain: str = 'vertex',
+        null_value: float = 0.0,
+    ):
+        if use_abs:
+            activation = np.abs(activation)
+        activation = (activation > activation_threshold)
+        parcellation_arg = parcellation
+        parcellation = parcellation - parcellation.min()
+        null_index = int(null_value - parcellation.min())
+        n_parcels = parcellation.max() + 1
+        parcellation = np.eye(n_parcels)[parcellation]
+        parcellation = np.delete(parcellation, null_index, axis=1)
+        selection = (
+            (activation @ parcellation) /
+            parcellation.sum(0) >
+            parcel_coverage_threshold
+        )
+        parcellation = np.where(
+            parcellation.T[selection].sum(0),
+            parcellation_arg,
+            np.nan,
+        )
+        if domain == 'vertex':
+            self.__getattribute__(hemisphere).point_data[
+                parcellation_name
+            ] = parcellation
+        else:
+            self.__getattribute__(hemisphere).cell_data[
+                parcellation_name
+            ] = parcellation
+
+    def _hemisphere_draw_boundaries_impl(
+        self,
+        hemisphere: str,
+        scalars: str,
+        scalar_array: Tensor,
+        boundary_name: str,
+        threshold: float = 0.5,
+        num_steps: int = 1,
+        source_domain: str = 'vertex',
+        target_domain: str = 'vertex',
+        domain: str = 'vertex',
+        v2f_interpolation: str = 'mode',
+        overwrite: bool = False,
+        copy_values_to_boundary: bool = True,
+        boundary_fill: float = 1.0,
+        nonboundary_fill: float = 0.0,
+    ):
+        step = 0
+        hemi_surf = self.__getattribute__(hemisphere)
+        faces = hemi_surf.faces.reshape(-1, 4)[..., 1:]
+        #TODO: This would probably be much more efficient if we could use an
+        #      adjacency matrix to find the neighbours of each face, rather
+        #      than iteratively resampling between vertex and face data.
+        while (step < (num_steps * 2)) or (domain != target_domain):
+            if domain == 'vertex':
+                scalar_array = scalar_array[faces].astype(float)
+                scalar_array = ~(
+                    (
+                        np.abs(scalar_array[..., 0] - scalar_array[..., 1])
+                        < threshold
+                    ) & (
+                        np.abs(scalar_array[..., 0] - scalar_array[..., 2])
+                        < threshold
+                    ) & (
+                        np.abs(scalar_array[..., 1] - scalar_array[..., 2])
+                        < threshold
+                    )
+                )
+                hemi_surf.cell_data[boundary_name] = scalar_array
+                domain = 'face'
+            else:
+                scalar_array = (
+                    #TODO: We're doing a lot of unnecessary resampling here.
+                    #      Can we at least just resample the boundary faces?
+                    pv.DataSetFilters.cell_data_to_point_data(
+                        hemi_surf
+                    ).point_data[boundary_name] != 0
+                )
+                hemi_surf.point_data[boundary_name] = scalar_array
+                domain = 'vertex'
+            step += 1
+        dataset = (
+            hemi_surf.point_data
+            if domain == 'vertex'
+            else hemi_surf.cell_data
+        )
+        if copy_values_to_boundary:
+            if source_domain == target_domain:
+                scalar_array = dataset[scalars]
+            elif target_domain == 'vertex':
+                scalar_array = pv.DataSetFilters.cell_data_to_point_data(
+                    hemi_surf
+                ).point_data[scalars]
+            else:
+                scalar_array = self._hemisphere_resample_v2f_impl(
+                    name=scalars,
+                    interpolation=v2f_interpolation,
+                    hemisphere=hemisphere,
+                )
+            dataset[boundary_name] = np.where(
+                dataset[boundary_name], scalar_array, nonboundary_fill
+            )
+        else:
+            dataset[boundary_name] = np.where(
+                dataset[boundary_name], boundary_fill, nonboundary_fill
+            )
+        if domain == 'face':
+            if boundary_name in hemi_surf.point_data:
+                hemi_surf.point_data.remove(boundary_name)
+            if overwrite:
+                hemi_surf.cell_data[scalars] = np.array(
+                    dataset[boundary_name]
+                )
+                if boundary_name in hemi_surf.cell_data:
+                    hemi_surf.cell_data.remove(boundary_name)
+        elif domain == 'vertex':
+            if boundary_name in hemi_surf.cell_data:
+                hemi_surf.cell_data.remove(boundary_name)
+            if overwrite:
+                hemi_surf.point_data[scalars] = np.array(
+                    dataset[boundary_name]
+                )
+                if boundary_name in hemi_surf.point_data:
+                    hemi_surf.point_data.remove(boundary_name)
+
+    def scalar_percentile(
+        self,
+        layers: Sequence[Layer],
+        hemispheres: Sequence[str],
+    ) -> Sequence[Layer]:
+        surfs = {
+            'left': getattr(self, 'left', None),
+            'right': getattr(self, 'right', None),
+        }
+        layers_eval = []
+        layers = [
+            dataclasses.replace(layer, clim_percentile=True)
+            if layer.clim is None
+            else layer
+            for layer in layers
+        ]
+        # layers = [
+        #     dataclasses.replace(layer, alim_percentile=True)
+        #     if layer.alim is None
+        #     else layer
+        #     for layer in layers
+        # ]
+        for layer in layers:
+            clim = layer.clim
+            alim = layer.alim
+            arrays = []
+            alpha_arrays = []
+            eval_colour = False
+            eval_alpha = False
+            if layer.clim_percentile:
+                eval_colour = True
+            if layer.alim_percentile and isinstance(layer.alpha, str):
+                eval_alpha = True
+            if layer.clim_percentile or layer.alim_percentile:
+                for hemisphere in hemispheres:
+                    hemi_surf = surfs[hemisphere]
+                    scalar_array = None
+                    alpha_array = None
+                    if hemi_surf is None:
+                        continue
+                    try:
+                        if eval_colour:
+                            scalar_array = hemi_surf.cell_data[layer.name]
+                        if eval_alpha:
+                            alpha_array = (
+                                hemi_surf.cell_data[layer.alpha]
+                            )
+                    except (KeyError, TypeError):
+                        try:
+                            if eval_colour:
+                                scalar_array = (
+                                    hemi_surf.point_data[layer.name]
+                                )
+                            if eval_alpha:
+                                alpha_array = (
+                                    hemi_surf.point_data[layer.alpha]
+                                )
+                        except (KeyError, TypeError):
+                            pass
+                    if scalar_array is not None:
+                        arrays.append(scalar_array)
+                    if alpha_array is not None:
+                        alpha_arrays.append(alpha_array)
+                if len(arrays) > 0 and eval_colour:
+                    clim = scalar_percentile(np.concatenate(arrays))
+                elif not eval_colour:
+                    clim = layer.clim
+                else:
+                    clim = (0, 1)
+                if len(alpha_arrays) > 0 and eval_alpha:
+                    alim = scalar_percentile(np.concatenate(alpha_arrays))
+                elif not eval_alpha:
+                    alim = layer.alim
+                else:
+                    alim = (0, 1)
+            layer = dataclasses.replace(
+                layer,
+                clim=clim,
+                alim=alim,
+                clim_percentile=False,
+                alim_percentile=False,
+            )
+            layers_eval.append(layer)
+        return layers_eval
+
+
+def plot_surf_f(
+    plotter: pv.Plotter,
+    scalar_bar_builders: Sequence[ScalarBarBuilder],
+    hemispheres: Sequence[str],
+    hemisphere_parameters: SubgeometryParameters,
+    copy_actors: bool = False,
+    *,
+    surf: Optional['CortexTriSurface'] = None,
+    surf_projection: str = 'pial',
+    surf_color: Optional[str] = 'white',
+    surf_alpha: Optional[float] = None,
+    surf_style: Union[Mapping, Literal['__default__']] = '__default__',
+    surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
+    surf_scalars_boundary_color: str = 'black',
+    surf_scalars_boundary_width: int = 0,
+    surf_scalars_color: Any = LAYER_COLOR_DEFAULT_VALUE,
+    surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_cmap_negative: Any = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_clim_negative: Any = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_clim_percentile: bool = LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_alpha: Union[float, str] = LAYER_ALPHA_DEFAULT_VALUE,
+    surf_scalars_amap: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_DEFAULT_VALUE,
+    surf_scalars_amap_negative: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_DEFAULT_VALUE,
+    surf_scalars_alim_negative: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim_percentile: bool = LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_nan_override: Any = LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+    surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    surf_scalars_layers: Union[
+        Optional[Sequence[Layer]],
+        Tuple[Optional[Sequence[Layer]]]
+    ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    # Consumed but not used
+    template: Optional[str] = None,
+) -> Tuple[pv.Plotter, Sequence[ScalarBarBuilder]]:
+    # Sometimes by construction surf_scalars is an empty tuple or list, which
+    # causes problems later on. So we convert it to None if it's empty.
+    if surf_scalars is not None:
+        surf_scalars = None if len(surf_scalars) == 0 else surf_scalars
+
+    if surf is not None:
+        for hemisphere in hemispheres:
+            hemi_surf = surf.__getattribute__(hemisphere)
+            hemi_surf.project(surf_projection)
+            hemi_clim = hemisphere_parameters.get(
+                hemisphere,
+                'surf_scalars_clim',
+            )
+            hemi_cmap = hemisphere_parameters.get(
+                hemisphere,
+                'surf_scalars_cmap',
+            )
+            hemi_layers = hemisphere_parameters.get(
+                hemisphere,
+                'surf_scalars_layers',
+            )
+            if hemi_layers is None:
+                hemi_layers = []
+
+            base_layers = []
+            if surf_color is not None:
+                base_layers += [
+                    Layer(
+                        name=None,
+                        cmap=None,
+                        clim=None,
+                        cmap_negative=None,
+                        color=surf_color,
+                        alpha=surf_alpha,
+                        below_color=None,
+                    )
+                ]
+            if surf_scalars is not None:
+                base_layers += [
+                    Layer(
+                        name=surf_scalars,
+                        color=surf_scalars_color or surf_scalars,
+                        cmap=hemi_cmap,
+                        cmap_negative=surf_scalars_cmap_negative,
+                        clim=hemi_clim,
+                        clim_negative=surf_scalars_clim_negative,
+                        clim_percentile=surf_scalars_clim_percentile,
+                        alpha=surf_scalars_alpha,
+                        amap=surf_scalars_amap,
+                        amap_negative=surf_scalars_amap_negative,
+                        alim=surf_scalars_alim,
+                        alim_negative=surf_scalars_alim_negative,
+                        alim_percentile=surf_scalars_alim_percentile,
+                        below_color=surf_scalars_below_color,
+                        nan_override=surf_scalars_nan_override,
+                    )
+                ]
+            hemi_layers = list(base_layers) + list(hemi_layers)
+            hemi_layers = surf.scalar_percentile(
+                layers=hemi_layers,
+                # We're hard-coding the limits to use both hemispheres here
+                # so that the scalar bar range is consistent for figures that
+                # simultaneously include views of single and both hemispheres.
+                hemispheres=(('left', 'right')),
+            )
+            plotter, new_builders = hemi_surf.paint(
+                plotter=plotter,
+                layers=hemi_layers,
+                surf_alpha=surf_alpha,
+                style=surf_style,
+                copy_actors=copy_actors,
+            )
+            if (
+                surf_scalars_boundary_width > 0
+                and surf_scalars is not None
+                and surf_scalars not in hemi_surf.cell_data
+            ):
+                plotter.add_mesh(
+                    hemi_surf.contour(
+                        isosurfaces=range(
+                            int(max(hemi_surf.point_data[surf_scalars]))
+                        ),
+                        scalars=surf_scalars,
+                    ),
+                    color=surf_scalars_boundary_color,
+                    line_width=surf_scalars_boundary_width,
+                )
+            scalar_bar_builders = scalar_bar_builders + new_builders
+    return plotter, scalar_bar_builders
+
+
+def plot_surf_aux_f(
+    metadata: Mapping[str, Sequence[str]],
+    *,
+    surf: Optional['CortexTriSurface'] = None,
+    surf_projection: str = 'pial',
+    surf_color: Optional[str] = 'white',
+    surf_alpha: Optional[float] = None,
+    surf_style: Union[Mapping, Literal['__default__']] = '__default__',
+    surf_scalars: Optional[str] = SURF_SCALARS_DEFAULT_VALUE,
+    surf_scalars_boundary_color: str = 'black',
+    surf_scalars_boundary_width: int = 0,
+    surf_scalars_color: Any = LAYER_COLOR_DEFAULT_VALUE,
+    surf_scalars_cmap: Any = SURF_SCALARS_CMAP_DEFAULT_VALUE,
+    surf_scalars_cmap_negative: Any = LAYER_CMAP_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_clim: Any = SURF_SCALARS_CLIM_DEFAULT_VALUE,
+    surf_scalars_clim_negative: Any = LAYER_CLIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_clim_percentile: bool = LAYER_CLIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_alpha: Union[float, str] = LAYER_ALPHA_DEFAULT_VALUE,
+    surf_scalars_amap: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_DEFAULT_VALUE,
+    surf_scalars_amap_negative: Union[
+        callable, Tuple[float, float]
+    ] = LAYER_AMAP_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_DEFAULT_VALUE,
+    surf_scalars_alim_negative: Optional[
+        Tuple[float, float]
+    ] = LAYER_ALIM_NEGATIVE_DEFAULT_VALUE,
+    surf_scalars_alim_percentile: bool = LAYER_ALIM_PERCENTILE_DEFAULT_VALUE,
+    surf_scalars_nan_override: Any = LAYER_NAN_OVERRIDE_DEFAULT_VALUE,
+    surf_scalars_below_color: str = SURF_SCALARS_BELOW_COLOR_DEFAULT_VALUE,
+    surf_scalars_layers: Union[
+        Optional[Sequence[Layer]],
+        Tuple[Optional[Sequence[Layer]]]
+    ] = SURF_SCALARS_LAYERS_DEFAULT_VALUE,
+    # Consumed but not used
+    template: Optional[str] = None,
+) -> Mapping[str, Sequence[str]]:
+    metadata['surfscalars'] = [surf_scalars or None]
+    metadata['projection'] = [surf_projection or None]
+    if surf_scalars_layers is not None:
+        layers = surf_scalars_layers
+        if len(layers) == 2 and isinstance(layers[0], (list, tuple)):
+            layers = (
+                layers[0]
+                if metadata['hemisphere'][0] != 'right'
+                else layers[1]
+            )
+        layers = '+'.join(layer.name for layer in layers)
+        metadata['surfscalars'] = (
+            [f'{metadata["surfscalars"][0]}+{layers}']
+            if metadata['surfscalars'][0] is not None
+            else [layers]
+        )
+    return metadata

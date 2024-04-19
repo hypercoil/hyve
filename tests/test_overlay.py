@@ -114,7 +114,7 @@ def test_parcellation_modal_cmap(output, v2f):
         parcellation_cifti=get_null400_cifti(),
         pain_nifti=nb.load(get_pain_thresh_nifti()),
         pain_cmap='inferno',
-        pain_clim='robust',
+        pain_clim_percentile=True,
         pain_alpha=0.5,
         pain_below_color=(0, 0, 0, 0),
         sphere_coor=sphere_coor,
@@ -143,7 +143,10 @@ def test_overlay_allview():
             view='lateral',
         ),
         3: dict(view='dorsal'),
-        4: dict(elements=['title', 'scalar_bar']),
+        4: dict(elements=[
+            'title',
+            {'scalar_bar': ('salience', 'zstat')},
+        ]),
         5: dict(view='ventral'),
         6: dict(
             hemisphere='left',
@@ -159,6 +162,7 @@ def test_overlay_allview():
     layout_r = Cell() | Cell() | Cell() << (1 / 3)
     layout_c = Cell() / Cell() / Cell() << (1 / 3)
     layout = layout_c * layout_r
+    #layout = layout % (Cell() | Cell() << (1 / 2)) << 4
     layout = Cell() | layout << (3 / 8)
     annotations[0] = dict(elements=['blend_insert'])
     layout = layout.annotate(annotations)
@@ -278,7 +282,7 @@ def test_autocams():
         **{0: {'view': 'focused'}},
         **{k: {'view': 'ortho'} for k in range(1, 4)},
         **{k: {'view': 'planar'} for k in range(4, 12)},
-        **{12: {'elements': ['scalar_bar']}}
+        **{12: {'elements': [{'scalar_bar': ('pain')}]}}
     }
     layout = layout.annotate(annotations)
 
@@ -298,7 +302,7 @@ def test_autocams():
             vertex_to_face('pain'),
         ),
         plot_to_image(),
-        auto_camera(n_ortho=3, focus='centroid', n_angles=8, surf_scalars='pain_points'),
+        auto_camera(n_ortho=3, focus='centroid', n_angles=8, surf_scalars='pain:points'),
         save_figure(
             layout_kernel=layout,
             #padding=10,
@@ -321,6 +325,14 @@ def test_autocams():
         pain_alpha=0.9,
         pain_below_color=(0, 0, 0, 0),
         surf_projection=('veryinflated',),
+        surf_style={
+            'pbr': True,
+            'metallic': 0.05,
+            'roughness': 0.1,
+            'specular': 0.5,
+            'specular_power': 15,
+            # 'diffuse': 1,
+        },
         hemisphere='left',
         window_size=(600, 500),
         theme=pv.themes.DarkTheme(),

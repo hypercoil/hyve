@@ -275,11 +275,11 @@ class RasterBuilder(ElementBuilder):
 
     @property
     def canvas_height(self) -> int:
-        return self.height
+        return self.bounding_box_height
 
     @property
     def canvas_width(self) -> int:
-        return self.width
+        return self.bounding_box_width
 
     def set_canvas_size(self, height, width) -> 'RasterBuilder':
         return dataclasses.replace(
@@ -315,7 +315,7 @@ class UnknownBuilder(ElementBuilder):
             object.__setattr__(self, '_orig_width', self.width)
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, RasterBuilder):
+        if not isinstance(other, UnknownBuilder):
             return False
         return all(
             self[key] == other[key]
@@ -1107,7 +1107,7 @@ def tile_plot_elements(
     spacing: float = SCALAR_BAR_DEFAULT_SPACING,
     max_dimension: Optional[Tuple[int, int]] = None,
     require_unique_names: bool = True,
-) -> Optional[Tensor]:
+) -> 'Optional[svg.SVG]':
     builders = [b for b in builders if b is not None]
     if len(builders) == 0:
         return None
