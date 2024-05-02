@@ -873,7 +873,7 @@ class GroupSpec:
         if self.max_levels is not None:
             if self.order == 'col':
                 bp = self.max_levels // n_rows
-                nb = ceil(n_cols / (bp + 1))
+                nb = ceil(n_cols / bp)
                 layout = kernel = grid(
                     n_rows=n_rows,
                     n_cols=bp,
@@ -888,7 +888,7 @@ class GroupSpec:
                     layout = layout << (1 / (nb + 1))
             else:
                 bp = self.max_levels // n_cols
-                nb = ceil(n_rows / (bp + 1))
+                nb = ceil(n_rows / bp)
                 layout = kernel = grid(
                     n_rows=bp,
                     n_cols=n_cols,
