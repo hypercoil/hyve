@@ -1195,13 +1195,17 @@ def tile_plot_elements(
             (width - builder.canvas_width) // 2,
             (height - builder.canvas_height) // 2,
         ]
-        transform = element.transform + [
+        transform = [
             svg.Translate(
                 offset[0] + internal_displacement[0],
                 offset[1] + internal_displacement[1],
             )
         ]
-        element.transform = transform
+        element = svg.G(
+            id=f'element{i}-wrapper',
+            elements=[element],
+            transform=transform,
+        )
         canvas_elements.append(element)
         # Filling this in row-major order
         if i % layout[1] == layout[1] - 1:
