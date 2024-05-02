@@ -2058,7 +2058,10 @@ class CortexTriSurface:
                     if alpha_array is not None:
                         alpha_arrays.append(alpha_array)
                 if len(arrays) > 0 and eval_colour:
-                    clim = scalar_percentile(np.concatenate(arrays))
+                    clim = scalar_percentile(
+                        np.concatenate(arrays),
+                        percent=layer.clim,
+                    )
                 elif not eval_colour:
                     clim = layer.clim
                 else:

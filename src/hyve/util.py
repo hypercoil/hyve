@@ -243,6 +243,8 @@ def scalar_percentile(
     percent: Union[float, Tuple[float, float]] = DEFAULT_ROBUST_LIM_PCT,
     bgval: Optional[float] = 0.0,
 ) -> Tuple[float, float]:
+    if percent is None:
+        percent = DEFAULT_ROBUST_LIM_PCT
     if isinstance(percent, float):
         percent = (percent, 100 - percent)
     excl_mask = np.isnan(data) | np.isinf(data)
