@@ -1732,7 +1732,12 @@ def transform_postprocessor_f(
     if notfound:
         raise ValueError(
             f'Postprocessor {name} not found in postprocessors '
-            f'{postprocessors}'
+            f'{postprocessors}. It is possible that the postprocessor '
+            'primitive was composed after the transformer primitive in the '
+            'plot definition (for instance, an auto-camera primitive was '
+            'composed before a `plot_to_image` primitive). Please ensure '
+            'that the postprocessor primitive is composed before the '
+            'transformer primitive in the plot definition.'
         )
     if postprocessor_params is None:
         postprocessor_params = {}
@@ -1894,7 +1899,7 @@ def closest_ortho_camera_aux_f(
     n_ortho: int,
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
 ) -> Mapping:
-    metadata['index'] = [str(i) for i in range(n_ortho)]
+    metadata['index'] = [i for i in range(n_ortho)]
     if len(hemisphere) == 1 and hemisphere[0] != 'both':
         metadata['view'] = ['ortho']
     else:
@@ -1982,7 +1987,7 @@ def planar_sweep_camera_aux_f(
     n_steps: int,
     hemisphere: Optional[Sequence[Literal['left', 'right', 'both']]] = None,
 ) -> Mapping:
-    metadata['index'] = [str(i) for i in range(n_steps)]
+    metadata['index'] = [i for i in range(n_steps)]
     if len(hemisphere) == 1 and hemisphere[0] != 'both':
         metadata['view'] = ['planar']
     else:
@@ -2321,6 +2326,9 @@ def save_figure_f(
                 scalar_bar_names = page_elements[i][
                     celements_with_filters['scalar_bar']
                 ]['scalar_bar']
+                #TODO: This uses the substituted *text* on the scalar bar, and
+                #      not the layer name for matching. This is not always
+                #      the behaviour we want.
                 if not isinstance(scalar_bar_names, tuple):
                     scalar_bar_names = (scalar_bar_names,)
                 _others = [
@@ -2911,6 +2919,8 @@ def automap_unified_plotter_f(
         )
         for celement in unique_elements:
             cvalues = sum([e['elements'][celement] for e in meta], ())
+            if not cvalues:
+                continue
             if all([v == cvalues[0] for v in cvalues[1:]]):
                 gelements[postproc][celement] = (cvalues[0],)
             else:
