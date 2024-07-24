@@ -42,6 +42,7 @@ from .transforms import (
     add_network_overlay,
     build_network,
     node_coor_from_parcels,
+    node_coor_from_regions,
     add_node_variable,
     add_edge_variable,
     scalar_focus_camera,

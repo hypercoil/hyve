@@ -331,6 +331,25 @@ class PointDataCollection:
         except KeyError:
             return False
 
+    def parcel_centres_of_mass(
+        self,
+        parcellation: str,
+        null_value: Optional[int] = 0,
+    ) -> Tensor:
+        parcellation_ds = self.get_dataset(parcellation)
+        parcellation_array = parcellation_ds.points.point_data[parcellation]
+        node_ids = sorted(set(
+            np.unique(parcellation_array)
+        ).difference({null_value}))
+        parcellation_array = np.stack(
+            (parcellation_array == node_id)
+            for node_id in node_ids
+        )
+        points_coor = parcellation_ds.points.points
+        num = parcellation_array @ points_coor
+        denom = parcellation_array.sum(-1, keepdims=True)
+        return num / denom
+
     def paint(
         self,
         plotter: pv.Plotter,

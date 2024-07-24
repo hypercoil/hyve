@@ -1593,6 +1593,17 @@ def build_network_f(
     return networks
 
 
+def node_coor_from_regions_f(
+    points: PointDataCollection,
+    parcellation: str,
+    null_value: float = 0,
+) -> Tensor:
+    coor = points.parcel_centres_of_mass(
+        parcellation=parcellation,
+    )
+    return coor, points
+
+
 def node_coor_from_parcels_f(
     surf: CortexTriSurface,
     surf_projection: str,
@@ -3097,6 +3108,14 @@ build_network_p = Primitive(
     build_network_f,
     'build_network',
     output=('networks',),
+    forward_unused=True,
+)
+
+
+node_coor_from_regions_p = Primitive(
+    node_coor_from_regions_f,
+    'node_coor_from_regions',
+    output=('node_coor', 'points'),
     forward_unused=True,
 )
 

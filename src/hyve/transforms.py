@@ -64,6 +64,7 @@ from .prim import (
     closest_ortho_camera_aux_p,
     closest_ortho_camera_p,
     draw_surface_boundary_p,
+    node_coor_from_regions_p,
     node_coor_from_parcels_p,
     parcellate_colormap_p,
     parcellate_surf_scalars_p,
@@ -1646,6 +1647,30 @@ def build_network(name: str = 'network') -> callable:
                 edge_values=edge_values,
                 networks=networks,
                 lh_mask=lh_mask,
+            )
+
+        return f_transformed
+    return transform
+
+
+def node_coor_from_regions(parcellation: str) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> direct_compositor:
+        transformer_f = Partial(
+            node_coor_from_regions_p,
+            parcellation=parcellation,
+        )
+
+        @splice_on(f, occlusion=node_coor_from_regions_p.output)
+        def f_transformed(
+            *,
+            points: PointDataCollection,
+            **params: Mapping,
+        ):
+            return compositor(f, transformer_f)(**params)(
+                points=points,
             )
 
         return f_transformed
