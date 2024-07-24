@@ -351,12 +351,15 @@ def filter_adjacency_data(
     surviving_val: Optional[float] = 1.0,
     emit_degree: Union[bool, Literal['abs', '+', '-']] = False,
     emit_incident_nodes: Union[bool, tuple] = False,
+    include_diag: bool = False,
 ) -> pd.DataFrame:
     adj_incl = np.ones_like(adj, dtype=bool)
 
     sgn = np.sign(adj)
     if absolute:
         adj = np.abs(adj)
+    if not include_diag:
+        adj_incl = adj_incl * ~np.eye(adj.shape[0], dtype=bool)
     if incident_node_selection is not None:
         adj_incl[~incident_node_selection, :] = 0
     if connected_node_selection is not None:

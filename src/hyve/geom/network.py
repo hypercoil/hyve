@@ -114,8 +114,8 @@ class NetworkData:
     def select(self, condition: callable) -> 'NetworkData':
         mask = condition(self.coor, self.nodes, self.lh_mask)
         if self.edges is not None:
-            src_mask = mask[self.edges.index.get_level_values('src')]
-            dst_mask = mask[self.edges.index.get_level_values('dst')]
+            src_mask = mask[self.edges.index.get_level_values('src') - 1]
+            dst_mask = mask[self.edges.index.get_level_values('dst') - 1]
             edge_mask = src_mask & dst_mask
             edges = self.edges[edge_mask]
         else:
@@ -125,7 +125,7 @@ class NetworkData:
             self.coor[mask],
             self.nodes[mask],
             edges,
-            self.lh_mask[mask],
+            self.lh_mask[mask] if self.lh_mask is not None else None,
         )
 
     def translate(
@@ -479,12 +479,15 @@ def build_nodes_mesh(
             mapper=layer.rmap,
         )
 
-    if layer.color not in node_values.columns:
-        scalars = None
-        color = layer.color
-    else:
+    if layer.color in node_values.columns:
         scalars = node_values[layer.color].values
         color = None
+    elif layer.color == 'index':
+        scalars = np.asarray(node_values.index)
+        color = None
+    else:
+        scalars = None
+        color = layer.color
     if isinstance(layer.alpha, str):
         alpha = node_values[layer.alpha].values
     else:
