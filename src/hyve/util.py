@@ -240,7 +240,7 @@ def scale_image_preserve_aspect_ratio(
 
 def scalar_percentile(
     data: Tensor,
-    percent: Union[float, Tuple[float, float]] = DEFAULT_ROBUST_LIM_PCT,
+    percent: float | Tuple[float, float] | None = DEFAULT_ROBUST_LIM_PCT,
     bgval: Optional[float] = 0.0,
 ) -> Tuple[float, float]:
     if percent is None:

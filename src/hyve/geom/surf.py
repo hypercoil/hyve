@@ -1198,6 +1198,7 @@ class CortexTriSurface:
         self,
         name: str,
         interpolation: Literal['mode', 'mean'] = 'mode',
+        points_suffix: Optional[str] = None,
     ):
         """
         Resample a vertex-wise scalar dataset onto mesh faces. The face-valued
@@ -1338,37 +1339,23 @@ class CortexTriSurface:
             )
         if target_domain is None:
             target_domain = domain
-        self._hemisphere_draw_boundaries_impl(
-            'left',
-            scalars=scalars,
-            scalar_array=scalars_left,
-            boundary_name=boundary_name,
-            threshold=threshold,
-            num_steps=num_steps,
-            source_domain=source_domain,
-            target_domain=target_domain,
-            domain=domain,
-            overwrite=overwrite,
-            copy_values_to_boundary=copy_values_to_boundary,
-            boundary_fill=boundary_fill,
-            nonboundary_fill=nonboundary_fill,
-        )
-        self._hemisphere_draw_boundaries_impl(
-            'right',
-            scalars=scalars,
-            scalar_array=scalars_right,
-            boundary_name=boundary_name,
-            threshold=threshold,
-            num_steps=num_steps,
-            source_domain=source_domain,
-            target_domain=target_domain,
-            domain=domain,
-            v2f_interpolation=v2f_interpolation,
-            overwrite=overwrite,
-            copy_values_to_boundary=copy_values_to_boundary,
-            boundary_fill=boundary_fill,
-            nonboundary_fill=nonboundary_fill,
-        )
+        for hemisphere in ('left', 'right'):
+            self._hemisphere_draw_boundaries_impl(
+                hemisphere,
+                scalars=scalars,
+                scalar_array=scalars_left if hemisphere == 'left' else scalars_right,
+                boundary_name=boundary_name,
+                threshold=threshold,
+                num_steps=num_steps,
+                source_domain=source_domain,
+                target_domain=target_domain,
+                domain=domain,
+                v2f_interpolation=v2f_interpolation,
+                overwrite=overwrite,
+                copy_values_to_boundary=copy_values_to_boundary,
+                boundary_fill=boundary_fill,
+                nonboundary_fill=nonboundary_fill,
+            )
 
     def parcel_centres_of_mass(
         self,
@@ -2030,7 +2017,7 @@ class CortexTriSurface:
                 eval_colour = True
             if layer.alim_percentile and isinstance(layer.alpha, str):
                 eval_alpha = True
-            if layer.clim_percentile or layer.alim_percentile:
+            if eval_colour or eval_alpha:
                 for hemisphere in hemispheres:
                     hemi_surf = surfs[hemisphere]
                     scalar_array = None
@@ -2061,14 +2048,29 @@ class CortexTriSurface:
                     if alpha_array is not None:
                         alpha_arrays.append(alpha_array)
                 if len(arrays) > 0 and eval_colour:
-                    clim = scalar_percentile(
-                        np.concatenate(arrays),
-                        percent=layer.clim,
-                    )
+                    color_arg = np.concatenate(arrays)
+                    if layer.cmap_negative is not None:
+                        color_arg_pos = np.maximum(color_arg, 0)
+                        color_arg_neg = -np.minimum(color_arg, 0)
+                        clim = scalar_percentile(
+                            color_arg_pos,
+                            percent=layer.clim,
+                        )
+                        clim_negative = scalar_percentile(
+                            color_arg_neg,
+                            percent=layer.clim_negative,
+                        )
+                    else:
+                        clim = scalar_percentile(
+                            np.concatenate(arrays),
+                            percent=layer.clim,
+                        )
                 elif not eval_colour:
                     clim = layer.clim
+                    clim_negative = layer.clim_negative
                 else:
                     clim = (0, 1)
+                    clim_negative = None
                 if len(alpha_arrays) > 0 and eval_alpha:
                     alim = scalar_percentile(np.concatenate(alpha_arrays))
                 elif not eval_alpha:
@@ -2078,6 +2080,7 @@ class CortexTriSurface:
             layer = dataclasses.replace(
                 layer,
                 clim=clim,
+                clim_negative=clim_negative,
                 alim=alim,
                 clim_percentile=False,
                 alim_percentile=False,
