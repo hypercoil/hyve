@@ -682,10 +682,12 @@ def vertex_to_face_f(
     surf: CortexTriSurface,
     scalars: Sequence[str],
     interpolation: Literal['mode', 'mean'] = 'mode',
+    points_suffix: Optional[str] = None,
 ) -> Tuple[CortexTriSurface, Sequence[str]]:
     surf.vertex_to_face(
         name=scalars,
         interpolation=interpolation,
+        points_suffix=points_suffix,
     )
     return surf
 

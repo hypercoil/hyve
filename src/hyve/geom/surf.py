@@ -1218,7 +1218,10 @@ class CortexTriSurface:
             raise ValueError(
                 'Interpolation method must be one of "mode" or "mean".'
             )
-        points_name = f'{name}:points'
+        if points_suffix is None:
+            points_name = f'{name}:points'
+        else:
+            points_name = f'{name}{points_suffix}'
         self.left.cell_data[name] = self._hemisphere_resample_v2f_impl(
             name, interpolation, 'left'
         )

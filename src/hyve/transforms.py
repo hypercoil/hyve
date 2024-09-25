@@ -1273,6 +1273,7 @@ def vertex_to_face(
     scalars: str,
     *,
     interpolation: Literal['mode', 'mean'] = 'mode',
+    points_suffix: Optional[str] = None,
 ) -> callable:
     """
     Resample a scalar dataset defined on the vertices of a surface to a
@@ -1304,6 +1305,7 @@ def vertex_to_face(
     ) -> callable:
         paramstr = sanitise(scalars)
         _interpolation = interpolation
+        _points_suffix = points_suffix
         transformer_f = Partial(
             vertex_to_face_p,
             scalars=scalars,
@@ -1312,7 +1314,8 @@ def vertex_to_face(
         @splice_on(
             f,
             expansion={
-                f'{paramstr}_v2f_interpolation': (str, _interpolation)
+                f'{paramstr}_v2f_interpolation': (str, _interpolation),
+                f'{paramstr}_v2f_points_suffix': (Optional[str], _points_suffix),
             },
             occlusion=vertex_to_face_p.output,
         )
@@ -1326,10 +1329,15 @@ def vertex_to_face(
                 f'{paramstr}_v2f_interpolation',
                 _interpolation,
             )
+            points_suffix = params.pop(
+                f'{paramstr}_v2f_points_suffix',
+                _points_suffix,
+            )
             return compositor(f, transformer_f)(**params)(
                 surf=surf,
                 surf_scalars=surf_scalars,
                 interpolation=interpolation,
+                points_suffix=points_suffix,
             )
 
         return f_transformed
